@@ -4,8 +4,15 @@ Conformance scenarios are executable policy. They allow independent
 implementations to prove that the same ordered inputs produce the same
 observable outcome.
 
-The suite currently defines only its draft file shape. No auction-behavior
-scenario is normative until the governing RFC is accepted.
+The suite and its proposed RFC 0001 scenarios are currently draft. No
+auction-behavior scenario is normative until the governing RFC is accepted.
+
+Configuration shared by scenarios lives in `fixtures/`. A scenario references
+a fixture by its filename without `.yaml`, for example:
+
+```yaml
+configuration: {fixture: usd-standard}
+```
 
 ## Scenario structure
 

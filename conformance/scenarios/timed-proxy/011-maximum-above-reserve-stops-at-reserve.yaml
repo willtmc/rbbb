@@ -1,0 +1,13 @@
+name: First maximum above reserve stops publicly at reserve
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-reserve}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 150000, effective_at: "2026-09-01T12:10:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 100000, reserve_status: reserve_met, next_required_minor_units: 102500}
+  privileged_events:
+    - {type: maximum_accepted, bidder_id: bidder-a, maximum_minor_units: 150000, executed_minor_units: 100000}
+  final_state: {leader_id: bidder-a, standing_minor_units: 100000, reserve_status: reserve_met, next_required_minor_units: 102500}

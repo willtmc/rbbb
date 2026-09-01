@@ -33,6 +33,11 @@ The roadmap describes intent, not a release promise.
 
 ## Later RFCs
 
-Quantity, choice, linked soft-close groups, multi-parcel bidding, auctioneer
-overrides, and other formats remain out of scope until their semantics are
-specified and tested.
+Quantity, choice, linked soft-close groups, multi-parcel bidding, additional
+auctioneer overrides, and other formats remain out of scope until their
+semantics are specified and tested.
+
+An optional rule that realigns a proxy-clipped short increment to the regular
+increment grid is explicitly deferred. The v0.1 baseline permits short
+increments and calculates the next required amount from the resulting standing
+amount.

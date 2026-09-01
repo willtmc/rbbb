@@ -1,0 +1,11 @@
+currency: USD
+opening_minor_units: 10000
+reserve_minor_units:
+increments:
+  - from_minor_units: 0
+    amount_minor_units: 1000
+opens_at: "2026-09-01T12:00:00Z"
+closes_at: "2026-09-01T13:00:00Z"
+extension:
+  trigger_window_seconds: 300
+  duration_seconds: 300

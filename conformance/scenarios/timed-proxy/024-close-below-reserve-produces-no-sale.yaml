@@ -1,0 +1,13 @@
+name: Closing below reserve produces no sale
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-reserve}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 80000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: close_bidding, effective_at: "2026-09-01T13:00:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 80000, reserve_status: reserve_not_met}
+    - {type: bidding_closed, result: no_sale, standing_minor_units: 80000}
+  final_state: {status: closed, result: no_sale, leader_id: bidder-a, standing_minor_units: 80000}

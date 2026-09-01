@@ -1,0 +1,18 @@
+name: Operator void preserves history and recomputes standing state
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bid_id: bid-a, bidder_id: bidder-a, maximum_minor_units: 50000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: place_bid, bid_id: bid-b, bidder_id: bidder-b, maximum_minor_units: 30000, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: command-3, type: void_bid, bid_id: bid-b, operator_id: operator-1, reason: bidder_entry_error, notification_policy: affected, effective_at: "2026-09-01T12:12:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000}
+    - {type: standing_bid_changed, standing_minor_units: 31000, leader_changed: false}
+    - {type: standing_bid_changed, standing_minor_units: 10000, leader_changed: false}
+  privileged_events:
+    - {type: bid_voided, bid_id: bid-b, operator_id: operator-1, reason: bidder_entry_error}
+    - {type: notification_requested, policy: affected}
+  final_state: {leader_id: bidder-a, standing_minor_units: 10000, voided_bid_ids: [bid-b]}

@@ -1,4 +1,4 @@
 # Scenarios
 
-No normative auction-behavior scenarios have been accepted yet. The first
-scenarios will land with the first accepted auction-semantics RFC.
+The `timed-proxy/` directory contains the proposed RFC 0001 conformance suite.
+Its scenarios become normative only when RFC 0001 is accepted.

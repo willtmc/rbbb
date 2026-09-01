@@ -1,0 +1,14 @@
+name: Operator may not raise reserve after bidding begins
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-reserve}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 150000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: change_reserve, operator_id: operator-1, reserve_minor_units: 120000, reason: seller_request, effective_at: "2026-09-01T12:11:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 100000, reserve_status: reserve_met}
+  rejections:
+    - {command_id: command-2, reason: reserve_may_not_increase_after_first_bid}
+  final_state: {leader_id: bidder-a, standing_minor_units: 100000, reserve_status: reserve_met, reserve_minor_units: 100000}
