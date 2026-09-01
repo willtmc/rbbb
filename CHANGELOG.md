@@ -20,3 +20,6 @@ versioned artifacts.
   executed floor and authoritative command order.
 - Implement audited pre-close operator bid voiding with immutable authorization
   history, deterministic state recomputation, and notification intent.
+- Implement audited operator closing-time and reserve changes, including
+  post-bid restrictions and preservation of previously executed reserve
+  pressure.
