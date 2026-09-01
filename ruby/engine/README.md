@@ -4,8 +4,8 @@ This directory will contain the pure-Ruby reference implementation of the RBBB
 specification.
 
 > [!WARNING]
-> The gem implements only an early subset of RFC 0001. It is not production
-> ready and must not be used in a live auction.
+> The gem is an early RFC 0001 implementation. It is not production ready and
+> must not be used in a live auction.
 
 The engine will remain independent of Rails, databases, HTTP, jobs, and
 authentication. Its public decision boundary is:
@@ -24,8 +24,9 @@ unexecuted proxy authority. Authorized operator bid voiding preserves the
 original bid, deterministically recomputes standing and executed amounts, and
 emits host-facing notification intent. Audited operator commands may also
 change closing time and reserve under the RFC's pre-bid and post-bid
-constraints without unwinding already executed amounts. Explicit closing
-outcomes, persistence, and networking are not implemented.
+constraints without unwinding already executed amounts. Explicit ordered
+closing produces `sold`, `no_sale`, or `no_bid` terminal state. Persistence,
+networking, service-level idempotency, and authentication are not implemented.
 
 The pure engine records `operator_id`; it does not authenticate or authorize
 that identity. A host must authorize the operator before submitting any

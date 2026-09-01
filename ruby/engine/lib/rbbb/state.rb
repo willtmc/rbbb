@@ -21,7 +21,7 @@ module RBBB
     attr_reader :version, :positions, :leader_id, :standing_minor_units,
       :next_required_minor_units, :reserve_status, :opens_at, :closes_at,
       :reserve_minor_units, :authorization_history, :reserve_history,
-      :voided_bid_ids
+      :voided_bid_ids, :status, :result, :winner_id, :winning_minor_units
 
     def self.empty(configuration)
       new(
@@ -36,14 +36,16 @@ module RBBB
         closes_at: configuration.closes_at,
         authorization_history: [],
         reserve_history: [],
-        voided_bid_ids: []
+        voided_bid_ids: [],
+        status: "open"
       )
     end
 
     def initialize(version:, positions:, leader_id:, standing_minor_units:,
       next_required_minor_units:, reserve_status: nil, opens_at: nil, closes_at: nil,
       reserve_minor_units: nil, authorization_history: [], reserve_history: [],
-      voided_bid_ids: [])
+      voided_bid_ids: [], status: "open", result: nil, winner_id: nil,
+      winning_minor_units: nil)
       @version = version
       @positions = positions.each_with_object({}) do |(bidder_id, position), copy|
         copy[bidder_id.to_s.freeze] = coerce_position(position)
@@ -62,6 +64,10 @@ module RBBB
         coerce_reserve_change(entry)
       end.freeze
       @voided_bid_ids = voided_bid_ids.map { |bid_id| bid_id.to_s.freeze }.freeze
+      @status = status.to_s.freeze
+      @result = result&.to_s&.freeze
+      @winner_id = winner_id&.to_s&.freeze
+      @winning_minor_units = winning_minor_units
       validate!
       freeze
     end
@@ -80,12 +86,17 @@ module RBBB
       authorization_history.any? { |entry| entry.fetch("type") == "place_bid" }
     end
 
+    def closed?
+      status == "closed"
+    end
+
     def to_h
       result = {
         "version" => version,
         "leader_id" => leader_id,
         "standing_minor_units" => standing_minor_units,
-        "next_required_minor_units" => next_required_minor_units
+        "next_required_minor_units" => next_required_minor_units,
+        "status" => status
       }
       result["opens_at"] = Timestamp.dump(opens_at) if opens_at
       result["closes_at"] = Timestamp.dump(closes_at) if closes_at
@@ -96,6 +107,9 @@ module RBBB
       result["reserve_status"] = reserve_status if reserve_status
       result["reserve_minor_units"] = reserve_minor_units unless reserve_minor_units.nil?
       result["voided_bid_ids"] = voided_bid_ids if voided_bid_ids.any?
+      result["result"] = self.result if self.result
+      result["winner_id"] = winner_id if winner_id
+      result["winning_minor_units"] = winning_minor_units unless winning_minor_units.nil?
       result
     end
 
@@ -168,6 +182,7 @@ module RBBB
       end
       validate_authorization_history!
       validate_reserve_history!
+      validate_lifecycle!
       if leader_id && !positions.key?(leader_id)
         raise InvalidState, "leader must have a position"
       end
@@ -280,6 +295,43 @@ module RBBB
 
     def valid_optional_minor_units?(value)
       value.nil? || (value.is_a?(Integer) && value >= 0)
+    end
+
+    def validate_lifecycle!
+      unless %w[open closed].include?(status)
+        raise InvalidState, "bidding status is invalid"
+      end
+      if status == "open"
+        unless result.nil? && winner_id.nil? && winning_minor_units.nil?
+          raise InvalidState, "open bidding cannot have a closing result"
+        end
+        return
+      end
+
+      unless %w[sold no_sale no_bid].include?(result)
+        raise InvalidState, "closed bidding result is invalid"
+      end
+      case result
+      when "sold"
+        unless leader_id && winner_id == leader_id && winning_minor_units == standing_minor_units
+          raise InvalidState, "sold result must match the standing leader and amount"
+        end
+        if reserve_status == "reserve_not_met"
+          raise InvalidState, "sold result requires reserve to be met"
+        end
+      when "no_sale"
+        unless leader_id && standing_minor_units && reserve_status == "reserve_not_met"
+          raise InvalidState, "no-sale result requires a leader below reserve"
+        end
+        unless winner_id.nil? && winning_minor_units.nil?
+          raise InvalidState, "no-sale result cannot have a winner"
+        end
+      when "no_bid"
+        unless leader_id.nil? && standing_minor_units.nil? &&
+            winner_id.nil? && winning_minor_units.nil?
+          raise InvalidState, "no-bid result cannot have a standing bid or winner"
+        end
+      end
     end
   end
 end

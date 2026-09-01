@@ -23,3 +23,5 @@ versioned artifacts.
 - Implement audited operator closing-time and reserve changes, including
   post-bid restrictions and preservation of previously executed reserve
   pressure.
+- Implement explicit ordered closing with terminal `sold`, `no_sale`, and
+  `no_bid` outcomes and post-close mutation rejection.
