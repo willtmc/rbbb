@@ -1,0 +1,25 @@
+# frozen_string_literal: true
+
+require_relative "test_helper"
+require_relative "support/conformance_runner"
+
+class TimedProxyConformanceTest < Minitest::Test
+  SCENARIOS = %w[
+    001-first-maximum-opens-at-opening.yaml
+    002-maximum-below-opening-rejected.yaml
+    003-proxy-advances-one-increment.yaml
+    004-earlier-equal-maximum-retains-priority.yaml
+    005-tier-selected-from-losing-maximum.yaml
+    006-proxy-clipping-permits-short-increment.yaml
+    007-challenger-below-next-required-rejected.yaml
+    008-leader-may-raise-by-less-than-increment.yaml
+  ].freeze
+
+  SCENARIOS.each do |filename|
+    define_method("test_#{File.basename(filename, '.yaml').tr('-', '_')}") do
+      ConformanceRunner.new(self).run(
+        "conformance/scenarios/timed-proxy/#{filename}"
+      )
+    end
+  end
+end
