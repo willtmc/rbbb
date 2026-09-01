@@ -1,0 +1,32 @@
+asyncapi: 3.1.0
+info:
+  title: RBBB event subscription API
+  version: 0.1.0-draft
+  description: >-
+    Draft contract for committed public event delivery. Private audit events
+    require a separate privileged surface.
+channels:
+  biddingUnitEvents:
+    address: auctions/{auctionId}/bidding-units/{biddingUnitId}/events
+    parameters:
+      auctionId:
+        description: Host-provided auction identifier
+      biddingUnitId:
+        description: Engine bidding-unit identifier
+    messages:
+      publicEvent:
+        $ref: "#/components/messages/PublicEvent"
+operations:
+  receiveBiddingUnitEvents:
+    action: receive
+    channel:
+      $ref: "#/channels/biddingUnitEvents"
+    messages:
+      - $ref: "#/channels/biddingUnitEvents/messages/publicEvent"
+components:
+  messages:
+    PublicEvent:
+      name: publicEvent
+      title: Committed public engine event
+      payload:
+        $ref: ./events/event.schema.json

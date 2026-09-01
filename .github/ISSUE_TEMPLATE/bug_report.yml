@@ -1,0 +1,58 @@
+name: Bug report
+description: Report an incorrect, inconsistent, or undocumented behavior.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include production bidder data, private maximums, credentials,
+        payment details, or proprietary payloads. Report security issues through
+        GitHub private vulnerability reporting.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Specification
+        - Conformance suite
+        - Ruby engine
+        - Reference server
+        - Documentation or governance
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.0.1 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Use synthetic identifiers and values.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include an ordered synthetic scenario when possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: provenance
+    attributes:
+      label: Provenance
+      options:
+        - label: I removed proprietary and identifying data from this report.
+          required: true

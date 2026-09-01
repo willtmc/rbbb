@@ -1,0 +1,51 @@
+name: Auction rule proposal
+description: Propose or clarify normative auction behavior before writing an RFC.
+title: "rule: "
+labels: [rule-proposal]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Frame the decision so auctioneers and implementers can evaluate it.
+        Real experience is welcome; examples must be synthetic and
+        provenance-safe.
+  - type: textarea
+    id: question
+    attributes:
+      label: Policy question
+      description: What exact ambiguity or new capability needs a decision?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Operational motivation
+      description: Why does this matter in a real auction?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Credible outcomes
+      description: Describe the strongest competing rules and consequences.
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Synthetic example
+      description: Give an ordered example with invented IDs and amounts.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, audit, and abuse considerations
+      description: What must remain private, and what must an operator be able to prove?
+  - type: checkboxes
+    id: provenance
+    attributes:
+      label: Provenance
+      options:
+        - label: I have not copied proprietary code, fixtures, or private data.
+          required: true

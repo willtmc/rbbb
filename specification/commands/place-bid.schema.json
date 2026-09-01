@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/place-bid.schema.json",
+  "title": "Place bid command",
+  "description": "Draft envelope for requesting a bid decision. Pricing semantics are not yet normative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "command_id",
+    "type",
+    "auction_id",
+    "bidding_unit_id",
+    "bidder_id",
+    "expected_version",
+    "maximum_amount"
+  ],
+  "properties": {
+    "command_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "type": {"const": "place_bid"},
+    "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "expected_version": {"type": "integer", "minimum": 0},
+    "maximum_amount": {
+      "$ref": "../common/money.schema.json"
+    },
+    "effective_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Authoritative time input assigned by the command-ordering boundary."
+    }
+  }
+}

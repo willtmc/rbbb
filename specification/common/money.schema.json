@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/common/money.schema.json",
+  "title": "Money",
+  "description": "An exact monetary amount. Floating-point values are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["currency", "minor_units"],
+  "properties": {
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 alphabetic currency code."
+    },
+    "minor_units": {
+      "type": "integer",
+      "description": "Amount in the currency's minor unit."
+    }
+  }
+}
