@@ -9,6 +9,7 @@ module RBBB
       void_bid
       change_reserve
       change_closing_time
+      close_bidding
     ].freeze
     NOTIFICATION_POLICIES = %w[affected removed_bidder all_bidders none].freeze
     STATE_TRANSITION_EVENTS = %w[
@@ -18,6 +19,7 @@ module RBBB
       bid_voided
       reserve_changed
       closing_time_changed
+      bidding_closed
     ].freeze
 
     attr_reader :configuration
@@ -44,6 +46,7 @@ module RBBB
       if values.key?("expected_version") && values["expected_version"] != state.version
         return reject(command_id, "stale_aggregate_version")
       end
+      return reject(command_id, "bidding_closed") if state.closed?
 
       case values.fetch("type")
       when "place_bid"
@@ -60,6 +63,8 @@ module RBBB
         decide_change_reserve(state, values)
       when "change_closing_time"
         decide_change_closing_time(state, values)
+      when "close_bidding"
+        decide_close_bidding(state, values)
       end
     end
 
@@ -93,7 +98,14 @@ module RBBB
           state.authorization_history
         ),
         reserve_history: transition.data.fetch("reserve_history", state.reserve_history),
-        voided_bid_ids: transition.data.fetch("voided_bid_ids", state.voided_bid_ids)
+        voided_bid_ids: transition.data.fetch("voided_bid_ids", state.voided_bid_ids),
+        status: transition.data.fetch("status", state.status),
+        result: transition.data.fetch("result", state.result),
+        winner_id: transition.data.fetch("winner_id", state.winner_id),
+        winning_minor_units: transition.data.fetch(
+          "winning_minor_units",
+          state.winning_minor_units
+        )
       )
     end
 
@@ -224,6 +236,17 @@ module RBBB
       build_closing_time_change_decision(state, command, new_closes_at, effective_at)
     rescue ArgumentError
       reject(command_id, "invalid_closing_time")
+    end
+
+    def decide_close_bidding(state, command)
+      command_id = command.fetch("command_id")
+      effective_at = authoritative_time(command)
+      return reject(command_id, "invalid_command") unless effective_at
+      if state.closes_at && effective_at < state.closes_at
+        return reject(command_id, "closing_time_not_reached")
+      end
+
+      build_closing_decision(state, command, effective_at)
     end
 
     def build_bid_decision(state, command, bid_id, bidder_id, maximum, existing, effective_at)
@@ -442,6 +465,52 @@ module RBBB
         type: "closing_time_changed",
         visibility: :public,
         data: common_data
+      )
+
+      Decision.accepted([transition, public_event])
+    end
+
+    def build_closing_decision(state, command, effective_at)
+      aggregate_version = state.version + 1
+      result = closing_result(state)
+      winner_id = result == "sold" ? state.leader_id : nil
+      winning_minor_units = result == "sold" ? state.standing_minor_units : nil
+      common_data = {
+        "command_id" => command.fetch("command_id"),
+        "aggregate_version" => aggregate_version,
+        "result" => result
+      }
+      transition = Event.new(
+        type: "bidding_closed",
+        visibility: :privileged,
+        data: common_data.merge(
+          "effective_at" => Timestamp.dump(effective_at),
+          "leader_id" => state.leader_id,
+          "standing_minor_units" => state.standing_minor_units,
+          "next_required_minor_units" => state.next_required_minor_units,
+          "reserve_status" => state.reserve_status,
+          "reserve_minor_units" => state.reserve_minor_units,
+          "closes_at" => Timestamp.dump(state.closes_at),
+          "positions" => state.positions.transform_values(&:to_h),
+          "authorization_history" => state.authorization_history,
+          "reserve_history" => state.reserve_history,
+          "voided_bid_ids" => state.voided_bid_ids,
+          "status" => "closed",
+          "winner_id" => winner_id,
+          "winning_minor_units" => winning_minor_units
+        )
+      )
+      public_data = common_data.dup
+      case result
+      when "sold"
+        public_data["winning_minor_units"] = winning_minor_units
+      when "no_sale"
+        public_data["standing_minor_units"] = state.standing_minor_units
+      end
+      public_event = Event.new(
+        type: "bidding_closed",
+        visibility: :public,
+        data: public_data
       )
 
       Decision.accepted([transition, public_event])
@@ -724,6 +793,13 @@ module RBBB
       new_reserve > old_reserve
     end
 
+    def closing_result(state)
+      return "no_bid" unless state.leader_id
+      return "no_sale" if state.reserve_status == "reserve_not_met"
+
+      "sold"
+    end
+
     def validate_transition_history!(state, transition, aggregate_version)
       case transition.type
       when "reserve_changed"
@@ -745,7 +821,42 @@ module RBBB
         unless transition.data.fetch("old_closes_at") == Timestamp.dump(state.closes_at)
           raise InvalidState, "closing-time change does not start from current close"
         end
+      when "bidding_closed"
+        validate_closing_transition!(state, transition)
       end
+    end
+
+    def validate_closing_transition!(state, transition)
+      effective_at = Timestamp.parse(transition.data.fetch("effective_at"))
+      if state.closes_at && effective_at < state.closes_at
+        raise InvalidState, "closing transition precedes current close"
+      end
+
+      expected_result = closing_result(state)
+      expected_winner = expected_result == "sold" ? state.leader_id : nil
+      expected_winning_amount = expected_result == "sold" ? state.standing_minor_units : nil
+      expected_snapshot = {
+        "leader_id" => state.leader_id,
+        "standing_minor_units" => state.standing_minor_units,
+        "next_required_minor_units" => state.next_required_minor_units,
+        "reserve_status" => state.reserve_status,
+        "reserve_minor_units" => state.reserve_minor_units,
+        "closes_at" => Timestamp.dump(state.closes_at),
+        "positions" => state.positions.transform_values(&:to_h),
+        "authorization_history" => state.authorization_history,
+        "reserve_history" => state.reserve_history,
+        "voided_bid_ids" => state.voided_bid_ids,
+        "status" => "closed",
+        "result" => expected_result,
+        "winner_id" => expected_winner,
+        "winning_minor_units" => expected_winning_amount
+      }
+      snapshot_matches = expected_snapshot.all? do |key, expected|
+        transition.data.fetch(key) == expected
+      end
+      raise InvalidState, "closing transition does not match current state" unless snapshot_matches
+    rescue ArgumentError, KeyError
+      raise InvalidState, "closing transition is invalid"
     end
   end
 end

@@ -50,10 +50,11 @@ framework and persistence concerns do not belong inside the auction rules.
 ## Current status
 
 RFC 0001 defines the accepted timed online proxy-bidding baseline, backed by 26
-language-neutral conformance scenarios. The Ruby reference engine is now
-implementing that RFC incrementally and currently covers scenarios 001–022 and
-026. Scenarios 023–025, which specify explicit closing outcomes, remain next.
-Anything marked `draft` may still change before the first stable release.
+language-neutral conformance scenarios. The Ruby reference engine now covers
+all scenarios 001–026. This completes the behavior exercised by the initial
+RFC suite, not the persistence, API, security, or operational work required for
+production. Anything marked `draft` may still change before the first stable
+release.
 
 See [ROADMAP.md](ROADMAP.md), [docs/architecture.md](docs/architecture.md), and
 [specification/README.md](specification/README.md) for the planned path.

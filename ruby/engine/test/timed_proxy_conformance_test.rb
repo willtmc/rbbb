@@ -27,6 +27,9 @@ class TimedProxyConformanceTest < Minitest::Test
     020-lowering-reserve-after-bid.yaml
     021-raising-reserve-after-bid-rejected.yaml
     022-operator-may-extend-but-not-shorten.yaml
+    023-close-without-reserve-produces-sale.yaml
+    024-close-below-reserve-produces-no-sale.yaml
+    025-close-without-bids-produces-no-bid.yaml
     026-lowering-reserve-does-not-unwind-standing-amount.yaml
   ].freeze
 
