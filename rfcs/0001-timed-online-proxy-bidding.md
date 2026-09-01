@@ -192,9 +192,10 @@ shortened. Closed bidding units cannot be reopened in v0.1.
 
 Before the first accepted bid, an operator may set, raise, lower, or remove
 reserve. After bidding begins, reserve may only be lowered or removed. A lower
-reserve immediately recomputes reserve status. Whether lowering reserve may
-reduce an already executed standing amount remains unresolved; the proposed
-conformance suite currently preserves that amount.
+reserve immediately recomputes reserve status but never reduces an already
+executed standing amount or bidder executed floor. It withdraws only
+unexecuted future reserve pressure. This is expected to be an exceptional
+operator action, but its outcome remains deterministic and audited.
 
 Every operator change records actor, reason, previous value, and new value.
 Reserve values remain privileged; public output contains only resulting public
@@ -259,8 +260,6 @@ must prevail over the reserve.
 
 ## Unresolved questions
 
-- May lowering or removing reserve reduce an already executed standing amount,
-  or does it only change future reserve pressure and reserve status?
 - Which public bidder alias, if any, belongs in the standard projection rather
   than the host platform?
 - What retention guarantee applies to idempotency records and privileged audit
