@@ -1,0 +1,11 @@
+name: Closing without accepted bids produces no bid
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: close_bidding, effective_at: "2026-09-01T13:00:00Z"}
+expected:
+  public_events:
+    - {type: bidding_closed, result: no_bid}
+  final_state: {status: closed, result: no_bid, leader_id: null, standing_minor_units: null}

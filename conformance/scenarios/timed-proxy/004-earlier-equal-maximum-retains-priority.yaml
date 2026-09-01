@@ -1,0 +1,13 @@
+name: Earlier equal maximum retains priority
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 50000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: place_bid, bidder_id: bidder-b, maximum_minor_units: 50000, effective_at: "2026-09-01T12:11:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
+    - {type: standing_bid_changed, standing_minor_units: 50000, next_required_minor_units: 51000, leader_changed: false}
+  final_state: {leader_id: bidder-a, standing_minor_units: 50000, next_required_minor_units: 51000}

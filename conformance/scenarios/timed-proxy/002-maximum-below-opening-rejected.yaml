@@ -1,0 +1,12 @@
+name: Maximum below opening is rejected
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 9900, effective_at: "2026-09-01T12:10:00Z"}
+expected:
+  public_events: []
+  rejections:
+    - {command_id: command-1, reason: maximum_below_opening}
+  final_state: {leader_id: null, standing_minor_units: null, next_required_minor_units: 10000}

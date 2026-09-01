@@ -1,0 +1,14 @@
+name: Lowering reserve does not unwind an executed standing amount
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-reserve}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 150000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: change_reserve, operator_id: operator-1, reserve_minor_units: 80000, reason: seller_authorized_reduction, effective_at: "2026-09-01T12:11:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 100000, reserve_status: reserve_met}
+  privileged_events:
+    - {type: reserve_changed, old_reserve_minor_units: 100000, new_reserve_minor_units: 80000, operator_id: operator-1}
+  final_state: {leader_id: bidder-a, standing_minor_units: 100000, reserve_status: reserve_met, reserve_minor_units: 80000}
