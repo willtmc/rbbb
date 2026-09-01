@@ -37,11 +37,11 @@ rfcs/            Proposed changes to normative auction behavior
 docs/            Architecture, terminology, and design decisions
 ```
 
-The reference implementation will expose a pure decision boundary:
+The reference implementation exposes a pure decision boundary:
 
 ```ruby
-events = engine.decide(current_state, command)
-new_state = engine.apply(current_state, events)
+decision = engine.decide(current_state, command)
+new_state = engine.apply(current_state, decision.events)
 ```
 
 Rails, PostgreSQL, HTTP, and real-time delivery may surround that core, but
@@ -49,9 +49,10 @@ framework and persistence concerns do not belong inside the auction rules.
 
 ## Current status
 
-The repository is being bootstrapped. Its current documents describe project
-boundaries and contribution mechanics, not finalized auction semantics.
-Anything marked `draft` may change before the first stable release.
+RFC 0001 defines the accepted timed online proxy-bidding baseline, backed by 26
+language-neutral conformance scenarios. The Ruby reference engine is now
+implementing that RFC incrementally and currently covers scenarios 001–008.
+Anything marked `draft` may still change before the first stable release.
 
 See [ROADMAP.md](ROADMAP.md), [docs/architecture.md](docs/architecture.md), and
 [specification/README.md](specification/README.md) for the planned path.

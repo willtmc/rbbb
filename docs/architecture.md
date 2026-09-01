@@ -8,8 +8,8 @@ individual requirements are accepted into the specification.
 The engine is a deterministic state machine:
 
 ```text
-(current state, configuration, command) -> events
-(current state, events)                 -> new state
+(current state, configuration, command) -> decision
+(current state, accepted events)        -> new state
 ```
 
 Given the same initial state, configuration, ordered commands, and engine
@@ -86,9 +86,10 @@ Auction variation is expressed through a finite vocabulary of specified,
 composable configuration—not arbitrary callbacks. A genuinely new auction form
 requires an RFC, schemas, conformance scenarios, and implementation support.
 
-## Deferred decisions
+## Accepted and deferred behavior
 
-The project has not yet accepted normative rules for opening amounts, equal
-maximums, increment boundaries, reserve behavior, extension timing, quantity,
-choice, or multi-parcel allocation. Those decisions must not be inferred from
-examples in discussions or from another auction system.
+RFC 0001 accepts normative rules for timed online proxy bidding, including
+opening amounts, equal maxima, increment boundaries, reserves, extension
+timing, proxy reduction, and constrained operator actions. Quantity, choice,
+linked closing groups, multi-parcel allocation, outcry, and hybrid auctions
+remain deferred and must not be inferred from another auction system.

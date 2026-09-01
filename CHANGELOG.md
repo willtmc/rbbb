@@ -9,3 +9,6 @@ versioned artifacts.
 
 - Bootstrap project governance, specification, conformance, and Ruby reference
   implementation structure.
+- Implement the first pure-Ruby RFC 0001 slice: exact money, configurable
+  increments, opening bids, proxy competition, equal-maximum priority, short
+  increments, and challenger validation.

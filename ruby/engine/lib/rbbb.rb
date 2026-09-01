@@ -5,12 +5,16 @@ require_relative "rbbb/version"
 # Namespace for the R Triple B Ruby reference implementation.
 module RBBB
   class Error < StandardError; end
-
-  class NotImplemented < Error; end
-
-  # This guard prevents the scaffold from being mistaken for a bidding engine.
-  def self.decide(*)
-    raise NotImplemented,
-      "auction behavior has not been specified; do not use RBBB for live bids"
-  end
+  class InvalidConfiguration < Error; end
+  class InvalidMoney < Error; end
+  class InvalidState < Error; end
+  class UnsupportedFeature < Error; end
 end
+
+require_relative "rbbb/money"
+require_relative "rbbb/increment_schedule"
+require_relative "rbbb/configuration"
+require_relative "rbbb/event"
+require_relative "rbbb/decision"
+require_relative "rbbb/state"
+require_relative "rbbb/engine"
