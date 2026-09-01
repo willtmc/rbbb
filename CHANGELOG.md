@@ -27,3 +27,5 @@ versioned artifacts.
   `no_bid` outcomes and post-close mutation rejection.
 - Complete the experimental RFC 0001 configuration, command, rejection, event,
   public-state, and privileged aggregate-state schema contract.
+- Package the Ruby reference engine as the pre-stable `0.1.0.pre.1` evaluation
+  gem with compatibility metadata and isolated artifact verification.

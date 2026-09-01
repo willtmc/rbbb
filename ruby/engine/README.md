@@ -1,6 +1,6 @@
 # RBBB Ruby reference engine
 
-This directory will contain the pure-Ruby reference implementation of the RBBB
+This directory contains the pure-Ruby reference implementation of the RBBB
 specification.
 
 > [!WARNING]
@@ -54,9 +54,38 @@ decision = engine.decide(state, {
 state = engine.apply(state, decision.events) if decision.accepted?
 ```
 
+## Install the evaluation gem
+
+Version `0.1.0.pre.1` is an experimental evaluation package. It has no runtime
+dependencies and supports Ruby 3.2 and newer. Until a maintainer publishes it
+to a registry, build an installable artifact from a reviewed commit:
+
+```sh
+cd ruby/engine
+gem build rbbb.gemspec
+gem install ./rbbb-0.1.0.pre.1.gem
+ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
+```
+
+For local application evaluation with Bundler:
+
+```ruby
+gem "rbbb", path: "/path/to/rbbb/ruby/engine"
+```
+
+The installed package exposes its implementation version, claimed
+specification version, and release status as `RBBB::VERSION`,
+`RBBB::SPECIFICATION_VERSION`, and `RBBB::RELEASE_STATUS`. A package version is
+not, by itself, a production-readiness or compatibility claim.
+
 ## Development
 
 ```sh
 bundle install
 bundle exec rake
 ```
+
+The default task includes `package:verify`, which builds the gem in a temporary
+directory, checks the exact file allowlist, installs it into an isolated gem
+home, and runs a bid through the installed artifact. Run `bundle exec rake
+package:verify` when only that check is needed.

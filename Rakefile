@@ -13,4 +13,13 @@ Rake::TestTask.new(:test) do |task|
   task.pattern = "ruby/engine/test/**/*_test.rb"
 end
 
-task default: %i[validate test]
+namespace :package do
+  desc "Build, inspect, install, and smoke-test the Ruby evaluation gem"
+  task :verify do
+    Dir.chdir("ruby/engine") do
+      ruby "script/verify_package.rb"
+    end
+  end
+end
+
+task default: [:validate, :test, "package:verify"]

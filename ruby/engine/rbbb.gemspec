@@ -8,24 +8,32 @@ Gem::Specification.new do |spec|
   spec.authors = ["R Triple B contributors"]
   spec.email = ["will@mclemoreauction.com"]
 
-  spec.summary = "A deterministic, auditable auction bidding engine"
-  spec.description = "The pure-Ruby reference implementation of the language-neutral RBBB bidding specification."
+  spec.summary = "Experimental Ruby reference engine for deterministic auction bidding"
+  spec.description = <<~DESCRIPTION.strip
+    An evaluation build of the pure-Ruby reference implementation for the
+    language-neutral RBBB bidding specification. It is not production ready.
+  DESCRIPTION
   spec.homepage = "https://github.com/willtmc/rbbb"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2"
 
   spec.metadata = {
+    "allowed_push_host" => "https://rubygems.org",
     "bug_tracker_uri" => "https://github.com/willtmc/rbbb/issues",
     "changelog_uri" => "https://github.com/willtmc/rbbb/blob/main/CHANGELOG.md",
-    "documentation_uri" => "https://github.com/willtmc/rbbb#readme",
+    "documentation_uri" => "https://github.com/willtmc/rbbb/blob/main/ruby/engine/README.md",
     "homepage_uri" => spec.homepage,
+    "rbbb_release_status" => RBBB::RELEASE_STATUS,
+    "rbbb_rfc" => "0001",
+    "rbbb_specification_version" => RBBB::SPECIFICATION_VERSION,
     "rubygems_mfa_required" => "true",
-    "source_code_uri" => spec.homepage
+    "source_code_uri" => "https://github.com/willtmc/rbbb/tree/main/ruby/engine"
   }
 
   spec.files = Dir.chdir(__dir__) do
     Dir["lib/**/*.rb", "README.md", "LICENSE"].sort
   end
+  spec.extra_rdoc_files = ["README.md", "LICENSE"]
   spec.require_paths = ["lib"]
 
   spec.add_development_dependency "minitest", "~> 5.20"
