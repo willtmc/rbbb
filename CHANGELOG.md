@@ -18,3 +18,5 @@ versioned artifacts.
   resets for public bid changes.
 - Implement private maximum reductions constrained by each bidder's immutable
   executed floor and authoritative command order.
+- Implement audited pre-close operator bid voiding with immutable authorization
+  history, deterministic state recomputation, and notification intent.

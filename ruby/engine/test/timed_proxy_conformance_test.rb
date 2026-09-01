@@ -23,6 +23,7 @@ class TimedProxyConformanceTest < Minitest::Test
     016-bidder-reduces-unexecuted-proxy.yaml
     017-reduction-below-executed-amount-rejected.yaml
     018-command-order-controls-reduction-floor.yaml
+    019-operator-void-recomputes-standing-state.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

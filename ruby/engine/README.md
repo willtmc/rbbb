@@ -20,8 +20,14 @@ increment tiers, opening bids, proxy competition, earlier-equal priority,
 proxy clipping, challenger minimums, private leader maximum increases, and
 confidential reserve pricing and status. It also enforces authoritative closing
 times, configurable per-unit soft-close extensions, and bidder withdrawal of
-unexecuted proxy authority. Operator commands, explicit closing outcomes,
-persistence, and networking are not implemented.
+unexecuted proxy authority. Authorized operator bid voiding preserves the
+original bid, deterministically recomputes standing and executed amounts, and
+emits host-facing notification intent. Other operator commands, explicit
+closing outcomes, persistence, and networking are not implemented.
+
+The pure engine records `operator_id`; it does not authenticate or authorize
+that identity. A host must authorize the operator before submitting a
+`void_bid` command and must deliver or retry any requested notifications.
 
 ```ruby
 configuration = RBBB::Configuration.new(
