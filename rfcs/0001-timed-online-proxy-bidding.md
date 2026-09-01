@@ -166,7 +166,9 @@ notification policy.
 
 Voiding emits a new immutable audit event; it does not delete the original bid.
 The engine recomputes standing amount, leader, reserve status, and next required
-amount from remaining valid bids.
+amount from remaining valid bids. It also recomputes each remaining bidder's
+executed amount from those bids. A voided competing bid cannot continue to bind
+another bidder's proxy-withdrawal floor.
 
 Notification policy is one of:
 
@@ -257,8 +259,6 @@ must prevail over the reserve.
 
 ## Unresolved questions
 
-- When an operator voids the competing bid that caused proxy execution, does
-  the remaining bidder's executed-withdrawal floor also recompute downward?
 - May lowering or removing reserve reduce an already executed standing amount,
   or does it only change future reserve pressure and reserve status?
 - Which public bidder alias, if any, belongs in the standard projection rather

@@ -14,5 +14,6 @@ expected:
     - {type: standing_bid_changed, standing_minor_units: 10000, leader_changed: false}
   privileged_events:
     - {type: bid_voided, bid_id: bid-b, operator_id: operator-1, reason: bidder_entry_error}
+    - {type: executed_amount_changed, bidder_id: bidder-a, old_minor_units: 31000, new_minor_units: 10000}
     - {type: notification_requested, policy: affected}
-  final_state: {leader_id: bidder-a, standing_minor_units: 10000, voided_bid_ids: [bid-b]}
+  final_state: {leader_id: bidder-a, standing_minor_units: 10000, leader_executed_minor_units: 10000, voided_bid_ids: [bid-b]}
