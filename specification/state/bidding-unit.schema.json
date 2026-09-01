@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/state/bidding-unit.schema.json",
+  "title": "Bidding unit state",
+  "description": "Draft minimum replayable aggregate state; auction semantics remain deferred.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["auction_id", "bidding_unit_id", "version"],
+  "properties": {
+    "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "version": {"type": "integer", "minimum": 0}
+  }
+}

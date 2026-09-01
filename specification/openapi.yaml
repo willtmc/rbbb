@@ -1,0 +1,57 @@
+openapi: 3.1.0
+info:
+  title: RBBB command and query API
+  version: 0.1.0-draft
+  description: >-
+    Draft language-neutral HTTP contract. Auction semantics and production
+    service guarantees are not yet stable.
+  license:
+    name: MIT
+    identifier: MIT
+security:
+  - bearerAuth: []
+servers:
+  - url: https://api.rbbb.example
+    description: Placeholder used by the draft contract; no hosted service exists.
+paths:
+  /v1/commands:
+    post:
+      operationId: submitCommand
+      summary: Submit an idempotent state-changing command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./commands/place-bid.schema.json
+      responses:
+        "202":
+          description: Command accepted and committed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandResult"
+        "409":
+          description: Aggregate version or command-id conflict
+        "422":
+          description: Command rejected by a stable engine rule
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    CommandResult:
+      type: object
+      additionalProperties: false
+      required: [command_id, status, events]
+      properties:
+        command_id:
+          type: string
+        status:
+          type: string
+          enum: [committed]
+        events:
+          type: array
+          items:
+            $ref: ./events/event.schema.json

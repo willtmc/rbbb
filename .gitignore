@@ -1,0 +1,10 @@
+/.bundle/
+/.ruby-lsp/
+/.DS_Store
+/coverage/
+/pkg/
+/ruby/engine/Gemfile.lock
+/ruby/engine/vendor/bundle/
+/tmp/
+*.gem
+*.rbc
