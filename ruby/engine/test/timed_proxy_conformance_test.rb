@@ -24,6 +24,10 @@ class TimedProxyConformanceTest < Minitest::Test
     017-reduction-below-executed-amount-rejected.yaml
     018-command-order-controls-reduction-floor.yaml
     019-operator-void-recomputes-standing-state.yaml
+    020-lowering-reserve-after-bid.yaml
+    021-raising-reserve-after-bid-rejected.yaml
+    022-operator-may-extend-but-not-shorten.yaml
+    026-lowering-reserve-does-not-unwind-standing-amount.yaml
   ].freeze
 
   SCENARIOS.each do |filename|
