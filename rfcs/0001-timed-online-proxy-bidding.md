@@ -1,8 +1,9 @@
 # RFC 0001: Timed online proxy bidding baseline
 
-- Status: proposed
+- Status: accepted
 - Author: Will McLemore
 - Created: 2026-09-01
+- Accepted: 2026-09-01
 - Specification target: 0.1.0-draft
 
 ## Summary
@@ -219,6 +220,12 @@ all without changing engine conformance.
 Bidder-facing notifications may identify that bidder's own maximum and removal
 details through a separately authorized host-platform view.
 
+Exact idempotency and audit-retention periods belong to the reference-service
+contract, not the auction-behavior algorithm. Commands retain stable IDs and
+events remain immutable and ordered. A host must publish its retention policy;
+records may move to archival storage but cannot be selectively rewritten while
+retained.
+
 ## Closing result
 
 At closing, a bidding unit with no accepted real bid produces `no_bid`. A unit
@@ -262,8 +269,3 @@ must prevail over the reserve.
 - bidder self-service notification preferences;
 - quantity, choice, multi-parcel, outcry, and hybrid auctions; and
 - cross-bidding-unit exposure limits.
-
-## Unresolved questions
-
-- What retention guarantee applies to idempotency records and privileged audit
-  data?
