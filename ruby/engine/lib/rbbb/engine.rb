@@ -12,8 +12,8 @@ module RBBB
       unless configuration.is_a?(Configuration)
         raise InvalidConfiguration, "engine requires an RBBB::Configuration"
       end
-      unless configuration.reserve_minor_units.nil?
-        raise UnsupportedFeature, "reserve behavior is not implemented in this engine version"
+      if configuration.extension
+        raise UnsupportedFeature, "extension behavior is not implemented in this engine version"
       end
     end
 
@@ -54,7 +54,8 @@ module RBBB
         positions: transition.data.fetch("positions"),
         leader_id: transition.data.fetch("leader_id"),
         standing_minor_units: transition.data.fetch("standing_minor_units"),
-        next_required_minor_units: transition.data.fetch("next_required_minor_units")
+        next_required_minor_units: transition.data.fetch("next_required_minor_units"),
+        reserve_status: transition.data["reserve_status"]
       )
     end
 
@@ -97,6 +98,7 @@ module RBBB
       end
       leader_id = ranked.fetch(0).first
       standing = standing_amount(ranked)
+      reserve_status = reserve_status_for(ranked.fetch(0).last)
       next_required = standing + configuration.increment_for(standing)
 
       positions.each do |id, position|
@@ -120,22 +122,26 @@ module RBBB
           "leader_id" => leader_id,
           "standing_minor_units" => standing,
           "next_required_minor_units" => next_required,
+          "reserve_status" => reserve_status,
           "positions" => positions
         }
       )
 
       events = [privileged]
-      if standing != state.standing_minor_units || leader_id != state.leader_id
+      if standing != state.standing_minor_units || leader_id != state.leader_id ||
+          reserve_status != state.reserve_status
+        public_data = {
+          "command_id" => command.fetch("command_id"),
+          "aggregate_version" => aggregate_version,
+          "standing_minor_units" => standing,
+          "next_required_minor_units" => next_required,
+          "leader_changed" => leader_id != state.leader_id
+        }
+        public_data["reserve_status"] = reserve_status if reserve_status
         events << Event.new(
           type: "standing_bid_changed",
           visibility: :public,
-          data: {
-            "command_id" => command.fetch("command_id"),
-            "aggregate_version" => aggregate_version,
-            "standing_minor_units" => standing,
-            "next_required_minor_units" => next_required,
-            "leader_changed" => leader_id != state.leader_id
-          }
+          data: public_data
         )
       end
 
@@ -144,15 +150,32 @@ module RBBB
 
     def standing_amount(ranked)
       leader = ranked.fetch(0).last
-      return configuration.opening_minor_units if ranked.one?
-
-      runner_up = ranked.fetch(1).last
-      competitive = runner_up.fetch("maximum_minor_units") +
-        configuration.increment_for(runner_up.fetch("maximum_minor_units"))
+      competitive = if ranked.one?
+        configuration.opening_minor_units
+      else
+        runner_up = ranked.fetch(1).last
+        runner_up.fetch("maximum_minor_units") +
+          configuration.increment_for(runner_up.fetch("maximum_minor_units"))
+      end
+      reserve_pressure = if configuration.reserve_minor_units
+        [leader.fetch("maximum_minor_units"), configuration.reserve_minor_units].min
+      else
+        configuration.opening_minor_units
+      end
       [
         leader.fetch("maximum_minor_units"),
-        [configuration.opening_minor_units, competitive].max
+        [configuration.opening_minor_units, competitive, reserve_pressure].max
       ].min
+    end
+
+    def reserve_status_for(leader)
+      return nil unless configuration.reserve_minor_units
+
+      if leader.fetch("maximum_minor_units") >= configuration.reserve_minor_units
+        "reserve_met"
+      else
+        "reserve_not_met"
+      end
     end
 
     def reject(command_id, reason)

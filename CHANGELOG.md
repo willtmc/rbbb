@@ -12,3 +12,5 @@ versioned artifacts.
 - Implement the first pure-Ruby RFC 0001 slice: exact money, configurable
   increments, opening bids, proxy competition, equal-maximum priority, short
   increments, and challenger validation.
+- Implement confidential reserve pressure, reserve-met status, and real-bidder
+  priority when a maximum equals reserve.

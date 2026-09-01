@@ -19,7 +19,7 @@ module RBBB
     end
 
     attr_reader :version, :positions, :leader_id, :standing_minor_units,
-      :next_required_minor_units
+      :next_required_minor_units, :reserve_status
 
     def self.empty(configuration)
       new(
@@ -27,12 +27,13 @@ module RBBB
         positions: {},
         leader_id: nil,
         standing_minor_units: nil,
-        next_required_minor_units: configuration.opening_minor_units
+        next_required_minor_units: configuration.opening_minor_units,
+        reserve_status: configuration.reserve_minor_units.nil? ? nil : "reserve_not_met"
       )
     end
 
     def initialize(version:, positions:, leader_id:, standing_minor_units:,
-      next_required_minor_units:)
+      next_required_minor_units:, reserve_status: nil)
       @version = version
       @positions = positions.each_with_object({}) do |(bidder_id, position), copy|
         copy[bidder_id.to_s.freeze] = coerce_position(position)
@@ -40,6 +41,7 @@ module RBBB
       @leader_id = leader_id&.to_s&.freeze
       @standing_minor_units = standing_minor_units
       @next_required_minor_units = next_required_minor_units
+      @reserve_status = reserve_status&.to_s&.freeze
       validate!
       freeze
     end
@@ -59,6 +61,7 @@ module RBBB
         result["leader_maximum_minor_units"] = positions.fetch(leader_id).maximum_minor_units
         result["leader_executed_minor_units"] = positions.fetch(leader_id).executed_minor_units
       end
+      result["reserve_status"] = reserve_status if reserve_status
       result
     end
 
@@ -81,6 +84,9 @@ module RBBB
       raise InvalidState, "version must be a non-negative integer" unless version.is_a?(Integer) && version >= 0
       unless next_required_minor_units.is_a?(Integer) && next_required_minor_units >= 0
         raise InvalidState, "next required amount must be a non-negative integer"
+      end
+      unless [nil, "reserve_not_met", "reserve_met"].include?(reserve_status)
+        raise InvalidState, "reserve status is invalid"
       end
       if leader_id && !positions.key?(leader_id)
         raise InvalidState, "leader must have a position"

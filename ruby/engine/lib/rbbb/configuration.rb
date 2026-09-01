@@ -4,7 +4,7 @@ module RBBB
   # Immutable bidding-unit configuration consumed by the pure engine.
   class Configuration
     attr_reader :currency, :opening_minor_units, :reserve_minor_units,
-      :increment_schedule
+      :increment_schedule, :extension
 
     def self.from_h(attributes)
       values = attributes.transform_keys(&:to_s)
@@ -12,13 +12,15 @@ module RBBB
         currency: values.fetch("currency"),
         opening_minor_units: values.fetch("opening_minor_units"),
         reserve_minor_units: values["reserve_minor_units"],
-        increments: values.fetch("increments")
+        increments: values.fetch("increments"),
+        extension: values["extension"]
       )
     rescue KeyError => e
       raise InvalidConfiguration, "configuration is missing #{e.key}"
     end
 
-    def initialize(currency:, opening_minor_units:, increments:, reserve_minor_units: nil)
+    def initialize(currency:, opening_minor_units:, increments:, reserve_minor_units: nil,
+      extension: nil)
       Money.new(currency: currency, minor_units: opening_minor_units)
       unless opening_minor_units >= 0
         raise InvalidConfiguration, "opening amount must be non-negative"
@@ -32,6 +34,7 @@ module RBBB
       @opening_minor_units = opening_minor_units
       @reserve_minor_units = reserve_minor_units
       @increment_schedule = IncrementSchedule.new(increments)
+      @extension = extension&.transform_keys(&:to_s)&.freeze
       freeze
     rescue InvalidMoney => e
       raise InvalidConfiguration, e.message

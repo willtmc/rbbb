@@ -13,6 +13,9 @@ class TimedProxyConformanceTest < Minitest::Test
     006-proxy-clipping-permits-short-increment.yaml
     007-challenger-below-next-required-rejected.yaml
     008-leader-may-raise-by-less-than-increment.yaml
+    009-reserve-pushes-price-without-being-met.yaml
+    010-real-bidder-wins-reserve-tie.yaml
+    011-maximum-above-reserve-stops-at-reserve.yaml
   ].freeze
 
   SCENARIOS.each do |filename|
