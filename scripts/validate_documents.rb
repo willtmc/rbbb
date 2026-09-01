@@ -79,7 +79,7 @@ scenario_paths.each do |path|
   errors << "#{relative(path)}: expected.public_events must be an array" unless expected["public_events"].is_a?(Array)
   errors << "#{relative(path)}: expected.final_state must be an object" unless expected["final_state"].is_a?(Hash)
 
-  forbidden_public_keys = /maximum|reserve_minor_units|operator_id|reason|bidder_id/
+  forbidden_public_keys = /maximum|reserve_minor_units|operator_id|reason|bidder_id|leader_id|winner_id/
   Array(expected["public_events"]).each_with_index do |event, index|
     leaked = deep_keys(event).grep(forbidden_public_keys).uniq
     next if leaked.empty?

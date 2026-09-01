@@ -211,6 +211,11 @@ next required amount, leader change, reserve status, closing time, and final
 sale status. They never expose a private maximum, confidential reserve, account
 identity, or operator-only reason.
 
+Public bidder presentation belongs entirely to the host platform. RBBB does
+not standardize or emit a public bidder, leader, or winner identifier. A host
+may display an anonymous paddle number, username, initials, or no identity at
+all without changing engine conformance.
+
 Bidder-facing notifications may identify that bidder's own maximum and removal
 details through a separately authorized host-platform view.
 
@@ -260,7 +265,5 @@ must prevail over the reserve.
 
 ## Unresolved questions
 
-- Which public bidder alias, if any, belongs in the standard projection rather
-  than the host platform?
 - What retention guarantee applies to idempotency records and privileged audit
   data?
