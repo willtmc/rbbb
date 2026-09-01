@@ -16,6 +16,10 @@ class TimedProxyConformanceTest < Minitest::Test
     009-reserve-pushes-price-without-being-met.yaml
     010-real-bidder-wins-reserve-tie.yaml
     011-maximum-above-reserve-stops-at-reserve.yaml
+    012-qualifying-bid-resets-soft-close.yaml
+    013-private-maximum-raise-does-not-extend.yaml
+    014-bid-at-closing-time-rejected.yaml
+    015-bid-ordered-before-close-remains-eligible.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

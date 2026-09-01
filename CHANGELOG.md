@@ -14,3 +14,5 @@ versioned artifacts.
   increments, and challenger validation.
 - Implement confidential reserve pressure, reserve-met status, and real-bidder
   priority when a maximum equals reserve.
+- Implement authoritative closing-time eligibility and configurable soft-close
+  resets for public bid changes.

@@ -19,7 +19,7 @@ module RBBB
     end
 
     attr_reader :version, :positions, :leader_id, :standing_minor_units,
-      :next_required_minor_units, :reserve_status
+      :next_required_minor_units, :reserve_status, :opens_at, :closes_at
 
     def self.empty(configuration)
       new(
@@ -28,12 +28,14 @@ module RBBB
         leader_id: nil,
         standing_minor_units: nil,
         next_required_minor_units: configuration.opening_minor_units,
-        reserve_status: configuration.reserve_minor_units.nil? ? nil : "reserve_not_met"
+        reserve_status: configuration.reserve_minor_units.nil? ? nil : "reserve_not_met",
+        opens_at: configuration.opens_at,
+        closes_at: configuration.closes_at
       )
     end
 
     def initialize(version:, positions:, leader_id:, standing_minor_units:,
-      next_required_minor_units:, reserve_status: nil)
+      next_required_minor_units:, reserve_status: nil, opens_at: nil, closes_at: nil)
       @version = version
       @positions = positions.each_with_object({}) do |(bidder_id, position), copy|
         copy[bidder_id.to_s.freeze] = coerce_position(position)
@@ -42,6 +44,8 @@ module RBBB
       @standing_minor_units = standing_minor_units
       @next_required_minor_units = next_required_minor_units
       @reserve_status = reserve_status&.to_s&.freeze
+      @opens_at = coerce_timestamp(opens_at, "opens_at")
+      @closes_at = coerce_timestamp(closes_at, "closes_at")
       validate!
       freeze
     end
@@ -57,6 +61,8 @@ module RBBB
         "standing_minor_units" => standing_minor_units,
         "next_required_minor_units" => next_required_minor_units
       }
+      result["opens_at"] = Timestamp.dump(opens_at) if opens_at
+      result["closes_at"] = Timestamp.dump(closes_at) if closes_at
       if leader_id
         result["leader_maximum_minor_units"] = positions.fetch(leader_id).maximum_minor_units
         result["leader_executed_minor_units"] = positions.fetch(leader_id).executed_minor_units
@@ -66,6 +72,14 @@ module RBBB
     end
 
     private
+
+    def coerce_timestamp(value, field)
+      return nil if value.nil?
+
+      Timestamp.parse(value)
+    rescue ArgumentError
+      raise InvalidState, "#{field} must be a valid ISO 8601 timestamp"
+    end
 
     def coerce_position(position)
       return position if position.is_a?(Position) && position.frozen?
@@ -87,6 +101,9 @@ module RBBB
       end
       unless [nil, "reserve_not_met", "reserve_met"].include?(reserve_status)
         raise InvalidState, "reserve status is invalid"
+      end
+      if opens_at && closes_at && opens_at >= closes_at
+        raise InvalidState, "opens_at must be earlier than closes_at"
       end
       if leader_id && !positions.key?(leader_id)
         raise InvalidState, "leader must have a position"
