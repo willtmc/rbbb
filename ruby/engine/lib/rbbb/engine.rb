@@ -3,7 +3,7 @@
 module RBBB
   # Deterministic RFC 0001 state transitions implemented to a claimed subset.
   class Engine
-    SUPPORTED_COMMANDS = %w[place_bid].freeze
+    SUPPORTED_COMMANDS = %w[place_bid reduce_maximum].freeze
 
     attr_reader :configuration
 
@@ -32,12 +32,18 @@ module RBBB
         return reject(command_id, "stale_aggregate_version")
       end
 
-      decide_place_bid(state, values)
+      case values.fetch("type")
+      when "place_bid"
+        decide_place_bid(state, values)
+      when "reduce_maximum"
+        decide_reduce_maximum(state, values)
+      end
     end
 
     def apply(state, events)
       transition = events.find do |event|
-        event.privileged? && %w[maximum_accepted maximum_increased].include?(event.type)
+        event.privileged? &&
+          %w[maximum_accepted maximum_increased maximum_reduced].include?(event.type)
       end
       return state unless transition
 
@@ -65,12 +71,8 @@ module RBBB
       maximum = command["maximum_minor_units"]
       command_id = command["command_id"]
       effective_at = authoritative_time(command)
-      if state.closes_at && !effective_at
-        return reject(command_id, "invalid_command")
-      end
-      if state.closes_at && effective_at >= state.closes_at
-        return reject(command_id, "bidding_closed")
-      end
+      timing_rejection = reject_for_timing(state, command_id, effective_at)
+      return timing_rejection if timing_rejection
       unless maximum.is_a?(Integer) && maximum >= 0
         return reject(command_id, "invalid_maximum")
       end
@@ -88,6 +90,33 @@ module RBBB
       end
 
       build_bid_decision(state, command, bidder_id, maximum, existing, effective_at)
+    end
+
+    def decide_reduce_maximum(state, command)
+      bidder_id = command.fetch("bidder_id").to_s
+      maximum = command["maximum_minor_units"]
+      command_id = command["command_id"]
+      effective_at = authoritative_time(command)
+      timing_rejection = reject_for_timing(state, command_id, effective_at)
+      return timing_rejection if timing_rejection
+      unless maximum.is_a?(Integer) && maximum >= 0
+        return reject(command_id, "invalid_maximum")
+      end
+
+      existing = state.position_for(bidder_id)
+      return reject(command_id, "maximum_not_found") unless existing
+      if maximum >= existing.maximum_minor_units
+        return reject(command_id, "maximum_not_reduced")
+      end
+      if maximum < existing.executed_minor_units
+        return reject(
+          command_id,
+          "maximum_below_executed_amount",
+          "executed_floor_minor_units" => existing.executed_minor_units
+        )
+      end
+
+      build_reduction_decision(state, command, bidder_id, maximum, existing, effective_at)
     end
 
     def build_bid_decision(state, command, bidder_id, maximum, existing, effective_at)
@@ -170,12 +199,51 @@ module RBBB
       Decision.accepted(events)
     end
 
+    def build_reduction_decision(state, command, bidder_id, maximum, existing, effective_at)
+      aggregate_version = state.version + 1
+      positions = state.positions.transform_values(&:to_h)
+      positions[bidder_id] = {
+        "maximum_minor_units" => maximum,
+        "priority" => aggregate_version,
+        "executed_minor_units" => existing.executed_minor_units
+      }
+
+      event = Event.new(
+        type: "maximum_reduced",
+        visibility: :privileged,
+        data: {
+          "command_id" => command.fetch("command_id"),
+          "aggregate_version" => aggregate_version,
+          "bidder_id" => bidder_id,
+          "old_maximum_minor_units" => existing.maximum_minor_units,
+          "new_maximum_minor_units" => maximum,
+          "executed_floor_minor_units" => existing.executed_minor_units,
+          "leader_id" => state.leader_id,
+          "standing_minor_units" => state.standing_minor_units,
+          "next_required_minor_units" => state.next_required_minor_units,
+          "reserve_status" => state.reserve_status,
+          "effective_at" => Timestamp.dump(effective_at),
+          "closes_at" => Timestamp.dump(state.closes_at),
+          "positions" => positions
+        }
+      )
+
+      Decision.accepted([event])
+    end
+
     def authoritative_time(command)
       value = command["effective_at"]
       return nil if value.nil?
 
       Timestamp.parse(value)
     rescue ArgumentError
+      nil
+    end
+
+    def reject_for_timing(state, command_id, effective_at)
+      return reject(command_id, "invalid_command") if state.closes_at && !effective_at
+      return reject(command_id, "bidding_closed") if state.closes_at && effective_at >= state.closes_at
+
       nil
     end
 
@@ -219,8 +287,8 @@ module RBBB
       end
     end
 
-    def reject(command_id, reason)
-      Decision.rejected(command_id: command_id, reason: reason)
+    def reject(command_id, reason, details = {})
+      Decision.rejected(command_id: command_id, reason: reason, details: details)
     end
 
     def present_string?(value)
