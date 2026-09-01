@@ -20,6 +20,9 @@ class TimedProxyConformanceTest < Minitest::Test
     013-private-maximum-raise-does-not-extend.yaml
     014-bid-at-closing-time-rejected.yaml
     015-bid-ordered-before-close-remains-eligible.yaml
+    016-bidder-reduces-unexecuted-proxy.yaml
+    017-reduction-below-executed-amount-rejected.yaml
+    018-command-order-controls-reduction-floor.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

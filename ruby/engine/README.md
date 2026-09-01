@@ -19,9 +19,9 @@ The current implementation covers exact minor-unit money, configurable
 increment tiers, opening bids, proxy competition, earlier-equal priority,
 proxy clipping, challenger minimums, private leader maximum increases, and
 confidential reserve pricing and status. It also enforces authoritative closing
-times and configurable per-unit soft-close extensions. Reductions, operator
-commands, explicit closing outcomes, persistence, and networking are not
-implemented.
+times, configurable per-unit soft-close extensions, and bidder withdrawal of
+unexecuted proxy authority. Operator commands, explicit closing outcomes,
+persistence, and networking are not implemented.
 
 ```ruby
 configuration = RBBB::Configuration.new(

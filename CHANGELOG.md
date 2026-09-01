@@ -16,3 +16,5 @@ versioned artifacts.
   priority when a maximum equals reserve.
 - Implement authoritative closing-time eligibility and configurable soft-close
   resets for public bid changes.
+- Implement private maximum reductions constrained by each bidder's immutable
+  executed floor and authoritative command order.
