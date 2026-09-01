@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/events/privileged-event.schema.json",
+  "title": "Privileged RFC 0001 event",
+  "description": "Audit event that may contain bidder identity, private maxima, reserve amount, operator reason, or replay state.",
+  "x-rbbb-status": "experimental",
+  "allOf": [{"$ref": "./base.schema.json"}],
+  "oneOf": [
+    {
+      "properties": {
+        "type": {"enum": ["maximum_accepted", "maximum_increased"]},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/maximumAccepted"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "maximum_reduced"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/maximumReduced"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "bid_voided"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/bidVoided"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "executed_amount_changed"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/executedAmountChanged"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "notification_requested"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/notificationRequested"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "reserve_changed"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/reserveChanged"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "closing_time_changed"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/closingTimeChanged"}
+      }
+    },
+    {
+      "properties": {
+        "type": {"const": "bidding_closed"},
+        "visibility": {"const": "privileged"},
+        "data": {"$ref": "#/$defs/biddingClosed"}
+      }
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "state": {"$ref": "../state/aggregate.schema.json"},
+    "maximumAccepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bid_id",
+        "bidder_id",
+        "maximum_minor_units",
+        "executed_minor_units",
+        "state"
+      ],
+      "properties": {
+        "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "maximum_minor_units": {"type": "integer", "minimum": 0},
+        "executed_minor_units": {"type": "integer", "minimum": 0},
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "maximumReduced": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bidder_id",
+        "old_maximum_minor_units",
+        "new_maximum_minor_units",
+        "executed_floor_minor_units",
+        "state"
+      ],
+      "properties": {
+        "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "old_maximum_minor_units": {"type": "integer", "minimum": 0},
+        "new_maximum_minor_units": {"type": "integer", "minimum": 0},
+        "executed_floor_minor_units": {"type": "integer", "minimum": 0},
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "bidVoided": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bid_id",
+        "bidder_id",
+        "operator_id",
+        "reason",
+        "notification_policy",
+        "state"
+      ],
+      "properties": {
+        "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "notification_policy": {
+          "type": "string",
+          "enum": ["affected", "removed_bidder", "all_bidders", "none"]
+        },
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "executedAmountChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bidder_id", "old_minor_units", "new_minor_units"],
+      "properties": {
+        "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "old_minor_units": {"type": "integer", "minimum": 0},
+        "new_minor_units": {"type": "integer", "minimum": 0}
+      }
+    },
+    "notificationRequested": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bid_id", "reason", "policy", "bidder_ids"],
+      "properties": {
+        "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "policy": {
+          "type": "string",
+          "enum": ["affected", "removed_bidder", "all_bidders", "none"]
+        },
+        "bidder_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 255}
+        }
+      }
+    },
+    "reserveChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator_id",
+        "reason",
+        "old_reserve_minor_units",
+        "new_reserve_minor_units",
+        "state"
+      ],
+      "properties": {
+        "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "old_reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "new_reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "closingTimeChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operator_id", "reason", "old_closes_at", "closes_at", "state"],
+      "properties": {
+        "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "old_closes_at": {"type": ["string", "null"], "format": "date-time"},
+        "closes_at": {"type": "string", "format": "date-time"},
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "biddingClosed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "winner_id", "winning_minor_units", "state"],
+      "properties": {
+        "result": {"type": "string", "enum": ["sold", "no_sale", "no_bid"]},
+        "winner_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+        "winning_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "state": {"$ref": "#/$defs/state"}
+      }
+    }
+  }
+}

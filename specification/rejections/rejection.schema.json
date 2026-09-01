@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/rejections/rejection.schema.json",
+  "title": "Command rejection",
+  "description": "Stable machine-readable rejection returned without changing aggregate state.",
+  "x-rbbb-status": "experimental",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["command_id", "status", "reason"],
+  "properties": {
+    "command_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "status": {"const": "rejected"},
+    "reason": {
+      "type": "string",
+      "enum": [
+        "invalid_command",
+        "unsupported_command",
+        "stale_aggregate_version",
+        "bidding_closed",
+        "bid_id_already_exists",
+        "invalid_maximum",
+        "maximum_below_opening",
+        "maximum_not_increased",
+        "maximum_below_next_required",
+        "maximum_not_found",
+        "maximum_not_reduced",
+        "maximum_below_executed_amount",
+        "invalid_notification_policy",
+        "bid_not_found",
+        "bid_already_voided",
+        "invalid_reserve",
+        "reserve_may_not_increase_after_first_bid",
+        "invalid_closing_time",
+        "closing_time_may_not_shorten_after_first_bid",
+        "closing_time_not_reached"
+      ]
+    }
+  }
+}

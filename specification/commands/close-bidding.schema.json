@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/close-bidding.schema.json",
+  "title": "Close bidding command",
+  "description": "Explicitly close an eligible bidding unit and produce its terminal result.",
+  "x-rbbb-status": "experimental",
+  "allOf": [
+    {"$ref": "./base.schema.json"},
+    {
+      "type": "object",
+      "properties": {
+        "type": {"const": "close_bidding"}
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

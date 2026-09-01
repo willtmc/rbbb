@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/change-reserve.schema.json",
+  "title": "Change reserve command",
+  "description": "Set, change, or remove a confidential reserve within RFC 0001 constraints.",
+  "x-rbbb-status": "experimental",
+  "allOf": [
+    {"$ref": "./base.schema.json"},
+    {
+      "type": "object",
+      "required": ["operator_id", "reason", "reserve_minor_units"],
+      "properties": {
+        "type": {"const": "change_reserve"},
+        "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "reserve_minor_units": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Null removes the reserve. This field is privileged."
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

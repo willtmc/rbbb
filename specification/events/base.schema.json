@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/events/base.schema.json",
+  "title": "Event envelope",
+  "description": "Common immutable event identity, routing, ordering, visibility, and timing fields.",
+  "x-rbbb-status": "experimental",
+  "type": "object",
+  "required": [
+    "event_id",
+    "type",
+    "visibility",
+    "auction_id",
+    "bidding_unit_id",
+    "aggregate_version",
+    "event_index",
+    "command_id",
+    "effective_at",
+    "recorded_at",
+    "data"
+  ],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "type": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "visibility": {"type": "string", "enum": ["public", "privileged"]},
+    "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "aggregate_version": {"type": "integer", "minimum": 1},
+    "event_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based order among events emitted by the same accepted command and aggregate version."
+    },
+    "command_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "effective_at": {"type": "string", "format": "date-time"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "data": {"type": "object"}
+  }
+}

@@ -1,14 +1,70 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/willtmc/rbbb/specification/state/bidding-unit.schema.json",
-  "title": "Bidding unit state",
-  "description": "Draft minimum replayable aggregate state; auction semantics remain deferred.",
+  "title": "Public bidding unit state",
+  "description": "Public RFC 0001 query projection. It excludes bidder identity, private maxima, reserve amount, and operator audit facts.",
+  "x-rbbb-status": "experimental",
   "type": "object",
-  "additionalProperties": true,
-  "required": ["auction_id", "bidding_unit_id", "version"],
+  "additionalProperties": false,
+  "required": [
+    "auction_id",
+    "bidding_unit_id",
+    "version",
+    "status",
+    "currency",
+    "opens_at",
+    "closes_at",
+    "standing_minor_units",
+    "next_required_minor_units",
+    "reserve_status",
+    "result",
+    "winning_minor_units"
+  ],
   "properties": {
     "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
     "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "version": {"type": "integer", "minimum": 0}
-  }
+    "version": {"type": "integer", "minimum": 0},
+    "status": {"type": "string", "enum": ["open", "closed"]},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "opens_at": {"type": "string", "format": "date-time"},
+    "closes_at": {"type": "string", "format": "date-time"},
+    "standing_minor_units": {"type": ["integer", "null"], "minimum": 0},
+    "next_required_minor_units": {"type": "integer", "minimum": 0},
+    "reserve_status": {
+      "type": ["string", "null"],
+      "enum": ["reserve_not_met", "reserve_met", null]
+    },
+    "result": {
+      "type": ["string", "null"],
+      "enum": ["sold", "no_sale", "no_bid", null]
+    },
+    "winning_minor_units": {"type": ["integer", "null"], "minimum": 0}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "open"}}},
+      "then": {
+        "properties": {
+          "result": {"const": null},
+          "winning_minor_units": {"const": null}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"result": {"const": "sold"}}},
+      "then": {
+        "properties": {
+          "winning_minor_units": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"result": {"enum": ["no_sale", "no_bid"]}}},
+      "then": {"properties": {"winning_minor_units": {"const": null}}}
+    },
+    {
+      "if": {"properties": {"result": {"const": "no_bid"}}},
+      "then": {"properties": {"standing_minor_units": {"const": null}}}
+    }
+  ]
 }

@@ -25,3 +25,5 @@ versioned artifacts.
   pressure.
 - Implement explicit ordered closing with terminal `sold`, `no_sale`, and
   `no_bid` outcomes and post-close mutation rejection.
+- Complete the experimental RFC 0001 configuration, command, rejection, event,
+  public-state, and privileged aggregate-state schema contract.

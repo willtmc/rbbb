@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/void-bid.schema.json",
+  "title": "Void bid command",
+  "description": "Record an authorized pre-close operator removal without deleting the original bid.",
+  "x-rbbb-status": "experimental",
+  "allOf": [
+    {"$ref": "./base.schema.json"},
+    {
+      "type": "object",
+      "required": ["bid_id", "operator_id", "reason", "notification_policy"],
+      "properties": {
+        "type": {"const": "void_bid"},
+        "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "notification_policy": {
+          "type": "string",
+          "enum": ["affected", "removed_bidder", "all_bidders", "none"]
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

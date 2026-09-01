@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/base.schema.json",
+  "title": "Command envelope",
+  "description": "Common routing, concurrency, identity, and authoritative-time fields for every RFC 0001 command.",
+  "x-rbbb-status": "experimental",
+  "type": "object",
+  "required": [
+    "command_id",
+    "type",
+    "auction_id",
+    "bidding_unit_id",
+    "expected_version",
+    "effective_at"
+  ],
+  "properties": {
+    "command_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "type": {
+      "type": "string",
+      "enum": [
+        "place_bid",
+        "reduce_maximum",
+        "void_bid",
+        "change_reserve",
+        "change_closing_time",
+        "close_bidding"
+      ]
+    },
+    "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "expected_version": {"type": "integer", "minimum": 0},
+    "effective_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Authoritative UTC time assigned at the bidding-unit command-ordering boundary."
+    }
+  }
+}

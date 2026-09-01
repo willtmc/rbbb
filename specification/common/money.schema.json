@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/willtmc/rbbb/specification/common/money.schema.json",
   "title": "Money",
-  "description": "An exact monetary amount. Floating-point values are forbidden.",
+  "description": "A reusable exact monetary amount for boundaries that are not already scoped to one currency. RFC 0001 bidding-unit commands use *_minor_units fields instead.",
+  "x-rbbb-status": "draft",
   "type": "object",
   "additionalProperties": false,
   "required": ["currency", "minor_units"],
@@ -14,6 +15,7 @@
     },
     "minor_units": {
       "type": "integer",
+      "minimum": 0,
       "description": "Amount in the currency's minor unit."
     }
   }
