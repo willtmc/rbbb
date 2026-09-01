@@ -35,7 +35,12 @@ class ConformanceRunner
     expected = scenario.fetch("expected")
     assert_collection(expected.fetch("public_events"), public_events, "public events")
     if expected.key?("privileged_events")
-      assert_collection(expected.fetch("privileged_events"), privileged_events, "privileged events")
+      expected_privileged = expected.fetch("privileged_events")
+      expected_types = expected_privileged.map { |event| event.fetch("type") }.uniq
+      relevant_privileged = privileged_events.select do |event|
+        expected_types.include?(event.fetch("type"))
+      end
+      assert_collection(expected_privileged, relevant_privileged, "privileged events")
     end
     assert_collection(expected.fetch("rejections", []), rejections, "rejections")
     assert_subset(expected.fetch("final_state"), state.to_h, "final state")

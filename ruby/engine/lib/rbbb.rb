@@ -13,6 +13,7 @@ end
 
 require_relative "rbbb/money"
 require_relative "rbbb/increment_schedule"
+require_relative "rbbb/timestamp"
 require_relative "rbbb/configuration"
 require_relative "rbbb/event"
 require_relative "rbbb/decision"

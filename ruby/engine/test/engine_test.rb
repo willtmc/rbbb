@@ -168,17 +168,20 @@ class EngineTest < Minitest::Test
     assert_equal "reserve_met", state.reserve_status
   end
 
-  def test_fails_closed_for_unimplemented_extension_behavior
+  def test_parses_timed_configuration_and_exposes_initial_schedule
     configuration = RBBB::Configuration.from_h({
       currency: "USD",
       opening_minor_units: 10_000,
       increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: "2026-09-01T12:00:00Z",
+      closes_at: "2026-09-01T13:00:00Z",
       extension: {trigger_window_seconds: 300, duration_seconds: 300}
     })
+    engine = RBBB::Engine.new(configuration)
 
-    error = assert_raises(RBBB::UnsupportedFeature) do
-      RBBB::Engine.new(configuration)
-    end
-    assert_includes error.message, "extension behavior"
+    assert_equal "2026-09-01T12:00:00Z", RBBB::Timestamp.dump(configuration.opens_at)
+    assert_equal "2026-09-01T13:00:00Z", RBBB::Timestamp.dump(configuration.closes_at)
+    assert_equal 300, configuration.extension.fetch("duration_seconds")
+    assert_equal "2026-09-01T13:00:00Z", engine.initial_state.to_h.fetch("closes_at")
   end
 end

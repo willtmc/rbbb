@@ -18,15 +18,19 @@ new_state = engine.apply(current_state, decision.events)
 The current implementation covers exact minor-unit money, configurable
 increment tiers, opening bids, proxy competition, earlier-equal priority,
 proxy clipping, challenger minimums, private leader maximum increases, and
-confidential reserve pricing and status. Extensions, reductions, operator
-commands, closing, persistence, and networking are not implemented; the engine
-fails closed when extension behavior is configured.
+confidential reserve pricing and status. It also enforces authoritative closing
+times and configurable per-unit soft-close extensions. Reductions, operator
+commands, explicit closing outcomes, persistence, and networking are not
+implemented.
 
 ```ruby
 configuration = RBBB::Configuration.new(
   currency: "USD",
   opening_minor_units: 10_000,
-  increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+  increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+  opens_at: "2026-09-01T12:00:00Z",
+  closes_at: "2026-09-01T13:00:00Z",
+  extension: {trigger_window_seconds: 300, duration_seconds: 300}
 )
 engine = RBBB::Engine.new(configuration)
 state = engine.initial_state
@@ -35,7 +39,8 @@ decision = engine.decide(state, {
   command_id: "command-1",
   type: "place_bid",
   bidder_id: "bidder-a",
-  maximum_minor_units: 50_000
+  maximum_minor_units: 50_000,
+  effective_at: "2026-09-01T12:10:00Z"
 })
 state = engine.apply(state, decision.events) if decision.accepted?
 ```

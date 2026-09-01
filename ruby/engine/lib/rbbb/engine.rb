@@ -12,9 +12,6 @@ module RBBB
       unless configuration.is_a?(Configuration)
         raise InvalidConfiguration, "engine requires an RBBB::Configuration"
       end
-      if configuration.extension
-        raise UnsupportedFeature, "extension behavior is not implemented in this engine version"
-      end
     end
 
     def initial_state
@@ -55,7 +52,9 @@ module RBBB
         leader_id: transition.data.fetch("leader_id"),
         standing_minor_units: transition.data.fetch("standing_minor_units"),
         next_required_minor_units: transition.data.fetch("next_required_minor_units"),
-        reserve_status: transition.data["reserve_status"]
+        reserve_status: transition.data["reserve_status"],
+        opens_at: state.opens_at,
+        closes_at: transition.data.fetch("closes_at", state.closes_at)
       )
     end
 
@@ -65,6 +64,13 @@ module RBBB
       bidder_id = command.fetch("bidder_id").to_s
       maximum = command["maximum_minor_units"]
       command_id = command["command_id"]
+      effective_at = authoritative_time(command)
+      if state.closes_at && !effective_at
+        return reject(command_id, "invalid_command")
+      end
+      if state.closes_at && effective_at >= state.closes_at
+        return reject(command_id, "bidding_closed")
+      end
       unless maximum.is_a?(Integer) && maximum >= 0
         return reject(command_id, "invalid_maximum")
       end
@@ -81,10 +87,10 @@ module RBBB
         return reject(command_id, "maximum_below_next_required")
       end
 
-      build_bid_decision(state, command, bidder_id, maximum, existing)
+      build_bid_decision(state, command, bidder_id, maximum, existing, effective_at)
     end
 
-    def build_bid_decision(state, command, bidder_id, maximum, existing)
+    def build_bid_decision(state, command, bidder_id, maximum, existing, effective_at)
       aggregate_version = state.version + 1
       positions = state.positions.transform_values(&:to_h)
       positions[bidder_id] = {
@@ -100,6 +106,9 @@ module RBBB
       standing = standing_amount(ranked)
       reserve_status = reserve_status_for(ranked.fetch(0).last)
       next_required = standing + configuration.increment_for(standing)
+      public_result_changed = standing != state.standing_minor_units ||
+        leader_id != state.leader_id
+      closes_at = extended_closing_time(state, effective_at, public_result_changed)
 
       positions.each do |id, position|
         executed = id == leader_id ? standing : position.fetch("maximum_minor_units")
@@ -123,6 +132,8 @@ module RBBB
           "standing_minor_units" => standing,
           "next_required_minor_units" => next_required,
           "reserve_status" => reserve_status,
+          "effective_at" => Timestamp.dump(effective_at),
+          "closes_at" => Timestamp.dump(closes_at),
           "positions" => positions
         }
       )
@@ -144,8 +155,38 @@ module RBBB
           data: public_data
         )
       end
+      if closes_at != state.closes_at
+        events << Event.new(
+          type: "closing_time_changed",
+          visibility: :public,
+          data: {
+            "command_id" => command.fetch("command_id"),
+            "aggregate_version" => aggregate_version,
+            "closes_at" => Timestamp.dump(closes_at)
+          }
+        )
+      end
 
       Decision.accepted(events)
+    end
+
+    def authoritative_time(command)
+      value = command["effective_at"]
+      return nil if value.nil?
+
+      Timestamp.parse(value)
+    rescue ArgumentError
+      nil
+    end
+
+    def extended_closing_time(state, effective_at, public_result_changed)
+      return state.closes_at unless configuration.extension
+      return state.closes_at unless public_result_changed && effective_at && state.closes_at
+
+      trigger_window = configuration.extension.fetch("trigger_window_seconds")
+      return state.closes_at if effective_at < state.closes_at - trigger_window
+
+      effective_at + configuration.extension.fetch("duration_seconds")
     end
 
     def standing_amount(ranked)
