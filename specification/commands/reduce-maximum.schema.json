@@ -1,17 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/willtmc/rbbb/specification/commands/place-bid.schema.json",
-  "title": "Place bid command",
-  "description": "Authorize or increase one bidder's private maximum on a bidding unit.",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/reduce-maximum.schema.json",
+  "title": "Reduce maximum command",
+  "description": "Withdraw only the unexecuted portion of one bidder's private maximum.",
   "x-rbbb-status": "experimental",
   "allOf": [
     {"$ref": "./base.schema.json"},
     {
       "type": "object",
-      "required": ["bid_id", "bidder_id", "maximum_minor_units"],
+      "required": ["bidder_id", "maximum_minor_units"],
       "properties": {
-        "type": {"const": "place_bid"},
-        "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "type": {"const": "reduce_maximum"},
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "maximum_minor_units": {"type": "integer", "minimum": 0}
       }

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/commands/command.schema.json",
+  "title": "RFC 0001 command",
+  "description": "One supported state-changing command in the RFC 0001 service envelope.",
+  "x-rbbb-status": "experimental",
+  "oneOf": [
+    {"$ref": "./place-bid.schema.json"},
+    {"$ref": "./reduce-maximum.schema.json"},
+    {"$ref": "./void-bid.schema.json"},
+    {"$ref": "./change-reserve.schema.json"},
+    {"$ref": "./change-closing-time.schema.json"},
+    {"$ref": "./close-bidding.schema.json"}
+  ]
+}

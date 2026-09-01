@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: RBBB command and query API
+  title: RBBB command API
   version: 0.1.0-draft
   description: >-
-    Draft language-neutral HTTP contract. Auction semantics and production
-    service guarantees are not yet stable.
+    Experimental language-neutral HTTP command contract for RFC 0001. No
+    hosted service exists and production service guarantees are not yet stable.
   license:
     name: MIT
     identifier: MIT
@@ -23,9 +23,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ./commands/place-bid.schema.json
+              $ref: ./commands/command.schema.json
       responses:
-        "202":
+        "200":
           description: Command accepted and committed
           content:
             application/json:
@@ -33,8 +33,16 @@ paths:
                 $ref: "#/components/schemas/CommandResult"
         "409":
           description: Aggregate version or command-id conflict
+          content:
+            application/json:
+              schema:
+                $ref: ./rejections/rejection.schema.json
         "422":
           description: Command rejected by a stable engine rule
+          content:
+            application/json:
+              schema:
+                $ref: ./rejections/rejection.schema.json
 components:
   securitySchemes:
     bearerAuth:
@@ -44,14 +52,17 @@ components:
     CommandResult:
       type: object
       additionalProperties: false
-      required: [command_id, status, events]
+      required: [command_id, status, aggregate_version, public_events]
       properties:
         command_id:
           type: string
         status:
           type: string
           enum: [committed]
-        events:
+        aggregate_version:
+          type: integer
+          minimum: 1
+        public_events:
           type: array
           items:
-            $ref: ./events/event.schema.json
+            $ref: ./events/public-event.schema.json

@@ -2,11 +2,13 @@
 
 The specification is the language-neutral source of truth for compatible
 auction behavior. It is currently a **draft** and has no stable compatibility
-guarantee.
+guarantee. RFC 0001 schemas are marked `experimental`: complete enough for
+implementation review, but still eligible for incompatible correction before
+the first stable release.
 
 ## Normative sources
 
-Once the first RFC is accepted, normative requirements will live in:
+Normative requirements live in:
 
 - prose under this directory;
 - JSON Schemas for configuration, commands, events, and state;
@@ -25,7 +27,11 @@ Documents and schemas may carry one of these statuses:
 - `experimental`: implementable but not yet a compatibility promise;
 - `stable`: governed by semantic versioning and migration requirements.
 
-Everything is `draft` until explicitly stated otherwise.
+Unmarked documents remain `draft` until explicitly stated otherwise.
+
+RFC 0001 contract schemas use the `experimental` marker described above. See
+[`contract.md`](contract.md) for envelope, amount, visibility, and state-view
+conventions.
 
 ## Design requirements
 

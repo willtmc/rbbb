@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/configuration/timed-proxy.schema.json",
+  "title": "Timed proxy bidding configuration",
+  "description": "Finite RFC 0001 configuration for one independent bidding unit.",
+  "x-rbbb-status": "experimental",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "currency",
+    "opening_minor_units",
+    "reserve_minor_units",
+    "increments",
+    "opens_at",
+    "closes_at",
+    "extension"
+  ],
+  "properties": {
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO 4217 alphabetic code fixed for the bidding unit."
+    },
+    "opening_minor_units": {"type": "integer", "minimum": 0},
+    "reserve_minor_units": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Confidential reserve; null means no reserve."
+    },
+    "increments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/incrementTier"}
+    },
+    "opens_at": {"type": "string", "format": "date-time"},
+    "closes_at": {"type": "string", "format": "date-time"},
+    "extension": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/extension"}
+      ]
+    }
+  },
+  "$defs": {
+    "incrementTier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_minor_units", "amount_minor_units"],
+      "properties": {
+        "from_minor_units": {"type": "integer", "minimum": 0},
+        "amount_minor_units": {"type": "integer", "minimum": 1}
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trigger_window_seconds", "duration_seconds"],
+      "properties": {
+        "trigger_window_seconds": {"type": "integer", "minimum": 0},
+        "duration_seconds": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

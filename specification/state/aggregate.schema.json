@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/state/aggregate.schema.json",
+  "title": "Privileged bidding unit aggregate state",
+  "description": "Replayable RFC 0001 state. Access is privileged because it contains bidder identities, maxima, reserve amount, and audit history.",
+  "x-rbbb-status": "experimental",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "auction_id",
+    "bidding_unit_id",
+    "version",
+    "status",
+    "currency",
+    "opens_at",
+    "closes_at",
+    "reserve_minor_units",
+    "reserve_status",
+    "leader_id",
+    "standing_minor_units",
+    "next_required_minor_units",
+    "positions",
+    "authorization_history",
+    "reserve_history",
+    "voided_bid_ids",
+    "result",
+    "winner_id",
+    "winning_minor_units"
+  ],
+  "properties": {
+    "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "version": {"type": "integer", "minimum": 0},
+    "status": {"type": "string", "enum": ["open", "closed"]},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "opens_at": {"type": "string", "format": "date-time"},
+    "closes_at": {"type": "string", "format": "date-time"},
+    "reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
+    "reserve_status": {
+      "type": ["string", "null"],
+      "enum": ["reserve_not_met", "reserve_met", null]
+    },
+    "leader_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "standing_minor_units": {"type": ["integer", "null"], "minimum": 0},
+    "next_required_minor_units": {"type": "integer", "minimum": 0},
+    "positions": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/position"}
+    },
+    "authorization_history": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/placeBidAuthorization"},
+          {"$ref": "#/$defs/maximumReduction"}
+        ]
+      }
+    },
+    "reserve_history": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/reserveChange"}
+    },
+    "voided_bid_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 255}
+    },
+    "result": {
+      "type": ["string", "null"],
+      "enum": ["sold", "no_sale", "no_bid", null]
+    },
+    "winner_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
+    "winning_minor_units": {"type": ["integer", "null"], "minimum": 0}
+  },
+  "$defs": {
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum_minor_units", "priority", "executed_minor_units"],
+      "properties": {
+        "maximum_minor_units": {"type": "integer", "minimum": 0},
+        "priority": {"type": "integer", "minimum": 1},
+        "executed_minor_units": {"type": "integer", "minimum": 0}
+      }
+    },
+    "placeBidAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "bid_id", "bidder_id", "maximum_minor_units", "priority"],
+      "properties": {
+        "type": {"const": "place_bid"},
+        "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "maximum_minor_units": {"type": "integer", "minimum": 0},
+        "priority": {"type": "integer", "minimum": 1}
+      }
+    },
+    "maximumReduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "bidder_id", "maximum_minor_units", "priority"],
+      "properties": {
+        "type": {"const": "maximum_reduced"},
+        "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "maximum_minor_units": {"type": "integer", "minimum": 0},
+        "priority": {"type": "integer", "minimum": 1}
+      }
+    },
+    "reserveChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["old_reserve_minor_units", "new_reserve_minor_units", "priority"],
+      "properties": {
+        "old_reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "new_reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "priority": {"type": "integer", "minimum": 1}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "open"}}},
+      "then": {
+        "properties": {
+          "result": {"const": null},
+          "winner_id": {"const": null},
+          "winning_minor_units": {"const": null}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"result": {"const": "sold"}}},
+      "then": {
+        "properties": {
+          "winner_id": {"type": "string", "minLength": 1},
+          "winning_minor_units": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"result": {"enum": ["no_sale", "no_bid"]}}},
+      "then": {
+        "properties": {
+          "winner_id": {"const": null},
+          "winning_minor_units": {"const": null}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"result": {"const": "no_bid"}}},
+      "then": {
+        "properties": {
+          "leader_id": {"const": null},
+          "standing_minor_units": {"const": null}
+        }
+      }
+    }
+  ]
+}

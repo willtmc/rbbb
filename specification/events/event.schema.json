@@ -1,26 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/willtmc/rbbb/specification/events/event.schema.json",
-  "title": "Engine event envelope",
-  "description": "Draft common fields for an immutable engine event.",
-  "type": "object",
-  "required": [
-    "event_id",
-    "type",
-    "auction_id",
-    "bidding_unit_id",
-    "aggregate_version",
-    "command_id",
-    "recorded_at"
-  ],
-  "properties": {
-    "event_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "type": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-    "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "aggregate_version": {"type": "integer", "minimum": 1},
-    "command_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "recorded_at": {"type": "string", "format": "date-time"},
-    "data": {"type": "object"}
-  }
+  "title": "RFC 0001 event",
+  "description": "One committed public or privileged event.",
+  "x-rbbb-status": "experimental",
+  "oneOf": [
+    {"$ref": "./public-event.schema.json"},
+    {"$ref": "./privileged-event.schema.json"}
+  ]
 }

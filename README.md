@@ -53,8 +53,9 @@ RFC 0001 defines the accepted timed online proxy-bidding baseline, backed by 26
 language-neutral conformance scenarios. The Ruby reference engine now covers
 all scenarios 001–026. This completes the behavior exercised by the initial
 RFC suite, not the persistence, API, security, or operational work required for
-production. Anything marked `draft` may still change before the first stable
-release.
+production. The matching command, event, rejection, configuration, and state
+schemas are experimental rather than a stable compatibility promise. Anything
+marked `draft` may still change before the first stable release.
 
 See [ROADMAP.md](ROADMAP.md), [docs/architecture.md](docs/architecture.md), and
 [specification/README.md](specification/README.md) for the planned path.
