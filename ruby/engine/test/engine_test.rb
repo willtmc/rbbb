@@ -90,17 +90,95 @@ class EngineTest < Minitest::Test
     assert_equal "stale_aggregate_version", decision.rejection.fetch("reason")
   end
 
-  def test_fails_closed_for_unimplemented_reserve_behavior
+  def test_confidential_reserve_affects_price_without_becoming_leader
     configuration = RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 10_000,
       reserve_minor_units: 100_000,
       increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
     )
+    engine = RBBB::Engine.new(configuration)
+
+    decision = engine.decide(engine.initial_state, {
+      command_id: "command-1",
+      type: "place_bid",
+      bidder_id: "bidder-a",
+      maximum_minor_units: 150_000
+    })
+    state = engine.apply(engine.initial_state, decision.events)
+
+    assert_equal "bidder-a", state.leader_id
+    assert_equal 100_000, state.standing_minor_units
+    assert_equal "reserve_met", state.reserve_status
+  end
+
+  def test_public_reserve_event_discloses_status_but_not_amount_or_maximum
+    configuration = RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      reserve_minor_units: 100_000,
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+    )
+    engine = RBBB::Engine.new(configuration)
+
+    decision = engine.decide(engine.initial_state, {
+      command_id: "command-1",
+      type: "place_bid",
+      bidder_id: "bidder-a",
+      maximum_minor_units: 150_000
+    })
+    public_event = decision.events.find(&:public?).to_h
+
+    assert_equal "reserve_met", public_event.fetch("reserve_status")
+    refute public_event.keys.any? { |key| key.include?("reserve") && key != "reserve_status" }
+    refute public_event.keys.any? { |key| key.include?("maximum") }
+  end
+
+  def test_competition_can_push_standing_amount_above_reserve
+    configuration = RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      reserve_minor_units: 100_000,
+      increments: [
+        {from_minor_units: 0, amount_minor_units: 1_000},
+        {from_minor_units: 100_000, amount_minor_units: 2_500}
+      ]
+    )
+    engine = RBBB::Engine.new(configuration)
+    state = engine.initial_state
+
+    first = engine.decide(state, {
+      command_id: "command-1",
+      type: "place_bid",
+      bidder_id: "bidder-a",
+      maximum_minor_units: 150_000
+    })
+    state = engine.apply(state, first.events)
+    second = engine.decide(state, {
+      command_id: "command-2",
+      type: "place_bid",
+      bidder_id: "bidder-b",
+      maximum_minor_units: 110_000
+    })
+    state = engine.apply(state, second.events)
+
+    assert_equal "bidder-a", state.leader_id
+    assert_equal 112_500, state.standing_minor_units
+    assert_equal 115_000, state.next_required_minor_units
+    assert_equal "reserve_met", state.reserve_status
+  end
+
+  def test_fails_closed_for_unimplemented_extension_behavior
+    configuration = RBBB::Configuration.from_h({
+      currency: "USD",
+      opening_minor_units: 10_000,
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      extension: {trigger_window_seconds: 300, duration_seconds: 300}
+    })
 
     error = assert_raises(RBBB::UnsupportedFeature) do
       RBBB::Engine.new(configuration)
     end
-    assert_includes error.message, "reserve behavior"
+    assert_includes error.message, "extension behavior"
   end
 end

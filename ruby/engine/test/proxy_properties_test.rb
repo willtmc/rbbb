@@ -36,16 +36,48 @@ class ProxyPropertiesTest < Minitest::Test
     end
   end
 
+  def test_single_bidder_reserve_boundaries_preserve_price_and_privacy
+    configuration = RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      reserve_minor_units: 100_000,
+      increments: [
+        {from_minor_units: 0, amount_minor_units: 1_000},
+        {from_minor_units: 100_000, amount_minor_units: 2_500}
+      ]
+    )
+    engine = RBBB::Engine.new(configuration)
+
+    [99_999, 100_000, 100_001, 150_000].each_with_index do |maximum, index|
+      decision = decide(engine, engine.initial_state, "reserve-#{index}", "bidder-a", maximum)
+      state = engine.apply(engine.initial_state, decision.events)
+      expected_status = maximum >= 100_000 ? "reserve_met" : "reserve_not_met"
+      expected_standing = [maximum, 100_000].min
+      public_event = decision.events.find(&:public?).to_h
+
+      assert_equal expected_standing, state.standing_minor_units, "maximum #{maximum}"
+      assert_equal expected_status, state.reserve_status, "maximum #{maximum}"
+      assert_equal "bidder-a", state.leader_id, "maximum #{maximum}"
+      assert_equal expected_status, public_event.fetch("reserve_status"), "maximum #{maximum}"
+      refute public_event.key?("reserve_minor_units"), "maximum #{maximum}"
+    end
+  end
+
   private
 
   def accept(state, command_id, bidder_id, maximum_minor_units)
-    decision = @engine.decide(state, {
+    decision = decide(@engine, state, command_id, bidder_id, maximum_minor_units)
+    @engine.apply(state, decision.events)
+  end
+
+  def decide(engine, state, command_id, bidder_id, maximum_minor_units)
+    decision = engine.decide(state, {
       command_id: command_id,
       type: "place_bid",
       bidder_id: bidder_id,
       maximum_minor_units: maximum_minor_units
     })
     assert decision.accepted?, decision.rejection.inspect
-    @engine.apply(state, decision.events)
+    decision
   end
 end

@@ -17,9 +17,10 @@ new_state = engine.apply(current_state, decision.events)
 
 The current implementation covers exact minor-unit money, configurable
 increment tiers, opening bids, proxy competition, earlier-equal priority,
-proxy clipping, challenger minimums, and private leader maximum increases. It
-fails closed when reserve behavior is configured. Extensions, reductions,
-operator commands, closing, persistence, and networking are not implemented.
+proxy clipping, challenger minimums, private leader maximum increases, and
+confidential reserve pricing and status. Extensions, reductions, operator
+commands, closing, persistence, and networking are not implemented; the engine
+fails closed when extension behavior is configured.
 
 ```ruby
 configuration = RBBB::Configuration.new(
