@@ -17,3 +17,25 @@ first release workflow is reviewed, maintainers use this checklist:
 Publishing automation must use trusted GitHub environments or registry trusted
 publishing rather than long-lived repository secrets whenever the registry
 supports it.
+
+## Evaluation artifact
+
+The repository may build a prerelease gem for local review without publishing
+it:
+
+```sh
+cd ruby/engine
+bundle exec rake package:verify
+gem build rbbb.gemspec
+```
+
+`package:verify` is the required preflight. It checks the exact file allowlist,
+world-readable package inputs, prerelease and compatibility metadata, isolated
+installation, and a bid decision from the installed artifact. A successful
+local build is not a registry release.
+
+Publishing `rbbb` for the first time requires explicit maintainer approval,
+control of the registry namespace, MFA, and read-back verification. The
+preferred long-term path is a protected GitHub `release` environment with
+RubyGems trusted publishing; do not add a long-lived registry token to the
+repository.

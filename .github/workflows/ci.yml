@@ -27,6 +27,6 @@ jobs:
           working-directory: ruby/engine
       - name: Validate specification documents
         run: ruby scripts/validate_documents.rb
-      - name: Test reference engine
+      - name: Test and package reference engine
         working-directory: ruby/engine
         run: bundle exec rake

@@ -13,14 +13,16 @@ The roadmap describes intent, not a release promise.
 
 Current checkpoint: the pure Ruby engine passes all 26 RFC 0001 conformance
 scenarios, and contract-complete experimental schemas are available for
-interoperability review. A stable compatibility decision and evaluation gem
-remain before Phase 1 is complete.
+interoperability review. An installable `0.1.0.pre.1` evaluation gem is
+package-verified but not yet published. A stable compatibility decision and
+registry release remain before Phase 1 is complete.
 
 - Specify command ordering, increments, maximum bids, ties, reserves, opening,
   closing, and extensions.
 - Build a deterministic pure-Ruby engine against the conformance suite.
 - Define stable command, event, state, and rejection schemas.
-- Publish an embeddable Ruby gem for evaluation.
+- Publish the package-verified Ruby evaluation gem through a maintainer-approved
+  registry release.
 
 ## Phase 2: reference service
 

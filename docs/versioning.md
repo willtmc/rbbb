@@ -9,6 +9,11 @@ RBBB versions three related artifacts independently:
 An implementation compatibility claim names all three relevant versions. A gem
 version alone does not identify the auction rules it implements.
 
+Ruby evaluation packages use prerelease versions such as `0.1.0.pre.1`. They
+expose `RBBB::SPECIFICATION_VERSION` and `RBBB::RELEASE_STATUS`, and repeat
+those values in gem metadata. Prerelease packages may change incompatibly and
+must not be treated as production-ready merely because they can be installed.
+
 Before specification 1.0, incompatible changes may occur between minor
 versions and will be called out in the changelog. After 1.0, the specification
 and public contracts follow Semantic Versioning:

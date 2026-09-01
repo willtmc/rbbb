@@ -60,6 +60,21 @@ marked `draft` may still change before the first stable release.
 See [ROADMAP.md](ROADMAP.md), [docs/architecture.md](docs/architecture.md), and
 [specification/README.md](specification/README.md) for the planned path.
 
+## Evaluate the Ruby gem
+
+The reference engine is packaged as the pre-stable `rbbb` gem. From a reviewed
+checkout:
+
+```sh
+cd ruby/engine
+gem build rbbb.gemspec
+gem install ./rbbb-0.1.0.pre.1.gem
+```
+
+This artifact is for evaluation and historical replay only. It is not a hosted
+service and must not be used to accept or resolve live bids. See the
+[Ruby engine guide](ruby/engine/README.md) for installation and usage.
+
 ## Contributing
 
 Auctioneers, software operators, designers, security researchers, and
