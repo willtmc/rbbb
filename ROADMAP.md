@@ -11,9 +11,9 @@ The roadmap describes intent, not a release promise.
 
 ## Phase 1: timed online proxy bidding
 
-Current checkpoint: the pure Ruby engine passes all 26 RFC 0001 conformance
+Current checkpoint: the pure Ruby engine passes all 29 RFC 0001 conformance
 scenarios, and contract-complete experimental schemas are available for
-interoperability review. An installable `0.1.0.pre.1` evaluation gem is
+interoperability review. An installable `0.1.0.pre.2` evaluation gem is
 package-verified but not yet published. A stable compatibility decision and
 registry release remain before Phase 1 is complete.
 

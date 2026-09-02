@@ -13,7 +13,7 @@
         "type": {"const": "place_bid"},
         "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
-        "maximum_minor_units": {"type": "integer", "minimum": 0}
+        "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"}
       }
     }
   ],

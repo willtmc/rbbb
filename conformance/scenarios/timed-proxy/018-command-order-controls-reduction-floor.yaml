@@ -12,5 +12,5 @@ expected:
     - {type: standing_bid_changed, standing_minor_units: 10000}
     - {type: standing_bid_changed, standing_minor_units: 81000, leader_changed: false}
   rejections:
-    - {command_id: command-3, reason: maximum_below_executed_amount, executed_floor_minor_units: 81000}
-  final_state: {leader_id: bidder-a, standing_minor_units: 81000, leader_maximum_minor_units: 100000}
+    - {command_id: command-3, status: rejected, reason: maximum_below_executed_amount, executed_floor_minor_units: 81000}
+  final_state: {leader_id: bidder-a, standing_minor_units: 81000, positions: {bidder-a: {maximum_minor_units: 100000}}}

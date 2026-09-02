@@ -13,6 +13,34 @@ A bidding unit has exactly one configured ISO 4217 currency. Every amount in
 its commands, events, and state is therefore an integer field ending in
 `_minor_units`. Floating-point values and currency conversion are forbidden.
 
+Every `*_minor_units` field references one of the shared definitions in
+`common/money.schema.json`, which cap amounts at 9,007,199,254,740,991
+(2^53 − 1). The bound is what makes "same commands, same result" hold across
+languages: it is the largest integer that JSON, IEEE 754 doubles, and signed
+64-bit integers all represent exactly. `scripts/validate_documents.rb` fails
+if an amount property bypasses the shared definition.
+
+## Other integers
+
+Versions, priorities, event indexes, and extension seconds are integers too,
+and they share the same 2^53 − 1 bound through
+`common/integer.schema.json` (`nonNegativeInteger` and `positiveInteger`).
+The extension bound matters most: `duration_seconds` is added to a command
+time, so an unbounded value would produce a closing time that some runtimes
+overflow and none can serialize inside the RFC 3339 four-digit year. The
+validator fails any integer property in the contract, including the OpenAPI
+and AsyncAPI documents, that declares its own range without a maximum at or
+below the shared bound.
+
+## Authoritative timestamps
+
+Every `*_at` field references `common/timestamp.schema.json`: RFC 3339 with an
+explicit UTC offset and at most three fractional digits. Millisecond precision
+is normative so that closing-time arithmetic (bid time plus extension
+duration) round-trips in millisecond-native runtimes. Implementations
+serialize UTC with `Z`, omit a zero fraction, and trim trailing zeros. The
+validator fails if a timestamp property bypasses the shared definition.
+
 The currency appears once in configuration and query state. Repeating a money
 object on every command would add a second source of truth and create a
 currency-mismatch failure mode without adding information.
@@ -34,6 +62,15 @@ implicit routing, or random identifiers inside its decision function.
 The pure Ruby engine consumes the abbreviated core form directly. A reference
 service adapter will validate the full envelope, resolve the aggregate, assign
 authoritative order and time, and then call the pure decision boundary.
+
+Outputs are not abbreviated. A rejection has no separate core form: the pure
+decision boundary emits the complete rejection document that
+`rejections/rejection.schema.json` defines, including the constant
+`status: "rejected"`, and the adapter transmits it verbatim after confirming the
+recipient is the command's author. Conformance scenarios therefore assert
+`status` on every expected rejection. Accepted commands differ: the engine emits
+events, and the adapter builds the `committed` command result around the public
+subset of them.
 
 ## Events and visibility
 
@@ -57,11 +94,26 @@ authority. The privileged event union is for an authenticated audit and
 persistence boundary; this draft intentionally does not expose that boundary
 as an HTTP endpoint.
 
-Ordinary rejection responses contain only the command identifier and a stable
-reason code. This experimental contract intentionally omits an open-ended
-details object: a future RFC may add finite, reason-specific public fields, but
-an arbitrary object would make accidental disclosure of a maximum, reserve, or
-identity too easy.
+Ordinary rejection responses contain the command identifier, a stable reason
+code, and at most the finite, reason-specific fields that
+`rejections/rejection.schema.json` declares. This experimental contract
+intentionally omits an open-ended details object: an arbitrary object would
+make accidental disclosure of a maximum, reserve, or identity too easy. Every
+additional field must be declared on the schema, gated to exactly one reason,
+and limited to data the rejected command's own author is already entitled to
+know. `scripts/validate_documents.rb` enforces that structure and that
+conformance scenarios assert no undeclared rejection keys.
+
+The only such field today is `executed_floor_minor_units`, which accompanies
+`maximum_below_executed_amount`. It reports the rejected bidder's own executed
+amount, the lowest maximum that bidder may still authorize, so the bidder can
+submit a valid reduction without a privileged query. It is bidder-own data:
+while that bidder leads it equals the public standing amount, and otherwise it
+equals the bidder's own fully executed maximum. When a sole bidder's proxy has
+executed up to reserve pressure the value coincides with the confidential
+reserve, but the bidder already observes that amount as the public standing
+amount. A host must return the field only to the bidder who issued the
+rejected command and must never place it in a public projection.
 
 All events emitted by one accepted command share its resulting
 `aggregate_version`. `event_index` gives their deterministic zero-based order;
@@ -77,6 +129,11 @@ positions and the immutable authorization, reserve-change, and bid-void facts
 needed by a compliant implementation. Possession of aggregate state does not
 authorize public disclosure.
 
+Both views always carry `opens_at` and `closes_at`. RFC 0001 defines only
+timed bidding units: a configuration without an opening time or a closing time
+is invalid, and an implementation must reject it rather than emit state with a
+missing or null schedule.
+
 ## Invariants beyond JSON Schema
 
 JSON Schema validates shape and local value constraints. RFC prose,
@@ -84,6 +141,11 @@ conformance scenarios, and engine checks remain normative for relational and
 ordered invariants, including:
 
 - opening time precedes current closing time;
+- the next required amount exceeds the standing amount unless both sit on
+  the shared amount bound;
+- authoritative times never regress across accepted commands, and every
+  timestamp carries an explicit UTC offset;
+- an extension never moves closing time earlier;
 - increment tiers are ordered and cover the permitted range;
 - executed amount never exceeds its maximum;
 - priorities are unique and ordered;

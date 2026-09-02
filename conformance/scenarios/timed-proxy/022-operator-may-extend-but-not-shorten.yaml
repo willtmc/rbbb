@@ -12,5 +12,5 @@ expected:
     - {type: standing_bid_changed, standing_minor_units: 10000}
     - {type: closing_time_changed, old_closes_at: "2026-09-01T13:00:00Z", closes_at: "2026-09-01T14:00:00Z"}
   rejections:
-    - {command_id: command-3, reason: closing_time_may_not_shorten_after_first_bid}
+    - {command_id: command-3, status: rejected, reason: closing_time_may_not_shorten_after_first_bid}
   final_state: {leader_id: bidder-a, standing_minor_units: 10000, closes_at: "2026-09-01T14:00:00Z"}

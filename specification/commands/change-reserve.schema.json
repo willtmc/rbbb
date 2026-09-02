@@ -14,8 +14,7 @@
         "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
         "reserve_minor_units": {
-          "type": ["integer", "null"],
-          "minimum": 0,
+          "$ref": "../common/money.schema.json#/$defs/optionalMinorUnits",
           "description": "Null removes the reserve. This field is privileged."
         }
       }

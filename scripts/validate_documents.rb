@@ -31,6 +31,17 @@ def walk(value, &block)
   end
 end
 
+# Like walk, but also yields the JSON Pointer of each node for error messages.
+def walk_with_pointer(value, pointer = "", &block)
+  yield value, pointer
+  case value
+  when Hash
+    value.each { |key, nested| walk_with_pointer(nested, "#{pointer}/#{key}", &block) }
+  when Array
+    value.each_with_index { |nested, index| walk_with_pointer(nested, "#{pointer}/#{index}", &block) }
+  end
+end
+
 def load_document(path)
   if path.extname == ".json"
     JSON.parse(path.read)
@@ -168,6 +179,7 @@ scenario_command_types = []
 scenario_public_event_types = []
 scenario_privileged_event_types = []
 scenario_rejection_reasons = []
+scenario_rejections = []
 
 scenario_paths.each do |path|
   scenario = YAML.safe_load_file(path, aliases: false)
@@ -207,6 +219,9 @@ scenario_paths.each do |path|
   scenario_public_event_types.concat(Array(expected["public_events"]).filter_map { |event| event["type"] })
   scenario_privileged_event_types.concat(Array(expected["privileged_events"]).filter_map { |event| event["type"] })
   scenario_rejection_reasons.concat(Array(expected["rejections"]).filter_map { |rejection| rejection["reason"] })
+  Array(expected["rejections"]).each_with_index do |rejection, index|
+    scenario_rejections << [relative(path), index, rejection] if rejection.is_a?(Hash)
+  end
 end
 
 command_base = schema_documents.fetch(ROOT.join("specification/commands/base.schema.json"))
@@ -246,6 +261,50 @@ if rejection_schema.fetch("properties").key?("details")
   errors << "specification/rejections/rejection.schema.json: open-ended details risk privileged disclosure"
 end
 
+# Rejections may carry only finite, reason-specific fields. Each extra
+# property must be required by exactly one reason's conditional clause and
+# forbidden for every other reason, and scenarios may assert only declared
+# keys for the reason they name.
+rejection_base_fields = %w[command_id status reason]
+rejection_fields_by_reason = Hash.new { |hash, reason| hash[reason] = [] }
+Array(rejection_schema["allOf"]).each do |clause|
+  reason = clause.dig("if", "properties", "reason", "const")
+  fields = Array(clause.dig("then", "required"))
+  next if reason.nil? || fields.empty?
+
+  unless schema_rejections.include?(reason)
+    errors << "specification/rejections/rejection.schema.json: reason-specific clause names unknown reason #{reason}"
+  end
+  unless Array(clause.dig("else", "not", "required")).sort == fields.sort
+    errors << "specification/rejections/rejection.schema.json: #{fields.join(', ')} must be forbidden for reasons other than #{reason}"
+  end
+  rejection_fields_by_reason[reason].concat(fields)
+end
+scoped_rejection_fields = rejection_fields_by_reason.values.flatten
+duplicated_rejection_fields = scoped_rejection_fields.tally.select { |_, count| count > 1 }.keys
+if duplicated_rejection_fields.any?
+  errors << "specification/rejections/rejection.schema.json: rejection fields must belong to exactly one reason: #{duplicated_rejection_fields.join(', ')}"
+end
+unscoped_rejection_fields = rejection_schema.fetch("properties").keys - rejection_base_fields - scoped_rejection_fields
+if unscoped_rejection_fields.any?
+  errors << "specification/rejections/rejection.schema.json: rejection fields must be reason-specific: #{unscoped_rejection_fields.join(', ')}"
+end
+undeclared_rejection_fields = scoped_rejection_fields - rejection_schema.fetch("properties").keys
+if undeclared_rejection_fields.any?
+  errors << "specification/rejections/rejection.schema.json: reason-specific fields lack properties: #{undeclared_rejection_fields.join(', ')}"
+end
+unless rejection_schema["additionalProperties"] == false
+  errors << "specification/rejections/rejection.schema.json: additionalProperties must be false"
+end
+
+scenario_rejections.each do |label, index, rejection|
+  allowed_keys = rejection_base_fields + rejection_fields_by_reason.fetch(rejection["reason"], [])
+  undeclared_keys = rejection.keys - allowed_keys
+  next if undeclared_keys.empty?
+
+  errors << "#{label}: rejections[#{index}] contains keys the rejection schema does not declare for #{rejection['reason']}: #{undeclared_keys.join(', ')}"
+end
+
 forbidden_contract_keys = /maximum|reserve_minor_units|operator_id|reason|bidder_id|leader_id|winner_id/
 {
   "specification/events/public-event.schema.json" => public_event_schema,
@@ -272,6 +331,72 @@ end
 unless asyncapi.dig("components", "messages", "PublicEvent", "payload", "$ref") ==
     "./events/public-event.schema.json"
   errors << "specification/asyncapi.yaml: subscription must use the public event schema"
+end
+
+# Cross-language determinism: every amount and timestamp must go through the
+# shared bounded definitions so no implementation can accept a value that
+# another cannot represent exactly.
+money_schema = schema_documents.fetch(ROOT.join("specification/common/money.schema.json"))
+money_bound = money_schema.dig("$defs", "minorUnits", "maximum")
+errors << "specification/common/money.schema.json: minorUnits must declare maximum" unless money_bound
+money_schema.fetch("$defs").each do |name, definition|
+  next if definition["maximum"] == money_bound
+
+  errors << "specification/common/money.schema.json: $defs/#{name} must use the shared maximum"
+end
+schema_documents.each do |path, document|
+  next unless path.to_s.start_with?(ROOT.join("specification").to_s + "/")
+  next if path.dirname == ROOT.join("specification/common")
+
+  walk(document) do |node|
+    next unless node.is_a?(Hash) && node["properties"].is_a?(Hash)
+
+    node["properties"].each do |name, property|
+      next unless property.is_a?(Hash)
+
+      if name.end_with?("minor_units") && !property.key?("const") &&
+          !property["$ref"].to_s.start_with?("../common/money.schema.json#/$defs/")
+        errors << "#{relative(path)}: #{name} must reference a bounded money.schema.json definition"
+      end
+      timestamp_ref = "../common/timestamp.schema.json"
+      uses_timestamp = property["$ref"] == timestamp_ref ||
+        Array(property["oneOf"]).any? { |entry| entry["$ref"] == timestamp_ref }
+      if property["format"] == "date-time" ||
+          (name.end_with?("_at") && !uses_timestamp)
+        errors << "#{relative(path)}: #{name} must reference timestamp.schema.json"
+      end
+    end
+  end
+end
+
+# Every other integer (versions, priorities, counters, extension seconds) must
+# carry the same 2^53 - 1 bound. A bare "type": "integer" without a maximum, or
+# a maximum above the shared bound, fails; properties should reference
+# common/integer.schema.json instead of declaring their own range.
+integer_schema = schema_documents.fetch(ROOT.join("specification/common/integer.schema.json"))
+unless integer_schema["type"] == "integer" && integer_schema["maximum"] == money_bound
+  errors << "specification/common/integer.schema.json: root must be an integer with the shared maximum"
+end
+integer_schema.fetch("$defs").each do |name, definition|
+  next if definition["type"] == "integer" && definition["maximum"] == money_bound
+
+  errors << "specification/common/integer.schema.json: $defs/#{name} must use the shared maximum"
+end
+bounded_integer_documents = schema_documents.select do |path, _document|
+  path.to_s.start_with?(ROOT.join("specification").to_s + "/") &&
+    path.dirname != ROOT.join("specification/common")
+end.merge(
+  Pathname(ROOT.join("specification/openapi.yaml")) => openapi,
+  Pathname(ROOT.join("specification/asyncapi.yaml")) => asyncapi
+)
+bounded_integer_documents.each do |path, document|
+  walk_with_pointer(document) do |node, pointer|
+    next unless node.is_a?(Hash) && Array(node["type"]).include?("integer")
+    next if node["maximum"].is_a?(Integer) && node["maximum"] <= money_bound
+
+    errors << "#{relative(path)}: #{pointer} is an integer without a maximum of at most #{money_bound}; " \
+      "reference common/integer.schema.json or common/money.schema.json"
+  end
 end
 
 event_base = schema_documents.fetch(ROOT.join("specification/events/base.schema.json"))
