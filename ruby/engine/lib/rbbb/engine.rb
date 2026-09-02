@@ -221,10 +221,10 @@ module RBBB
 
       timing_rejection = reject_for_timing(state, command_id, effective_at)
       return timing_rejection if timing_rejection
-      if new_closes_at <= effective_at || (state.opens_at && new_closes_at <= state.opens_at)
+      if new_closes_at <= effective_at || new_closes_at <= state.opens_at
         return reject(command_id, "invalid_closing_time")
       end
-      if state.bidding_started? && state.closes_at && new_closes_at < state.closes_at
+      if state.bidding_started? && new_closes_at < state.closes_at
         return reject(command_id, "closing_time_may_not_shorten_after_first_bid")
       end
 
@@ -237,7 +237,7 @@ module RBBB
       command_id = command.fetch("command_id")
       effective_at = authoritative_time(command)
       return reject(command_id, "invalid_command") unless effective_at
-      if state.closes_at && effective_at < state.closes_at
+      if effective_at < state.closes_at
         return reject(command_id, "closing_time_not_reached")
       end
 
@@ -722,12 +722,11 @@ module RBBB
     end
 
     def reject_for_timing(state, command_id, effective_at, bidder: false)
-      scheduled = state.closes_at || (bidder && state.opens_at)
-      return reject(command_id, "invalid_command") if scheduled && !effective_at
-      if bidder && state.opens_at && effective_at < state.opens_at
+      return reject(command_id, "invalid_command") unless effective_at
+      if bidder && effective_at < state.opens_at
         return reject(command_id, "bidding_not_open")
       end
-      return reject(command_id, "bidding_closed") if state.closes_at && effective_at >= state.closes_at
+      return reject(command_id, "bidding_closed") if effective_at >= state.closes_at
 
       nil
     end
@@ -740,7 +739,7 @@ module RBBB
 
     def extended_closing_time(state, effective_at, public_result_changed)
       return state.closes_at unless configuration.extension
-      return state.closes_at unless public_result_changed && effective_at && state.closes_at
+      return state.closes_at unless public_result_changed && effective_at
 
       trigger_window = configuration.extension.fetch("trigger_window_seconds")
       return state.closes_at if effective_at < state.closes_at - trigger_window
@@ -835,7 +834,7 @@ module RBBB
 
     def validate_closing_transition!(state, transition)
       effective_at = Timestamp.parse(transition.data.fetch("effective_at"))
-      if state.closes_at && effective_at < state.closes_at
+      if effective_at < state.closes_at
         raise InvalidState, "closing transition precedes current close"
       end
 

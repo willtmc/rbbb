@@ -138,7 +138,35 @@ class HardeningTest < Minitest::Test
     end
   end
 
+  def test_state_requires_opens_at_and_closes_at
+    error = assert_raises(RBBB::InvalidState) do
+      build_state(opens_at: nil, closes_at: CLOSES_AT)
+    end
+    assert_match(/missing opens_at/, error.message)
+
+    error = assert_raises(RBBB::InvalidState) do
+      build_state(opens_at: OPENS_AT, closes_at: nil)
+    end
+    assert_match(/missing closes_at/, error.message)
+
+    state = build_state(opens_at: OPENS_AT, closes_at: CLOSES_AT)
+    assert_equal OPENS_AT, state.to_h.fetch("opens_at")
+    assert_equal CLOSES_AT, state.to_h.fetch("closes_at")
+  end
+
   private
+
+  def build_state(opens_at:, closes_at:)
+    RBBB::State.new(
+      version: 0,
+      positions: {},
+      leader_id: nil,
+      standing_minor_units: nil,
+      next_required_minor_units: 10_000,
+      opens_at: opens_at,
+      closes_at: closes_at
+    )
+  end
 
   def build_engine(reserve: nil, extension: nil)
     RBBB::Engine.new(RBBB::Configuration.new(
