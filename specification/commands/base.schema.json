@@ -30,8 +30,7 @@
     "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
     "expected_version": {"type": "integer", "minimum": 0},
     "effective_at": {
-      "type": "string",
-      "format": "date-time",
+      "$ref": "../common/timestamp.schema.json",
       "description": "Authoritative UTC time assigned at the bidding-unit command-ordering boundary."
     }
   }

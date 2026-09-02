@@ -26,10 +26,10 @@
     "version": {"type": "integer", "minimum": 0},
     "status": {"type": "string", "enum": ["open", "closed"]},
     "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
-    "opens_at": {"type": "string", "format": "date-time"},
-    "closes_at": {"type": "string", "format": "date-time"},
-    "standing_minor_units": {"type": ["integer", "null"], "minimum": 0},
-    "next_required_minor_units": {"type": "integer", "minimum": 0},
+    "opens_at": {"$ref": "../common/timestamp.schema.json"},
+    "closes_at": {"$ref": "../common/timestamp.schema.json"},
+    "standing_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"},
+    "next_required_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
     "reserve_status": {
       "type": ["string", "null"],
       "enum": ["reserve_not_met", "reserve_met", null]
@@ -38,7 +38,7 @@
       "type": ["string", "null"],
       "enum": ["sold", "no_sale", "no_bid", null]
     },
-    "winning_minor_units": {"type": ["integer", "null"], "minimum": 0}
+    "winning_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"}
   },
   "allOf": [
     {
@@ -54,7 +54,7 @@
       "if": {"properties": {"result": {"const": "sold"}}},
       "then": {
         "properties": {
-          "winning_minor_units": {"type": "integer", "minimum": 0}
+          "winning_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"}
         }
       }
     },

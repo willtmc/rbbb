@@ -46,6 +46,17 @@ does not define an untimed bidding unit.
 Amounts are integer minor units. A bidding unit cannot mix currencies or
 perform currency conversion.
 
+Every amount is a non-negative integer no greater than 9,007,199,254,740,991
+(2^53 − 1), the largest integer that is exact in all of JSON, IEEE 754 double
+precision, and signed 64-bit integers. The bound applies to the opening
+amount, the reserve, increment tier lower bounds and increments, every command
+maximum, and every derived amount. A configuration outside the bound is
+invalid; a bid or reduction maximum above it is rejected as `invalid_maximum`;
+a reserve change above it is rejected as `invalid_reserve`. Derived amounts
+never exceed the bound: when the standing amount plus its increment would
+exceed it, the next required amount is the bound itself. That saturated case
+is the only one in which the next required amount equals the standing amount.
+
 Increment schedules are configurable. Each tier defines an inclusive lower
 bound and a positive increment. The applicable tier is the tier with the
 greatest lower bound not exceeding the amount being evaluated. Schedules must
@@ -157,6 +168,15 @@ The service assigns authoritative time and order at the bidding unit's command
 ordering boundary. Client clocks and client-supplied timestamps do not decide
 eligibility or priority. Authoritative timestamps carry an explicit UTC offset;
 a zone-less timestamp is invalid rather than interpreted in host-local time.
+
+Authoritative timestamps carry at most millisecond precision. A timestamp with
+more than three fractional digits is invalid rather than truncated, so an
+implementation whose native time type is millisecond-based can replay every
+command stream and compute every extended closing time exactly. The canonical
+serialized form is UTC with a `Z` designator; the fractional part is omitted
+when zero and otherwise trimmed of trailing zeros, for example
+`2026-09-01T13:00:00Z`, `2026-09-01T13:00:00.25Z`, and
+`2026-09-01T13:00:00.001Z`.
 
 Authoritative time is monotone across the accepted command sequence. A command
 whose authoritative time is earlier than the last accepted command's time is
@@ -271,6 +291,11 @@ rejected.
   conformance scenarios 027–029.
 - 2026-09-01: clarified that opening and closing times are required
   configuration; an untimed bidding unit is outside this RFC.
+- 2026-09-01: bounded every amount at 2^53 − 1 with saturation of the next
+  required amount, and fixed authoritative timestamp precision at one
+  millisecond with a canonical serialized form, so independent implementations
+  in double-precision or 64-bit-integer languages reach identical outcomes.
+  Backed by conformance scenario 030.
 
 ## Alternatives considered
 

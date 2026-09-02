@@ -34,6 +34,7 @@ class TimedProxyConformanceTest < Minitest::Test
     027-extension-never-shortens-closing.yaml
     028-bid-before-opening-time-rejected.yaml
     029-out-of-order-authoritative-time-rejected.yaml
+    030-maximum-above-interoperable-bound-rejected.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

@@ -70,3 +70,11 @@ versioned artifacts.
 - `State` now requires `opens_at` and `closes_at` as well and always emits
   them from `to_h`; the engine drops the nil-timestamp guards that were
   unreachable once configuration and state are both timed.
+- Bound every amount at 2^53 − 1 through shared `common/money.schema.json`
+  definitions and fix authoritative timestamp precision at one millisecond
+  through `common/timestamp.schema.json`, so double-precision and 64-bit
+  implementations replay the same commands to the same result. The Ruby engine
+  rejects amounts above the bound (`invalid_maximum`, `invalid_reserve`,
+  `InvalidConfiguration`), saturates the next required amount at the bound, and
+  rejects sub-millisecond timestamps. Conformance scenario 030 and a validator
+  guard cover the new rules.
