@@ -5,10 +5,10 @@ module RBBB
   class Money
     include Comparable
 
-    # Largest amount any RFC 0001 field may carry: 2**53 - 1. Every conforming
-    # implementation must produce identical results, and this is the largest
-    # integer that is exact in all of JSON, IEEE 754 doubles, and 64-bit integers.
-    MAX_MINOR_UNITS = (2**53) - 1
+    # Largest amount any RFC 0001 field may carry. Every conforming
+    # implementation must produce identical results, so amounts share the
+    # interoperable integer bound in RBBB::MAX_SAFE_INTEGER.
+    MAX_MINOR_UNITS = MAX_SAFE_INTEGER
 
     attr_reader :currency, :minor_units
 

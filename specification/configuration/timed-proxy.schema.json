@@ -55,8 +55,14 @@
       "additionalProperties": false,
       "required": ["trigger_window_seconds", "duration_seconds"],
       "properties": {
-        "trigger_window_seconds": {"type": "integer", "minimum": 0},
-        "duration_seconds": {"type": "integer", "minimum": 1}
+        "trigger_window_seconds": {
+          "$ref": "../common/integer.schema.json#/$defs/nonNegativeInteger",
+          "description": "Seconds before closing during which a public result change triggers an extension."
+        },
+        "duration_seconds": {
+          "$ref": "../common/integer.schema.json#/$defs/positiveInteger",
+          "description": "Seconds added to the triggering command time; bounded so closing-time arithmetic stays representable in every implementation."
+        }
       }
     }
   }

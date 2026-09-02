@@ -40,6 +40,31 @@ class InteroperabilityTest < Minitest::Test
     end
   end
 
+  def test_shared_integer_bound_matches_the_money_bound
+    assert_equal BOUND, RBBB::MAX_SAFE_INTEGER
+  end
+
+  def test_configuration_rejects_extension_seconds_above_the_bound
+    [BOUND + 1, 10**40].each do |seconds|
+      error = assert_raises(RBBB::InvalidConfiguration) do
+        build_configuration(extension: {trigger_window_seconds: seconds, duration_seconds: 300})
+      end
+      assert_match(/trigger window.*no greater than #{BOUND}/, error.message)
+
+      error = assert_raises(RBBB::InvalidConfiguration) do
+        build_configuration(extension: {trigger_window_seconds: 300, duration_seconds: seconds})
+      end
+      assert_match(/duration.*no greater than #{BOUND}/, error.message)
+    end
+  end
+
+  def test_configuration_accepts_extension_seconds_at_the_bound
+    configuration = build_configuration(extension: {trigger_window_seconds: BOUND, duration_seconds: BOUND})
+
+    assert_equal BOUND, configuration.extension.fetch("trigger_window_seconds")
+    assert_equal BOUND, configuration.extension.fetch("duration_seconds")
+  end
+
   def test_configuration_accepts_amounts_at_the_bound
     configuration = build_configuration(
       opening_minor_units: BOUND,

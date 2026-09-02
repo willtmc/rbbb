@@ -72,11 +72,16 @@ module RBBB
       values = extension.transform_keys(&:to_s)
       trigger = values["trigger_window_seconds"]
       duration = values["duration_seconds"]
-      unless trigger.is_a?(Integer) && trigger >= 0
-        raise InvalidConfiguration, "extension trigger window must be a non-negative integer"
+      # Seconds share the interoperable integer bound so closing-time
+      # arithmetic (command time plus duration) stays representable in every
+      # implementation and inside the RFC 3339 four-digit-year range.
+      unless trigger.is_a?(Integer) && trigger >= 0 && trigger <= MAX_SAFE_INTEGER
+        raise InvalidConfiguration,
+          "extension trigger window must be a non-negative integer no greater than #{MAX_SAFE_INTEGER}"
       end
-      unless duration.is_a?(Integer) && duration.positive?
-        raise InvalidConfiguration, "extension duration must be a positive integer"
+      unless duration.is_a?(Integer) && duration.positive? && duration <= MAX_SAFE_INTEGER
+        raise InvalidConfiguration,
+          "extension duration must be a positive integer no greater than #{MAX_SAFE_INTEGER}"
       end
 
       {
