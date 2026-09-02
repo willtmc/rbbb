@@ -46,7 +46,8 @@ class OperatorConfigurationTest < Minitest::Test
       set_engine.initial_state,
       change_reserve(set_engine, set_engine.initial_state, 100_000, "command-set")
     )
-    set_state = place(set_engine, set_state, "command-bid-set", "bidder-a", 150_000)
+    set_state = place(set_engine, set_state, "command-bid-set", "bidder-a", 150_000,
+      effective_at: "2026-09-01T12:25:00Z")
 
     remove_engine = build_engine(reserve: 100_000)
     remove_state = apply(
@@ -59,7 +60,8 @@ class OperatorConfigurationTest < Minitest::Test
       remove_state,
       "command-bid-remove",
       "bidder-a",
-      150_000
+      150_000,
+      effective_at: "2026-09-01T12:25:00Z"
     )
 
     assert_equal 100_000, set_state.standing_minor_units
@@ -104,7 +106,8 @@ class OperatorConfigurationTest < Minitest::Test
     state = place(engine, engine.initial_state, "command-a", "bidder-a", 150_000,
       bid_id: "bid-a")
     state = apply(engine, state, change_reserve(engine, state, 80_000, "command-reserve"))
-    state = place(engine, state, "command-b", "bidder-b", 110_000, bid_id: "bid-b")
+    state = place(engine, state, "command-b", "bidder-b", 110_000, bid_id: "bid-b",
+      effective_at: "2026-09-01T12:25:00Z")
 
     void = engine.decide(state, {
       command_id: "command-void",
@@ -281,14 +284,15 @@ class OperatorConfigurationTest < Minitest::Test
     ))
   end
 
-  def place(engine, state, command_id, bidder_id, maximum, bid_id: command_id)
+  def place(engine, state, command_id, bidder_id, maximum, bid_id: command_id,
+    effective_at: "2026-09-01T12:10:00Z")
     decision = engine.decide(state, {
       command_id: command_id,
       type: "place_bid",
       bid_id: bid_id,
       bidder_id: bidder_id,
       maximum_minor_units: maximum,
-      effective_at: "2026-09-01T12:10:00Z"
+      effective_at: effective_at
     })
     apply(engine, state, decision)
   end

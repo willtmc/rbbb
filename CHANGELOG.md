@@ -29,3 +29,15 @@ versioned artifacts.
   public-state, and privileged aggregate-state schema contract.
 - Package the Ruby reference engine as the pre-stable `0.1.0.pre.1` evaluation
   gem with compatibility metadata and isolated artifact verification.
+- Harden RFC 0001 timing: an extension can no longer move closing time earlier
+  when the configured duration is shorter than the remaining time; bids and
+  reductions before opening time are rejected as `bidding_not_open`; commands
+  whose authoritative time regresses are rejected as
+  `effective_at_out_of_order` (aggregate state now records
+  `last_effective_at`); zone-less timestamps are invalid instead of being read
+  in host-local time. Conformance scenarios 027–029 cover these rules.
+- `Engine#apply` raises when handed the events of more than one command, and
+  malformed increment tiers raise `InvalidConfiguration` instead of a raw
+  comparison error.
+- Add a seeded differential test that checks structural invariants and
+  incremental-versus-replay pricing agreement across random command streams.

@@ -84,6 +84,9 @@ conformance scenarios, and engine checks remain normative for relational and
 ordered invariants, including:
 
 - opening time precedes current closing time;
+- authoritative times never regress across accepted commands, and every
+  timestamp carries an explicit UTC offset;
+- an extension never moves closing time earlier;
 - increment tiers are ordered and cover the permitted range;
 - executed amount never exceeds its maximum;
 - priorities are unique and ordered;

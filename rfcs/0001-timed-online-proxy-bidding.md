@@ -121,8 +121,12 @@ its full maximum while the public status remains `reserve_not_met`. A maximum
 above reserve raises the standing amount to at least reserve and makes the
 public status `reserve_met`.
 
-The public contract exposes only reserve status, never the reserve amount. A
-bidding unit that closes below reserve produces `no_sale`, not a winner.
+The public contract exposes only reserve status, never the reserve amount.
+Confidential means unpublished, not undiscoverable: because reserve pressure
+stops the standing amount exactly at the reserve, a bidder whose maximum
+exceeds it, and any observer once status becomes `reserve_met`, can infer the
+amount from the public price. A bidding unit that closes below reserve
+produces `no_sale`, not a winner.
 
 ## Reducing an unexecuted proxy
 
@@ -141,15 +145,26 @@ it emits no public price event and does not trigger a closing extension.
 
 The service assigns authoritative time and order at the bidding unit's command
 ordering boundary. Client clocks and client-supplied timestamps do not decide
-eligibility or priority.
+eligibility or priority. Authoritative timestamps carry an explicit UTC offset;
+a zone-less timestamp is invalid rather than interpreted in host-local time.
 
-A bid ordered strictly before the current closing time is eligible. A bid
-ordered exactly at or after closing time is rejected as closed. A bid ordered
-before closing remains eligible if its transaction commits afterward.
+Authoritative time is monotone across the accepted command sequence. A command
+whose authoritative time is earlier than the last accepted command's time is
+rejected as `effective_at_out_of_order`; an equal time is permitted.
+
+A bid or reduction ordered before the opening time is rejected as
+`bidding_not_open`. A bid ordered at or after opening and strictly before the
+current closing time is eligible. A bid ordered exactly at or after closing
+time is rejected as closed. A bid ordered before closing remains eligible if
+its transaction commits afterward. Operator reserve and schedule changes remain
+permitted before opening time.
 
 Extension trigger window and extension duration are configurable. A qualifying
 bid resets closing time to the authoritative bid time plus the configured
-extension duration; it does not add the duration to the prior closing time.
+extension duration; it does not add the duration to the prior closing time. An
+extension can only move closing later: when bid time plus duration would fall
+before the current closing time, closing time is unchanged and no
+`closing_time_changed` event is emitted.
 
 A qualifying bid is an accepted command that changes the public standing amount
 or leader. Increasing one's own private maximum without changing the public
@@ -237,6 +252,13 @@ Closing is represented by an explicit, ordered engine command rather than an
 implicit wall-clock mutation. A qualifying bid already ordered before the
 close command is evaluated first and may extend closing; later bids are
 rejected.
+
+## Amendments
+
+- 2026-09-01: clarified that extensions never shorten closing, that bids
+  before opening time are rejected, that authoritative time is monotone across
+  accepted commands, and that timestamps require an explicit offset. Backed by
+  conformance scenarios 027–029.
 
 ## Alternatives considered
 
