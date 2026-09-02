@@ -20,6 +20,18 @@ languages: it is the largest integer that JSON, IEEE 754 doubles, and signed
 64-bit integers all represent exactly. `scripts/validate_documents.rb` fails
 if an amount property bypasses the shared definition.
 
+## Other integers
+
+Versions, priorities, event indexes, and extension seconds are integers too,
+and they share the same 2^53 − 1 bound through
+`common/integer.schema.json` (`nonNegativeInteger` and `positiveInteger`).
+The extension bound matters most: `duration_seconds` is added to a command
+time, so an unbounded value would produce a closing time that some runtimes
+overflow and none can serialize inside the RFC 3339 four-digit year. The
+validator fails any integer property in the contract, including the OpenAPI
+and AsyncAPI documents, that declares its own range without a maximum at or
+below the shared bound.
+
 ## Authoritative timestamps
 
 Every `*_at` field references `common/timestamp.schema.json`: RFC 3339 with an

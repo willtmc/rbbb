@@ -60,8 +60,7 @@ components:
           type: string
           enum: [committed]
         aggregate_version:
-          type: integer
-          minimum: 1
+          $ref: ./common/integer.schema.json#/$defs/positiveInteger
         public_events:
           type: array
           items:

@@ -78,3 +78,10 @@ versioned artifacts.
   `InvalidConfiguration`), saturates the next required amount at the bound, and
   rejects sub-millisecond timestamps. Conformance scenario 030 and a validator
   guard cover the new rules.
+- Bound every remaining contract integer (`expected_version`,
+  `aggregate_version`, `event_index`, state `version`, position `priority`,
+  and extension `trigger_window_seconds`/`duration_seconds`) at 2^53 − 1
+  through shared `common/integer.schema.json` definitions, extend the
+  validator so any integer without a maximum at or below the bound fails, and
+  make `RBBB::Configuration` raise `InvalidConfiguration` for extension
+  seconds above the bound.

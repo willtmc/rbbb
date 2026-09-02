@@ -31,7 +31,7 @@
   "properties": {
     "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
     "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "version": {"type": "integer", "minimum": 0},
+    "version": {"$ref": "../common/integer.schema.json#/$defs/nonNegativeInteger"},
     "status": {"type": "string", "enum": ["open", "closed"]},
     "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
     "opens_at": {"$ref": "../common/timestamp.schema.json"},
@@ -84,7 +84,7 @@
       "required": ["maximum_minor_units", "priority", "executed_minor_units"],
       "properties": {
         "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
-        "priority": {"type": "integer", "minimum": 1},
+        "priority": {"$ref": "../common/integer.schema.json#/$defs/positiveInteger"},
         "executed_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"}
       }
     },
@@ -97,7 +97,7 @@
         "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
-        "priority": {"type": "integer", "minimum": 1}
+        "priority": {"$ref": "../common/integer.schema.json#/$defs/positiveInteger"}
       }
     },
     "maximumReduction": {
@@ -108,7 +108,7 @@
         "type": {"const": "maximum_reduced"},
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
-        "priority": {"type": "integer", "minimum": 1}
+        "priority": {"$ref": "../common/integer.schema.json#/$defs/positiveInteger"}
       }
     },
     "reserveChange": {
@@ -118,7 +118,7 @@
       "properties": {
         "old_reserve_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"},
         "new_reserve_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"},
-        "priority": {"type": "integer", "minimum": 1}
+        "priority": {"$ref": "../common/integer.schema.json#/$defs/positiveInteger"}
       }
     }
   },

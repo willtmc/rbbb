@@ -24,10 +24,9 @@
     "visibility": {"type": "string", "enum": ["public", "privileged"]},
     "auction_id": {"type": "string", "minLength": 1, "maxLength": 255},
     "bidding_unit_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "aggregate_version": {"type": "integer", "minimum": 1},
+    "aggregate_version": {"$ref": "../common/integer.schema.json#/$defs/positiveInteger"},
     "event_index": {
-      "type": "integer",
-      "minimum": 0,
+      "$ref": "../common/integer.schema.json#/$defs/nonNegativeInteger",
       "description": "Zero-based order among events emitted by the same accepted command and aggregate version."
     },
     "command_id": {"type": "string", "minLength": 1, "maxLength": 255},

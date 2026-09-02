@@ -31,6 +31,17 @@ def walk(value, &block)
   end
 end
 
+# Like walk, but also yields the JSON Pointer of each node for error messages.
+def walk_with_pointer(value, pointer = "", &block)
+  yield value, pointer
+  case value
+  when Hash
+    value.each { |key, nested| walk_with_pointer(nested, "#{pointer}/#{key}", &block) }
+  when Array
+    value.each_with_index { |nested, index| walk_with_pointer(nested, "#{pointer}/#{index}", &block) }
+  end
+end
+
 def load_document(path)
   if path.extname == ".json"
     JSON.parse(path.read)
@@ -355,6 +366,36 @@ schema_documents.each do |path, document|
         errors << "#{relative(path)}: #{name} must reference timestamp.schema.json"
       end
     end
+  end
+end
+
+# Every other integer (versions, priorities, counters, extension seconds) must
+# carry the same 2^53 - 1 bound. A bare "type": "integer" without a maximum, or
+# a maximum above the shared bound, fails; properties should reference
+# common/integer.schema.json instead of declaring their own range.
+integer_schema = schema_documents.fetch(ROOT.join("specification/common/integer.schema.json"))
+unless integer_schema["type"] == "integer" && integer_schema["maximum"] == money_bound
+  errors << "specification/common/integer.schema.json: root must be an integer with the shared maximum"
+end
+integer_schema.fetch("$defs").each do |name, definition|
+  next if definition["type"] == "integer" && definition["maximum"] == money_bound
+
+  errors << "specification/common/integer.schema.json: $defs/#{name} must use the shared maximum"
+end
+bounded_integer_documents = schema_documents.select do |path, _document|
+  path.to_s.start_with?(ROOT.join("specification").to_s + "/") &&
+    path.dirname != ROOT.join("specification/common")
+end.merge(
+  Pathname(ROOT.join("specification/openapi.yaml")) => openapi,
+  Pathname(ROOT.join("specification/asyncapi.yaml")) => asyncapi
+)
+bounded_integer_documents.each do |path, document|
+  walk_with_pointer(document) do |node, pointer|
+    next unless node.is_a?(Hash) && Array(node["type"]).include?("integer")
+    next if node["maximum"].is_a?(Integer) && node["maximum"] <= money_bound
+
+    errors << "#{relative(path)}: #{pointer} is an integer without a maximum of at most #{money_bound}; " \
+      "reference common/integer.schema.json or common/money.schema.json"
   end
 end
 
