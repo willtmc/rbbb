@@ -36,6 +36,6 @@ Gem::Specification.new do |spec|
   spec.extra_rdoc_files = ["README.md", "LICENSE"]
   spec.require_paths = ["lib"]
 
-  spec.add_development_dependency "minitest", "~> 5.20"
+  spec.add_development_dependency "minitest", "~> 6.0"
   spec.add_development_dependency "rake", "~> 13.0"
 end
