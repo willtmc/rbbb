@@ -63,3 +63,7 @@ versioned artifacts.
   untimed configuration, a command without `effective_at` now clears
   `last_effective_at` instead of silently carrying the previous value forward,
   which the transition event never recorded.
+- `Configuration` now requires `opens_at` and `closes_at`, matching the RFC
+  0001 configuration and state schemas; a missing or null timestamp raises
+  `InvalidConfiguration` instead of producing an untimed unit whose state
+  views can never validate. RFC 0001 does not define untimed bidding units.

@@ -40,7 +40,8 @@ The reserve can affect price but can never be the leader or winner.
 
 Each bidding unit has one currency, an opening amount, an optional confidential
 reserve, an ordered increment schedule, an opening time, a closing time, and
-optional extension settings.
+optional extension settings. Opening and closing times are required; this RFC
+does not define an untimed bidding unit.
 
 Amounts are integer minor units. A bidding unit cannot mix currencies or
 perform currency conversion.
@@ -268,6 +269,8 @@ rejected.
   before opening time are rejected, that authoritative time is monotone across
   accepted commands, and that timestamps require an explicit offset. Backed by
   conformance scenarios 027–029.
+- 2026-09-01: clarified that opening and closing times are required
+  configuration; an untimed bidding unit is outside this RFC.
 
 ## Alternatives considered
 

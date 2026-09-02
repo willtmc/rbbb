@@ -88,7 +88,9 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
     configuration = RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 1_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 100}]
+      increments: [{from_minor_units: 0, amount_minor_units: 100}],
+      opens_at: "2026-09-01T12:00:00Z",
+      closes_at: "2026-09-01T13:00:00Z"
     )
     engine = RBBB::Engine.new(configuration)
     state = engine.initial_state
@@ -96,6 +98,7 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
       command_id: "evaluation-command",
       type: "place_bid",
       bidder_id: "evaluation-bidder",
+      effective_at: "2026-09-01T12:30:00Z",
       maximum_minor_units: 5_000
     })
     abort "installed gem rejected smoke bid" unless decision.accepted?

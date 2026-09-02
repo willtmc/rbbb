@@ -3,11 +3,17 @@
 require_relative "test_helper"
 
 class ProxyReductionTest < Minitest::Test
+  OPENS_AT = "2026-09-01T12:00:00Z"
+  CLOSES_AT = "2026-09-01T13:00:00Z"
+  BID_AT = "2026-09-01T12:30:00Z"
+
   def setup
     configuration = RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 10_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     @engine = RBBB::Engine.new(configuration)
   end
@@ -106,7 +112,7 @@ class ProxyReductionTest < Minitest::Test
     place(engine, state, "command-2", "bidder-b", 30_000)
   end
 
-  def place(engine, state, command_id, bidder_id, maximum, effective_at = nil)
+  def place(engine, state, command_id, bidder_id, maximum, effective_at = BID_AT)
     decision = engine.decide(state, {
       command_id: command_id,
       type: "place_bid",
@@ -118,7 +124,7 @@ class ProxyReductionTest < Minitest::Test
     engine.apply(state, decision.events)
   end
 
-  def reduce(engine, state, maximum:, effective_at: nil)
+  def reduce(engine, state, maximum:, effective_at: BID_AT)
     engine.decide(state, {
       command_id: "command-reduce",
       type: "reduce_maximum",

@@ -2,6 +2,9 @@
 
 module RBBB
   # Immutable bidding-unit configuration consumed by the pure engine.
+  #
+  # RFC 0001 defines only timed bidding units, so +opens_at+ and +closes_at+
+  # are required alongside currency, opening amount, and increments.
   class Configuration
     attr_reader :currency, :opening_minor_units, :reserve_minor_units,
       :increment_schedule, :opens_at, :closes_at, :extension
@@ -13,8 +16,8 @@ module RBBB
         opening_minor_units: values.fetch("opening_minor_units"),
         reserve_minor_units: values["reserve_minor_units"],
         increments: values.fetch("increments"),
-        opens_at: values["opens_at"],
-        closes_at: values["closes_at"],
+        opens_at: values.fetch("opens_at"),
+        closes_at: values.fetch("closes_at"),
         extension: values["extension"]
       )
     rescue KeyError => e
@@ -38,7 +41,7 @@ module RBBB
       @increment_schedule = IncrementSchedule.new(increments)
       @opens_at = parse_timestamp(opens_at, "opens_at")
       @closes_at = parse_timestamp(closes_at, "closes_at")
-      if @opens_at && @closes_at && @opens_at >= @closes_at
+      if @opens_at >= @closes_at
         raise InvalidConfiguration, "opens_at must be earlier than closes_at"
       end
       @extension = normalize_extension(extension)
@@ -54,7 +57,7 @@ module RBBB
     private
 
     def parse_timestamp(value, field)
-      return nil if value.nil?
+      raise InvalidConfiguration, "configuration is missing #{field}" if value.nil?
 
       Timestamp.parse(value)
     rescue ArgumentError
@@ -66,7 +69,6 @@ module RBBB
       unless extension.respond_to?(:transform_keys)
         raise InvalidConfiguration, "extension must be an object"
       end
-      raise InvalidConfiguration, "extension requires closes_at" unless closes_at
 
       values = extension.transform_keys(&:to_s)
       trigger = values["trigger_window_seconds"]

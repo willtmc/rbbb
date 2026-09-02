@@ -101,6 +101,11 @@ positions and the immutable authorization, reserve-change, and bid-void facts
 needed by a compliant implementation. Possession of aggregate state does not
 authorize public disclosure.
 
+Both views always carry `opens_at` and `closes_at`. RFC 0001 defines only
+timed bidding units: a configuration without an opening time or a closing time
+is invalid, and an implementation must reject it rather than emit state with a
+missing or null schedule.
+
 ## Invariants beyond JSON Schema
 
 JSON Schema validates shape and local value constraints. RFC prose,

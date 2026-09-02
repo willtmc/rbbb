@@ -3,11 +3,17 @@
 require_relative "test_helper"
 
 class BidVoidTest < Minitest::Test
+  OPENS_AT = "2026-09-01T12:00:00Z"
+  CLOSES_AT = "2026-09-01T13:00:00Z"
+  BID_AT = "2026-09-01T12:30:00Z"
+
   def setup
     configuration = RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 10_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     @engine = RBBB::Engine.new(configuration)
   end
@@ -35,6 +41,7 @@ class BidVoidTest < Minitest::Test
       command_id: "command-reduce",
       type: "reduce_maximum",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 10_000
     })
 
@@ -113,7 +120,8 @@ class BidVoidTest < Minitest::Test
       type: "void_bid",
       operator_id: "operator-1",
       reason: "bidder_entry_error",
-      notification_policy: "affected"
+      notification_policy: "affected",
+      effective_at: BID_AT
     })
     unknown = void(@engine, state, bid_id: "bid-unknown")
     first = void(@engine, state, bid_id: "bid-b")
@@ -177,7 +185,7 @@ class BidVoidTest < Minitest::Test
     place(@engine, state, "command-2", "bid-b", "bidder-b", 30_000)
   end
 
-  def place(engine, state, command_id, bid_id, bidder_id, maximum, effective_at = nil)
+  def place(engine, state, command_id, bid_id, bidder_id, maximum, effective_at = BID_AT)
     decision = engine.decide(state, {
       command_id: command_id,
       type: "place_bid",
@@ -190,7 +198,7 @@ class BidVoidTest < Minitest::Test
     engine.apply(state, decision.events)
   end
 
-  def void(engine, state, bid_id:, policy: "affected", effective_at: nil)
+  def void(engine, state, bid_id:, policy: "affected", effective_at: BID_AT)
     engine.decide(state, {
       command_id: "command-void-#{bid_id}",
       type: "void_bid",
