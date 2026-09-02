@@ -54,6 +54,38 @@ decision = engine.decide(state, {
 state = engine.apply(state, decision.events) if decision.accepted?
 ```
 
+### Rejected commands
+
+A command that cannot be applied yields `decision.rejected?` and no events.
+`decision.rejection` is a frozen hash holding `command_id`, `reason` (one of
+the enumerated codes in `specification/rejections/rejection.schema.json`), and
+`status: "rejected"`, and at most one reason-specific field:
+`executed_floor_minor_units`, present only with
+`maximum_below_executed_amount`. There is no open-ended details object, and
+the rejection is already the complete document the schema describes; a
+service adapter must transmit it without adding or removing fields. The
+normative rules live in
+`specification/contract.md` under "Service envelope and core inputs" and the
+rejection paragraph under "Events and visibility". A host must return
+`executed_floor_minor_units` only to the bidder who issued the rejected
+command and must never place it in a public projection.
+
+```ruby
+decision = engine.decide(state, {
+  command_id: "command-2",
+  type: "reduce_maximum",
+  bidder_id: "bidder-a",
+  maximum_minor_units: 5_000,
+  effective_at: "2026-09-01T12:11:00Z"
+})
+if decision.rejected?
+  decision.rejection
+  # => {"command_id" => "command-2",
+  #     "reason" => "maximum_below_executed_amount",
+  #     "executed_floor_minor_units" => 10_000}
+end
+```
+
 ## Snapshots, checkpoints, and the public view
 
 `State#to_h` is the full privileged aggregate snapshot. With the host's
