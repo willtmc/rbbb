@@ -108,13 +108,16 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
       release_status: RBBB::RELEASE_STATUS
     )
   RUBY
-  environment = {
-    "BUNDLE_GEMFILE" => nil,
+  bundler_environment = ENV.each_key.grep(/\A(?:BUNDLE|BUNDLER)_/).to_h do |key|
+    [key, nil]
+  end
+  environment = bundler_environment.merge(
     "GEM_HOME" => install_root.to_s,
     "GEM_PATH" => install_root.to_s,
+    "RUBYGEMS_GEMDEPS" => nil,
     "RUBYLIB" => nil,
     "RUBYOPT" => nil
-  }
+  )
   stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, "-e", smoke_code)
   fail_verification("installed smoke test failed: #{stderr}") unless status.success?
 
