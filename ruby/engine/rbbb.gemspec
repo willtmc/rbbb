@@ -17,17 +17,18 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2"
 
+  release_tag = "v#{spec.version}"
   spec.metadata = {
     "allowed_push_host" => "https://rubygems.org",
     "bug_tracker_uri" => "https://github.com/willtmc/rbbb/issues",
-    "changelog_uri" => "https://github.com/willtmc/rbbb/blob/main/CHANGELOG.md",
-    "documentation_uri" => "https://github.com/willtmc/rbbb/blob/main/ruby/engine/README.md",
+    "changelog_uri" => "https://github.com/willtmc/rbbb/blob/#{release_tag}/CHANGELOG.md",
+    "documentation_uri" => "https://github.com/willtmc/rbbb/blob/#{release_tag}/ruby/engine/README.md",
     "homepage_uri" => spec.homepage,
     "rbbb_release_status" => RBBB::RELEASE_STATUS,
     "rbbb_rfc" => "0001",
     "rbbb_specification_version" => RBBB::SPECIFICATION_VERSION,
     "rubygems_mfa_required" => "true",
-    "source_code_uri" => "https://github.com/willtmc/rbbb/tree/main/ruby/engine"
+    "source_code_uri" => "https://github.com/willtmc/rbbb/tree/#{release_tag}/ruby/engine"
   }
 
   spec.files = Dir.chdir(__dir__) do
