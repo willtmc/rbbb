@@ -57,6 +57,12 @@ never exceed the bound: when the standing amount plus its increment would
 exceed it, the next required amount is the bound itself. That saturated case
 is the only one in which the next required amount equals the standing amount.
 
+The same bound applies to every other integer in the contract: extension
+trigger window and extension duration in seconds, expected and aggregate
+versions, state versions, bidder priorities, and event indexes. A
+configuration whose extension trigger window or extension duration exceeds
+the bound is invalid.
+
 Increment schedules are configurable. Each tier defines an inclusive lower
 bound and a positive increment. The applicable tier is the tier with the
 greatest lower bound not exceeding the amount being evaluated. Schedules must
@@ -296,6 +302,10 @@ rejected.
   millisecond with a canonical serialized form, so independent implementations
   in double-precision or 64-bit-integer languages reach identical outcomes.
   Backed by conformance scenario 030.
+- 2026-09-01: extended the 2^53 − 1 bound from amounts to extension seconds,
+  versions, priorities, and event indexes, and declared a configuration with
+  extension seconds above the bound invalid. Backed by the shared integer
+  schema and the specification document validator.
 
 ## Alternatives considered
 
