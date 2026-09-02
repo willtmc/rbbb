@@ -24,6 +24,32 @@ module RBBB
       :reserve_history, :voided_bid_ids, :status, :result, :winner_id,
       :winning_minor_units
 
+    # Aggregate snapshot keys owned by the bidding unit. A host adds
+    # auction_id, bidding_unit_id, and currency to complete
+    # specification/state/aggregate.schema.json.
+    SNAPSHOT_KEYS = %w[
+      version status opens_at closes_at last_effective_at reserve_minor_units
+      reserve_status leader_id standing_minor_units next_required_minor_units
+      positions authorization_history reserve_history voided_bid_ids result
+      winner_id winning_minor_units
+    ].freeze
+
+    # Public projection keys owned by the bidding unit, per
+    # specification/state/bidding-unit.schema.json. Never add an identity,
+    # a maximum, a reserve amount, or audit history here.
+    PUBLIC_VIEW_KEYS = %w[
+      version status opens_at closes_at standing_minor_units
+      next_required_minor_units reserve_status result winning_minor_units
+    ].freeze
+
+    # Keys every privileged state-transition event carries. Closing adds
+    # status, result, winner_id, and winning_minor_units.
+    TRANSITION_KEYS = %w[
+      aggregate_version closes_at reserve_minor_units reserve_status leader_id
+      standing_minor_units next_required_minor_units positions
+      authorization_history reserve_history voided_bid_ids
+    ].freeze
+
     def self.empty(configuration)
       new(
         version: 0,
@@ -40,6 +66,72 @@ module RBBB
         reserve_history: [],
         voided_bid_ids: [],
         status: "open"
+      )
+    end
+
+    # Rebuild a validated state from a `State#to_h` snapshot. Identity keys
+    # added by the host are ignored; every snapshot key must be present.
+    def self.from_h(snapshot)
+      raise InvalidState, "snapshot must be an object" unless snapshot.respond_to?(:transform_keys)
+
+      values = snapshot.transform_keys(&:to_s)
+      missing = SNAPSHOT_KEYS.reject { |key| values.key?(key) }
+      raise InvalidState, "snapshot is missing #{missing.join(', ')}" if missing.any?
+
+      new(
+        version: values.fetch("version"),
+        positions: values.fetch("positions"),
+        leader_id: values.fetch("leader_id"),
+        standing_minor_units: values.fetch("standing_minor_units"),
+        next_required_minor_units: values.fetch("next_required_minor_units"),
+        reserve_status: values.fetch("reserve_status"),
+        reserve_minor_units: values.fetch("reserve_minor_units"),
+        opens_at: values.fetch("opens_at"),
+        closes_at: values.fetch("closes_at"),
+        last_effective_at: values.fetch("last_effective_at"),
+        authorization_history: values.fetch("authorization_history"),
+        reserve_history: values.fetch("reserve_history"),
+        voided_bid_ids: values.fetch("voided_bid_ids"),
+        status: values.fetch("status"),
+        result: values.fetch("result"),
+        winner_id: values.fetch("winner_id"),
+        winning_minor_units: values.fetch("winning_minor_units")
+      )
+    rescue NoMethodError, TypeError
+      raise InvalidState, "snapshot is malformed"
+    end
+
+    # Rebuild a validated state from one privileged state-transition event
+    # (or its data hash). Every transition carries the full aggregate
+    # snapshot, so a host can checkpoint from the latest transition instead
+    # of replaying the stream from version 0. `opens_at` is fixed by
+    # configuration and is not repeated in events.
+    def self.from_transition(configuration, event_or_data)
+      data = event_or_data.respond_to?(:data) ? event_or_data.data : event_or_data
+      raise InvalidState, "transition data must be an object" unless data.respond_to?(:transform_keys)
+
+      values = data.transform_keys(&:to_s)
+      missing = TRANSITION_KEYS.reject { |key| values.key?(key) }
+      raise InvalidState, "transition is missing #{missing.join(', ')}" if missing.any?
+
+      from_h(
+        "version" => values.fetch("aggregate_version"),
+        "status" => values.fetch("status", "open"),
+        "opens_at" => configuration.opens_at,
+        "closes_at" => values["closes_at"],
+        "last_effective_at" => values["effective_at"],
+        "reserve_minor_units" => values["reserve_minor_units"],
+        "reserve_status" => values["reserve_status"],
+        "leader_id" => values["leader_id"],
+        "standing_minor_units" => values["standing_minor_units"],
+        "next_required_minor_units" => values["next_required_minor_units"],
+        "positions" => values["positions"],
+        "authorization_history" => values["authorization_history"],
+        "reserve_history" => values["reserve_history"],
+        "voided_bid_ids" => values["voided_bid_ids"],
+        "result" => values["result"],
+        "winner_id" => values["winner_id"],
+        "winning_minor_units" => values["winning_minor_units"]
       )
     end
 
@@ -94,28 +186,50 @@ module RBBB
       status == "closed"
     end
 
+    # Full privileged aggregate snapshot. Together with the host's
+    # auction_id, bidding_unit_id, and currency it satisfies
+    # specification/state/aggregate.schema.json and round-trips through
+    # `State.from_h`. It contains identities, maxima, the reserve amount, and
+    # audit history; never publish it.
     def to_h
-      result = {
+      {
         "version" => version,
+        "status" => status,
+        "opens_at" => Timestamp.dump(opens_at),
+        "closes_at" => Timestamp.dump(closes_at),
+        "last_effective_at" => Timestamp.dump(last_effective_at),
+        "reserve_minor_units" => reserve_minor_units,
+        "reserve_status" => reserve_status,
         "leader_id" => leader_id,
         "standing_minor_units" => standing_minor_units,
         "next_required_minor_units" => next_required_minor_units,
-        "status" => status
+        "positions" => positions.transform_values(&:to_h),
+        "authorization_history" => authorization_history.map(&:dup),
+        "reserve_history" => reserve_history.map(&:dup),
+        "voided_bid_ids" => voided_bid_ids.dup,
+        "result" => result,
+        "winner_id" => winner_id,
+        "winning_minor_units" => winning_minor_units
       }
-      result["opens_at"] = Timestamp.dump(opens_at) if opens_at
-      result["closes_at"] = Timestamp.dump(closes_at) if closes_at
-      result["last_effective_at"] = Timestamp.dump(last_effective_at) if last_effective_at
-      if leader_id
-        result["leader_maximum_minor_units"] = positions.fetch(leader_id).maximum_minor_units
-        result["leader_executed_minor_units"] = positions.fetch(leader_id).executed_minor_units
-      end
-      result["reserve_status"] = reserve_status if reserve_status
-      result["reserve_minor_units"] = reserve_minor_units unless reserve_minor_units.nil?
-      result["voided_bid_ids"] = voided_bid_ids if voided_bid_ids.any?
-      result["result"] = self.result if self.result
-      result["winner_id"] = winner_id if winner_id
-      result["winning_minor_units"] = winning_minor_units unless winning_minor_units.nil?
-      result
+    end
+
+    # Public query projection. Together with the host's auction_id,
+    # bidding_unit_id, and currency it satisfies
+    # specification/state/bidding-unit.schema.json. It never carries a
+    # bidder, leader, or winner identity, a maximum, the reserve amount, or
+    # audit history.
+    def public_view
+      {
+        "version" => version,
+        "status" => status,
+        "opens_at" => Timestamp.dump(opens_at),
+        "closes_at" => Timestamp.dump(closes_at),
+        "standing_minor_units" => standing_minor_units,
+        "next_required_minor_units" => next_required_minor_units,
+        "reserve_status" => reserve_status,
+        "result" => result,
+        "winning_minor_units" => winning_minor_units
+      }
     end
 
     private

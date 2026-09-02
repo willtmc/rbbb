@@ -13,4 +13,4 @@ expected:
     - {type: standing_bid_changed, standing_minor_units: 31000, leader_changed: false}
   privileged_events:
     - {type: maximum_reduced, bidder_id: bidder-a, old_maximum_minor_units: 50000, new_maximum_minor_units: 35000, executed_floor_minor_units: 31000}
-  final_state: {leader_id: bidder-a, standing_minor_units: 31000, leader_maximum_minor_units: 35000}
+  final_state: {leader_id: bidder-a, standing_minor_units: 31000, positions: {bidder-a: {maximum_minor_units: 35000}}}

@@ -118,6 +118,17 @@ module RBBB
       )
     end
 
+    # Rebuild aggregate state from one privileged state-transition event
+    # instead of replaying the stream from version 0. Every transition event
+    # carries the full snapshot; the result is validated like any state.
+    def restore(event)
+      unless event.is_a?(Event) && event.privileged? && STATE_TRANSITION_EVENTS.include?(event.type)
+        raise InvalidState, "restore requires one privileged state-transition event"
+      end
+
+      State.from_transition(configuration, event)
+    end
+
     private
 
     def decide_place_bid(state, command)
