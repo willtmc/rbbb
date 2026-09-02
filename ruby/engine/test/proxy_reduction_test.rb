@@ -94,7 +94,9 @@ class ProxyReductionTest < Minitest::Test
       currency: "USD",
       opening_minor_units: 10_000,
       increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
-      reserve_minor_units: 40_000
+      reserve_minor_units: 40_000,
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     engine = RBBB::Engine.new(configuration)
     state = place(engine, engine.initial_state, "command-1", "bidder-a", 50_000)
