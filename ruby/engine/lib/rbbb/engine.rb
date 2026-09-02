@@ -88,34 +88,9 @@ module RBBB
       end
       validate_transition_history!(state, transition, aggregate_version)
 
-      State.new(
-        version: aggregate_version,
-        positions: transition.data.fetch("positions"),
-        leader_id: transition.data.fetch("leader_id"),
-        standing_minor_units: transition.data.fetch("standing_minor_units"),
-        next_required_minor_units: transition.data.fetch("next_required_minor_units"),
-        reserve_status: transition.data["reserve_status"],
-        reserve_minor_units: transition.data.fetch(
-          "reserve_minor_units",
-          state.reserve_minor_units
-        ),
-        opens_at: state.opens_at,
-        closes_at: transition.data.fetch("closes_at", state.closes_at),
-        last_effective_at: transition.data["effective_at"] || state.last_effective_at,
-        authorization_history: transition.data.fetch(
-          "authorization_history",
-          state.authorization_history
-        ),
-        reserve_history: transition.data.fetch("reserve_history", state.reserve_history),
-        voided_bid_ids: transition.data.fetch("voided_bid_ids", state.voided_bid_ids),
-        status: transition.data.fetch("status", state.status),
-        result: transition.data.fetch("result", state.result),
-        winner_id: transition.data.fetch("winner_id", state.winner_id),
-        winning_minor_units: transition.data.fetch(
-          "winning_minor_units",
-          state.winning_minor_units
-        )
-      )
+      # Every transition carries the full aggregate snapshot, so the next state
+      # is exactly what a host would restore from this event.
+      State.from_transition(configuration, transition)
     end
 
     # Rebuild aggregate state from one privileged state-transition event

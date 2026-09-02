@@ -97,6 +97,46 @@ class StateSnapshotTest < Minitest::Test
     assert_equal 9, replayed.version
   end
 
+  # An untimed configuration accepts commands without effective_at. The
+  # transition event is the whole snapshot, so apply must not carry a stale
+  # last_effective_at forward that a checkpoint restored from the event
+  # would not see.
+  def test_apply_agrees_with_restore_when_an_untimed_command_omits_effective_at
+    engine = RBBB::Engine.new(RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+    ))
+    state = engine.initial_state
+    transition = nil
+    [
+      {command_id: "command-1", type: "place_bid", bid_id: "bid-1", bidder_id: "bidder-a",
+       maximum_minor_units: 50_000, effective_at: "2026-09-01T12:00:00Z"},
+      {command_id: "command-2", type: "place_bid", bid_id: "bid-2", bidder_id: "bidder-b",
+       maximum_minor_units: 20_000}
+    ].each do |command|
+      decision = engine.decide(state, command)
+      assert decision.accepted?, decision.rejection.inspect
+      transition = decision.events.find(&:privileged?)
+      state = engine.apply(state, decision.events)
+    end
+    checkpoint = engine.restore(transition)
+
+    assert_nil transition.data.fetch("effective_at")
+    assert_nil state.last_effective_at
+    assert_equal state.to_h, checkpoint.to_h
+
+    earlier = {command_id: "command-3", type: "place_bid", bid_id: "bid-3", bidder_id: "bidder-b",
+               maximum_minor_units: 60_000, effective_at: "2026-09-01T11:00:00Z"}
+    replayed = engine.decide(state, earlier)
+    restored = engine.decide(checkpoint, earlier)
+
+    # Neither state records a time, so neither rejects the earlier effective_at.
+    assert replayed.accepted?, replayed.rejection.inspect
+    assert restored.accepted?, restored.rejection.inspect
+    assert_equal replayed.events.map(&:to_h), restored.events.map(&:to_h)
+  end
+
   def test_snapshot_round_trips_for_initial_and_closed_states
     initial = @engine.initial_state
     assert_equal initial.to_h, RBBB::State.from_h(initial.to_h).to_h

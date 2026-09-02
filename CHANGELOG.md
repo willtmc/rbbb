@@ -58,3 +58,8 @@ versioned artifacts.
 - Emit the constant `status: "rejected"` from the pure engine so its rejection
   is the complete schema-valid document rather than one the service adapter
   must finish, and assert `status` in every conformance rejection.
+- `Engine#apply` now builds the next state with `State.from_transition`, so it
+  is guaranteed to equal `Engine#restore` of the same event. Consequence: in an
+  untimed configuration, a command without `effective_at` now clears
+  `last_effective_at` instead of silently carrying the previous value forward,
+  which the transition event never recorded.
