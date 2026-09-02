@@ -81,6 +81,7 @@ decision = engine.decide(state, {
 if decision.rejected?
   decision.rejection
   # => {"command_id" => "command-2",
+  #     "status" => "rejected",
   #     "reason" => "maximum_below_executed_amount",
   #     "executed_floor_minor_units" => 10_000}
 end
