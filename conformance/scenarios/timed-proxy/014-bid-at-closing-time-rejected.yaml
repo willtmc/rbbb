@@ -8,5 +8,5 @@ commands:
 expected:
   public_events: []
   rejections:
-    - {command_id: command-1, reason: bidding_closed}
+    - {command_id: command-1, status: rejected, reason: bidding_closed}
   final_state: {leader_id: null, standing_minor_units: null, closes_at: "2026-09-01T13:00:00Z"}

@@ -10,5 +10,5 @@ expected:
   public_events:
     - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
   rejections:
-    - {command_id: command-1, reason: bidding_not_open}
+    - {command_id: command-1, status: rejected, reason: bidding_not_open}
   final_state: {leader_id: bidder-a, standing_minor_units: 10000}

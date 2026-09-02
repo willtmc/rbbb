@@ -55,3 +55,6 @@ versioned artifacts.
 - Add `State#public_view`, the public query projection matching
   `bidding-unit.schema.json`; it can never carry an identity, a maximum, the
   reserve amount, or audit history.
+- Emit the constant `status: "rejected"` from the pure engine so its rejection
+  is the complete schema-valid document rather than one the service adapter
+  must finish, and assert `status` in every conformance rejection.

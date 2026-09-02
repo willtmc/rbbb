@@ -3,9 +3,15 @@
 module RBBB
   # Accepted events or one stable rejection from evaluating a command.
   class Decision
-    # Rejection fields beyond command_id and reason, keyed by the only reason
-    # that may carry them. Mirrors specification/rejections/rejection.schema.json;
-    # there is deliberately no open-ended details object.
+    # The constant status every rejection carries. The pure engine emits the
+    # complete rejection document defined by
+    # specification/rejections/rejection.schema.json; a service adapter must
+    # transmit it without adding or removing fields.
+    REJECTED_STATUS = "rejected"
+
+    # Rejection fields beyond command_id, status, and reason, keyed by the only
+    # reason that may carry them. Mirrors the rejection schema; there is
+    # deliberately no open-ended details object.
     REASON_SPECIFIC_FIELDS = {
       "maximum_below_executed_amount" => %w[executed_floor_minor_units].freeze
     }.freeze
@@ -17,7 +23,7 @@ module RBBB
     end
 
     def self.rejected(command_id:, reason:, executed_floor_minor_units: nil)
-      rejection = {"command_id" => command_id, "reason" => reason}
+      rejection = {"command_id" => command_id, "status" => REJECTED_STATUS, "reason" => reason}
       allowed = REASON_SPECIFIC_FIELDS.fetch(reason, [])
 
       if allowed.include?("executed_floor_minor_units")

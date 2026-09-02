@@ -10,5 +10,5 @@ expected:
   public_events:
     - {type: standing_bid_changed, standing_minor_units: 100000, reserve_status: reserve_met}
   rejections:
-    - {command_id: command-2, reason: reserve_may_not_increase_after_first_bid}
+    - {command_id: command-2, status: rejected, reason: reserve_may_not_increase_after_first_bid}
   final_state: {leader_id: bidder-a, standing_minor_units: 100000, reserve_status: reserve_met, reserve_minor_units: 100000}
