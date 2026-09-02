@@ -45,3 +45,13 @@ versioned artifacts.
   field for `maximum_below_executed_amount`, replace the engine's open-ended
   rejection details with that explicit field, and make document validation
   reject undeclared or unscoped rejection keys.
+- `State#to_h` is now the full privileged aggregate snapshot matching
+  `aggregate.schema.json` (positions, histories, voided bid IDs, and closing
+  facts included; the derived `leader_maximum_minor_units` and
+  `leader_executed_minor_units` keys are gone, so read the leader's position
+  instead). `State.from_h` and `State.from_transition` / `Engine#restore`
+  rebuild a validated state from a snapshot or from one state-transition
+  event, so a host can checkpoint without replaying from version 0.
+- Add `State#public_view`, the public query projection matching
+  `bidding-unit.schema.json`; it can never carry an identity, a maximum, the
+  reserve amount, or audit history.

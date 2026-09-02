@@ -54,6 +54,30 @@ decision = engine.decide(state, {
 state = engine.apply(state, decision.events) if decision.accepted?
 ```
 
+## Snapshots, checkpoints, and the public view
+
+`State#to_h` is the full privileged aggregate snapshot. With the host's
+`auction_id`, `bidding_unit_id`, and `currency` added it satisfies
+`specification/state/aggregate.schema.json`, and `RBBB::State.from_h`
+rebuilds a validated state from it. It contains bidder identities, maxima,
+the reserve amount, and audit history, so it must never be published.
+
+Every privileged state-transition event already carries that snapshot, so a
+host can checkpoint from the latest transition instead of replaying the
+stream from version 0:
+
+```ruby
+transition = decision.events.find { |event| event.privileged? && event.type == "maximum_accepted" }
+restored = engine.restore(transition)          # or RBBB::State.from_transition(configuration, transition)
+restored.to_h == state.to_h                     # => true
+```
+
+`State#public_view` is the public query projection. With the same three host
+fields added it satisfies `specification/state/bidding-unit.schema.json`. It
+never carries a bidder, leader, or winner identity, a maximum, the reserve
+amount, or audit history; serve it rather than hand-rolling a projection
+from the aggregate.
+
 ## Install the evaluation gem
 
 Version `0.1.0.pre.1` is an experimental evaluation package. It has no runtime

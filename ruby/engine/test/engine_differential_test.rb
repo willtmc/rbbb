@@ -58,6 +58,7 @@ class EngineDifferentialTest < Minitest::Test
       state = engine.apply(state, decision.events)
 
       assert_no_private_data_in_public_events(decision, label)
+      assert_checkpoint_agreement(engine, decision, state, label)
       if command[:type] == "place_bid"
         assert_operator state.closes_at, :>=, before.closes_at,
           "#{label}: a bid moved closing time earlier: #{command.inspect}"
@@ -142,6 +143,21 @@ class EngineDifferentialTest < Minitest::Test
       leaked = event.data.keys & PRIVATE_KEYS
       assert_empty leaked, "#{label}: public #{event.type} leaked #{leaked.inspect}"
     end
+  end
+
+  # A host that checkpoints from the latest transition event, or from a stored
+  # snapshot, must land on exactly the state the incremental path produced,
+  # and its public projection must never carry a private key.
+  def assert_checkpoint_agreement(engine, decision, state, label)
+    transition = decision.events.find do |event|
+      event.privileged? && RBBB::Engine::STATE_TRANSITION_EVENTS.include?(event.type)
+    end
+    assert_equal state.to_h, engine.restore(transition).to_h,
+      "#{label}: restore from #{transition.type} diverged from apply"
+    assert_equal state.to_h, RBBB::State.from_h(state.to_h).to_h,
+      "#{label}: snapshot did not round-trip"
+    leaked = state.public_view.keys & PRIVATE_KEYS
+    assert_empty leaked, "#{label}: public view leaked #{leaked.inspect}"
   end
 
   def assert_executed_amount_rules(state, label)

@@ -12,4 +12,4 @@ expected:
   privileged_events:
     - {type: maximum_accepted, bidder_id: bidder-a, maximum_minor_units: 50000}
     - {type: maximum_increased, bidder_id: bidder-a, maximum_minor_units: 50001}
-  final_state: {leader_id: bidder-a, standing_minor_units: 10000, next_required_minor_units: 11000, leader_maximum_minor_units: 50001}
+  final_state: {leader_id: bidder-a, standing_minor_units: 10000, next_required_minor_units: 11000, positions: {bidder-a: {maximum_minor_units: 50001}}}
