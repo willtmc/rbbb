@@ -9,12 +9,24 @@ class DecisionTest < Minitest::Test
     "../../../specification/rejections/rejection.schema.json"
   ).expand_path
 
-  def test_rejection_carries_only_command_id_and_reason_by_default
+  def test_rejection_carries_only_command_id_status_and_reason_by_default
     decision = RBBB::Decision.rejected(command_id: "command-1", reason: "invalid_maximum")
 
     assert decision.rejected?
-    assert_equal({"command_id" => "command-1", "reason" => "invalid_maximum"}, decision.rejection)
+    assert_equal(
+      {"command_id" => "command-1", "status" => "rejected", "reason" => "invalid_maximum"},
+      decision.rejection
+    )
     assert decision.rejection.frozen?
+  end
+
+  def test_rejection_satisfies_the_schema_required_fields_and_status_constant
+    schema = JSON.parse(REJECTION_SCHEMA.read)
+    decision = RBBB::Decision.rejected(command_id: "command-1", reason: "invalid_maximum")
+
+    assert_empty schema.fetch("required") - decision.rejection.keys
+    assert_equal schema.dig("properties", "status", "const"), decision.rejection.fetch("status")
+    assert_equal RBBB::Decision::REJECTED_STATUS, decision.rejection.fetch("status")
   end
 
   def test_executed_floor_is_reported_only_for_maximum_below_executed_amount

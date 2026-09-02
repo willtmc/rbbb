@@ -12,5 +12,5 @@ expected:
     - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
     - {type: standing_bid_changed, standing_minor_units: 51000, next_required_minor_units: 52000, leader_changed: true}
   rejections:
-    - {command_id: command-2, reason: effective_at_out_of_order}
+    - {command_id: command-2, status: rejected, reason: effective_at_out_of_order}
   final_state: {leader_id: bidder-b, standing_minor_units: 51000, last_effective_at: "2026-09-01T12:20:00Z"}

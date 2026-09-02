@@ -35,6 +35,15 @@ The pure Ruby engine consumes the abbreviated core form directly. A reference
 service adapter will validate the full envelope, resolve the aggregate, assign
 authoritative order and time, and then call the pure decision boundary.
 
+Outputs are not abbreviated. A rejection has no separate core form: the pure
+decision boundary emits the complete rejection document that
+`rejections/rejection.schema.json` defines, including the constant
+`status: "rejected"`, and the adapter transmits it verbatim after confirming the
+recipient is the command's author. Conformance scenarios therefore assert
+`status` on every expected rejection. Accepted commands differ: the engine emits
+events, and the adapter builds the `committed` command result around the public
+subset of them.
+
 ## Events and visibility
 
 Every committed service event uses the common envelope in

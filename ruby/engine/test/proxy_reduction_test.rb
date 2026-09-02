@@ -67,8 +67,8 @@ class ProxyReductionTest < Minitest::Test
 
     assert_equal "maximum_not_found", missing.rejection.fetch("reason")
     assert_equal "maximum_not_reduced", unchanged.rejection.fetch("reason")
-    assert_equal %w[command_id reason], missing.rejection.keys
-    assert_equal %w[command_id reason], unchanged.rejection.keys
+    assert_equal %w[command_id status reason], missing.rejection.keys
+    assert_equal %w[command_id status reason], unchanged.rejection.keys
   end
 
   def test_reduction_below_executed_floor_reports_only_the_bidder_own_floor
@@ -80,7 +80,7 @@ class ProxyReductionTest < Minitest::Test
     assert_equal 31_000, decision.rejection.fetch("executed_floor_minor_units")
     assert_equal state.position_for("bidder-a").executed_minor_units,
       decision.rejection.fetch("executed_floor_minor_units")
-    assert_equal %w[command_id reason executed_floor_minor_units], decision.rejection.keys
+    assert_equal %w[command_id status reason executed_floor_minor_units], decision.rejection.keys
   end
 
   def test_sole_bidder_floor_under_reserve_pressure_equals_public_standing_amount
