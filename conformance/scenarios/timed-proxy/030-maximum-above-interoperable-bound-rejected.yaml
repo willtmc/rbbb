@@ -1,0 +1,19 @@
+name: Maximum above the interoperable bound is rejected and amounts saturate at the bound
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+# 9007199254740991 is 2^53 - 1, the largest amount any implementation may
+# accept. One above it (2^53) is still exactly representable as a double, so a
+# millisecond-native or double-native implementation can replay this file.
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 9007199254740992, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 9007199254740491, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: command-3, type: place_bid, bidder_id: bidder-b, maximum_minor_units: 9007199254740991, effective_at: "2026-09-01T12:12:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
+    - {type: standing_bid_changed, standing_minor_units: 9007199254740991, next_required_minor_units: 9007199254740991}
+  rejections:
+    - {command_id: command-1, status: rejected, reason: invalid_maximum}
+  final_state: {leader_id: bidder-b, standing_minor_units: 9007199254740991, next_required_minor_units: 9007199254740991}

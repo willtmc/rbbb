@@ -54,16 +54,72 @@ decision = engine.decide(state, {
 state = engine.apply(state, decision.events) if decision.accepted?
 ```
 
+### Rejected commands
+
+A command that cannot be applied yields `decision.rejected?` and no events.
+`decision.rejection` is a frozen hash holding `command_id`, `reason` (one of
+the enumerated codes in `specification/rejections/rejection.schema.json`), and
+`status: "rejected"`, and at most one reason-specific field:
+`executed_floor_minor_units`, present only with
+`maximum_below_executed_amount`. There is no open-ended details object, and
+the rejection is already the complete document the schema describes; a
+service adapter must transmit it without adding or removing fields. The
+normative rules live in
+`specification/contract.md` under "Service envelope and core inputs" and the
+rejection paragraph under "Events and visibility". A host must return
+`executed_floor_minor_units` only to the bidder who issued the rejected
+command and must never place it in a public projection.
+
+```ruby
+decision = engine.decide(state, {
+  command_id: "command-2",
+  type: "reduce_maximum",
+  bidder_id: "bidder-a",
+  maximum_minor_units: 5_000,
+  effective_at: "2026-09-01T12:11:00Z"
+})
+if decision.rejected?
+  decision.rejection
+  # => {"command_id" => "command-2",
+  #     "reason" => "maximum_below_executed_amount",
+  #     "executed_floor_minor_units" => 10_000}
+end
+```
+
+## Snapshots, checkpoints, and the public view
+
+`State#to_h` is the full privileged aggregate snapshot. With the host's
+`auction_id`, `bidding_unit_id`, and `currency` added it satisfies
+`specification/state/aggregate.schema.json`, and `RBBB::State.from_h`
+rebuilds a validated state from it. It contains bidder identities, maxima,
+the reserve amount, and audit history, so it must never be published.
+
+Every privileged state-transition event already carries that snapshot, so a
+host can checkpoint from the latest transition instead of replaying the
+stream from version 0:
+
+```ruby
+transition = decision.events.find { |event| event.privileged? && event.type == "maximum_accepted" }
+restored = engine.restore(transition)          # or RBBB::State.from_transition(configuration, transition)
+restored.to_h == state.to_h                     # => true
+```
+
+`State#public_view` is the public query projection. With the same three host
+fields added it satisfies `specification/state/bidding-unit.schema.json`. It
+never carries a bidder, leader, or winner identity, a maximum, the reserve
+amount, or audit history; serve it rather than hand-rolling a projection
+from the aggregate.
+
 ## Install the evaluation gem
 
-Version `0.1.0.pre.1` is an experimental evaluation package. It has no runtime
+Version `0.1.0.pre.2` is an experimental evaluation package. It has no runtime
 dependencies and supports Ruby 3.2 and newer. Until a maintainer publishes it
 to a registry, build an installable artifact from a reviewed commit:
 
 ```sh
 cd ruby/engine
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.1.gem
+gem install ./rbbb-0.1.0.pre.2.gem
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 

@@ -3,11 +3,17 @@
 require_relative "test_helper"
 
 class EngineTest < Minitest::Test
+  OPENS_AT = "2026-09-01T12:00:00Z"
+  CLOSES_AT = "2026-09-01T13:00:00Z"
+  BID_AT = "2026-09-01T12:30:00Z"
+
   def setup
     configuration = RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 10_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     @engine = RBBB::Engine.new(configuration)
   end
@@ -18,6 +24,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 50_000
     }
 
@@ -35,6 +42,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 50_000
     })
 
@@ -50,6 +58,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 50_000
     })
 
@@ -82,6 +91,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 50_000,
       expected_version: 2
     })
@@ -95,7 +105,9 @@ class EngineTest < Minitest::Test
       currency: "USD",
       opening_minor_units: 10_000,
       reserve_minor_units: 100_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     engine = RBBB::Engine.new(configuration)
 
@@ -103,6 +115,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 150_000
     })
     state = engine.apply(engine.initial_state, decision.events)
@@ -117,7 +130,9 @@ class EngineTest < Minitest::Test
       currency: "USD",
       opening_minor_units: 10_000,
       reserve_minor_units: 100_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     engine = RBBB::Engine.new(configuration)
 
@@ -125,6 +140,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 150_000
     })
     public_event = decision.events.find(&:public?).to_h
@@ -142,7 +158,9 @@ class EngineTest < Minitest::Test
       increments: [
         {from_minor_units: 0, amount_minor_units: 1_000},
         {from_minor_units: 100_000, amount_minor_units: 2_500}
-      ]
+      ],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     engine = RBBB::Engine.new(configuration)
     state = engine.initial_state
@@ -151,6 +169,7 @@ class EngineTest < Minitest::Test
       command_id: "command-1",
       type: "place_bid",
       bidder_id: "bidder-a",
+      effective_at: BID_AT,
       maximum_minor_units: 150_000
     })
     state = engine.apply(state, first.events)
@@ -158,6 +177,7 @@ class EngineTest < Minitest::Test
       command_id: "command-2",
       type: "place_bid",
       bidder_id: "bidder-b",
+      effective_at: BID_AT,
       maximum_minor_units: 110_000
     })
     state = engine.apply(state, second.events)
@@ -183,5 +203,48 @@ class EngineTest < Minitest::Test
     assert_equal "2026-09-01T13:00:00Z", RBBB::Timestamp.dump(configuration.closes_at)
     assert_equal 300, configuration.extension.fetch("duration_seconds")
     assert_equal "2026-09-01T13:00:00Z", engine.initial_state.to_h.fetch("closes_at")
+  end
+
+  def test_configuration_requires_opening_and_closing_time
+    base = {
+      currency: "USD",
+      opening_minor_units: 10_000,
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+    }
+
+    missing_open = assert_raises(RBBB::InvalidConfiguration) do
+      RBBB::Configuration.new(**base, closes_at: CLOSES_AT)
+    end
+    missing_close = assert_raises(RBBB::InvalidConfiguration) do
+      RBBB::Configuration.new(**base, opens_at: OPENS_AT)
+    end
+    null_from_h = assert_raises(RBBB::InvalidConfiguration) do
+      RBBB::Configuration.from_h(base.merge(opens_at: nil, closes_at: CLOSES_AT))
+    end
+    absent_from_h = assert_raises(RBBB::InvalidConfiguration) do
+      RBBB::Configuration.from_h(base.merge(opens_at: OPENS_AT))
+    end
+
+    assert_equal "configuration is missing opens_at", missing_open.message
+    assert_equal "configuration is missing closes_at", missing_close.message
+    assert_equal "configuration is missing opens_at", null_from_h.message
+    assert_equal "configuration is missing closes_at", absent_from_h.message
+  end
+
+  def test_every_state_view_carries_the_schedule
+    state = @engine.initial_state
+    decision = @engine.decide(state, {
+      command_id: "command-1",
+      type: "place_bid",
+      bidder_id: "bidder-a",
+      effective_at: BID_AT,
+      maximum_minor_units: 50_000
+    })
+    applied = @engine.apply(state, decision.events)
+
+    [state, applied].each do |candidate|
+      assert_equal OPENS_AT, candidate.to_h.fetch("opens_at")
+      assert_equal CLOSES_AT, candidate.to_h.fetch("closes_at")
+    end
   end
 end

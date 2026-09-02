@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/willtmc/rbbb/specification/common/money.schema.json",
   "title": "Money",
-  "description": "A reusable exact monetary amount for boundaries that are not already scoped to one currency. RFC 0001 bidding-unit commands use *_minor_units fields instead.",
+  "description": "A reusable exact monetary amount for boundaries that are not already scoped to one currency. RFC 0001 bidding-unit commands use *_minor_units fields instead; every such field references the shared $defs below so all implementations share one integer range.",
   "x-rbbb-status": "draft",
   "type": "object",
   "additionalProperties": false,
@@ -14,9 +14,28 @@
       "description": "ISO 4217 alphabetic currency code."
     },
     "minor_units": {
+      "$ref": "#/$defs/minorUnits",
+      "description": "Amount in the currency's minor unit."
+    }
+  },
+  "$defs": {
+    "minorUnits": {
       "type": "integer",
       "minimum": 0,
-      "description": "Amount in the currency's minor unit."
+      "maximum": 9007199254740991,
+      "description": "Non-negative amount in minor units. The upper bound is 2^53 - 1 so every conforming amount is exact in JSON, IEEE 754 doubles, and 64-bit integers."
+    },
+    "optionalMinorUnits": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Amount in minor units, or null when absent."
+    },
+    "positiveMinorUnits": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Strictly positive amount in minor units."
     }
   }
 }

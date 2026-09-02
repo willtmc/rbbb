@@ -4,12 +4,17 @@ require_relative "test_helper"
 
 class ProxyPropertiesTest < Minitest::Test
   MAXIMA = [10_000, 11_000, 11_001, 19_999, 20_000, 50_000].freeze
+  OPENS_AT = "2026-09-01T12:00:00Z"
+  CLOSES_AT = "2026-09-01T13:00:00Z"
+  BID_AT = "2026-09-01T12:30:00Z"
 
   def setup
     configuration = RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 10_000,
-      increments: [{from_minor_units: 0, amount_minor_units: 1_000}]
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     @engine = RBBB::Engine.new(configuration)
   end
@@ -44,7 +49,9 @@ class ProxyPropertiesTest < Minitest::Test
       increments: [
         {from_minor_units: 0, amount_minor_units: 1_000},
         {from_minor_units: 100_000, amount_minor_units: 2_500}
-      ]
+      ],
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
     )
     engine = RBBB::Engine.new(configuration)
 
@@ -75,6 +82,7 @@ class ProxyPropertiesTest < Minitest::Test
       command_id: command_id,
       type: "place_bid",
       bidder_id: bidder_id,
+      effective_at: BID_AT,
       maximum_minor_units: maximum_minor_units
     })
     assert decision.accepted?, decision.rejection.inspect

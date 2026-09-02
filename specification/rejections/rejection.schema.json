@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/willtmc/rbbb/specification/rejections/rejection.schema.json",
   "title": "Command rejection",
-  "description": "Stable machine-readable rejection returned without changing aggregate state.",
+  "description": "Stable machine-readable rejection returned without changing aggregate state. Beyond the identifier, status, and reason, a rejection may carry only the finite reason-specific fields declared here; there is no open-ended details object.",
   "x-rbbb-status": "experimental",
   "type": "object",
   "additionalProperties": false,
@@ -16,6 +16,8 @@
         "invalid_command",
         "unsupported_command",
         "stale_aggregate_version",
+        "effective_at_out_of_order",
+        "bidding_not_open",
         "bidding_closed",
         "bid_id_already_exists",
         "invalid_maximum",
@@ -34,6 +36,20 @@
         "closing_time_may_not_shorten_after_first_bid",
         "closing_time_not_reached"
       ]
+    },
+    "executed_floor_minor_units": {
+      "$ref": "../common/money.schema.json#/$defs/minorUnits",
+      "description": "Only with reason maximum_below_executed_amount: the rejected bidder's own executed amount, which is the lowest maximum that bidder may still authorize. It is bidder-own data and must be returned only to that bidder."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["reason"],
+        "properties": {"reason": {"const": "maximum_below_executed_amount"}}
+      },
+      "then": {"required": ["executed_floor_minor_units"]},
+      "else": {"not": {"required": ["executed_floor_minor_units"]}}
+    }
+  ]
 }

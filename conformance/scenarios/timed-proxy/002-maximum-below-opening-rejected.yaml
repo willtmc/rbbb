@@ -8,5 +8,5 @@ commands:
 expected:
   public_events: []
   rejections:
-    - {command_id: command-1, reason: maximum_below_opening}
+    - {command_id: command-1, status: rejected, reason: maximum_below_opening}
   final_state: {leader_id: null, standing_minor_units: null, next_required_minor_units: 10000}

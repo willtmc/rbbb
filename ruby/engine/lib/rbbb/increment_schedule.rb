@@ -16,12 +16,18 @@ module RBBB
 
     def initialize(tiers)
       @tiers = Array(tiers).map do |tier|
+        unless tier.respond_to?(:transform_keys)
+          raise InvalidConfiguration, "increment tier must be an object"
+        end
+
         values = tier.transform_keys(&:to_s)
         Tier.new(
           from_minor_units: values.fetch("from_minor_units"),
           amount_minor_units: values.fetch("amount_minor_units")
         ).freeze
-      end.sort_by(&:from_minor_units)
+      end
+      validate_tier_types!
+      @tiers = @tiers.sort_by(&:from_minor_units)
 
       validate!
       @tiers.freeze
@@ -44,19 +50,23 @@ module RBBB
 
     private
 
+    def validate_tier_types!
+      tiers.each do |tier|
+        unless Money.amount?(tier.from_minor_units)
+          raise InvalidConfiguration,
+            "increment lower bounds must be non-negative integers no greater than #{Money::MAX_MINOR_UNITS}"
+        end
+        unless Money.amount?(tier.amount_minor_units) && tier.amount_minor_units.positive?
+          raise InvalidConfiguration,
+            "increments must be positive integers no greater than #{Money::MAX_MINOR_UNITS}"
+        end
+      end
+    end
+
     def validate!
       raise InvalidConfiguration, "increment schedule must contain at least one tier" if tiers.empty?
       unless tiers.first.from_minor_units == 0
         raise InvalidConfiguration, "increment schedule must begin at zero"
-      end
-
-      tiers.each do |tier|
-        unless tier.from_minor_units.is_a?(Integer) && tier.from_minor_units >= 0
-          raise InvalidConfiguration, "increment lower bounds must be non-negative integers"
-        end
-        unless tier.amount_minor_units.is_a?(Integer) && tier.amount_minor_units.positive?
-          raise InvalidConfiguration, "increments must be positive integers"
-        end
       end
 
       duplicate = tiers.each_cons(2).find do |left, right|

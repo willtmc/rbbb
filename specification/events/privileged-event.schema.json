@@ -79,8 +79,8 @@
       "properties": {
         "bid_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
-        "maximum_minor_units": {"type": "integer", "minimum": 0},
-        "executed_minor_units": {"type": "integer", "minimum": 0},
+        "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "executed_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
         "state": {"$ref": "#/$defs/state"}
       }
     },
@@ -96,9 +96,9 @@
       ],
       "properties": {
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
-        "old_maximum_minor_units": {"type": "integer", "minimum": 0},
-        "new_maximum_minor_units": {"type": "integer", "minimum": 0},
-        "executed_floor_minor_units": {"type": "integer", "minimum": 0},
+        "old_maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "new_maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "executed_floor_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
         "state": {"$ref": "#/$defs/state"}
       }
     },
@@ -131,8 +131,8 @@
       "required": ["bidder_id", "old_minor_units", "new_minor_units"],
       "properties": {
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
-        "old_minor_units": {"type": "integer", "minimum": 0},
-        "new_minor_units": {"type": "integer", "minimum": 0}
+        "old_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "new_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"}
       }
     },
     "notificationRequested": {
@@ -166,8 +166,8 @@
       "properties": {
         "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
-        "old_reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
-        "new_reserve_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "old_reserve_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"},
+        "new_reserve_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"},
         "state": {"$ref": "#/$defs/state"}
       }
     },
@@ -178,8 +178,8 @@
       "properties": {
         "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
-        "old_closes_at": {"type": ["string", "null"], "format": "date-time"},
-        "closes_at": {"type": "string", "format": "date-time"},
+        "old_closes_at": {"oneOf": [{"type": "null"}, {"$ref": "../common/timestamp.schema.json"}]},
+        "closes_at": {"$ref": "../common/timestamp.schema.json"},
         "state": {"$ref": "#/$defs/state"}
       }
     },
@@ -190,7 +190,7 @@
       "properties": {
         "result": {"type": "string", "enum": ["sold", "no_sale", "no_bid"]},
         "winner_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 255},
-        "winning_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "winning_minor_units": {"$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"},
         "state": {"$ref": "#/$defs/state"}
       }
     }

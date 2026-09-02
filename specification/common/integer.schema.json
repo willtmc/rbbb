@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/common/integer.schema.json",
+  "title": "Bounded integer",
+  "description": "Shared integer ranges for counters, versions, priorities, and durations. Every non-monetary integer property in the contract references one of the $defs below so all implementations share one interoperable range; monetary amounts use money.schema.json instead.",
+  "x-rbbb-status": "draft",
+  "type": "integer",
+  "minimum": 0,
+  "maximum": 9007199254740991,
+  "$defs": {
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Zero or greater. The upper bound is 2^53 - 1 so every conforming value is exact in JSON, IEEE 754 doubles, and 64-bit integers."
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "One or greater, bounded at 2^53 - 1."
+    }
+  }
+}

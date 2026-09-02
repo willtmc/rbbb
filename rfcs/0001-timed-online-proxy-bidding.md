@@ -40,10 +40,28 @@ The reserve can affect price but can never be the leader or winner.
 
 Each bidding unit has one currency, an opening amount, an optional confidential
 reserve, an ordered increment schedule, an opening time, a closing time, and
-optional extension settings.
+optional extension settings. Opening and closing times are required; this RFC
+does not define an untimed bidding unit.
 
 Amounts are integer minor units. A bidding unit cannot mix currencies or
 perform currency conversion.
+
+Every amount is a non-negative integer no greater than 9,007,199,254,740,991
+(2^53 − 1), the largest integer that is exact in all of JSON, IEEE 754 double
+precision, and signed 64-bit integers. The bound applies to the opening
+amount, the reserve, increment tier lower bounds and increments, every command
+maximum, and every derived amount. A configuration outside the bound is
+invalid; a bid or reduction maximum above it is rejected as `invalid_maximum`;
+a reserve change above it is rejected as `invalid_reserve`. Derived amounts
+never exceed the bound: when the standing amount plus its increment would
+exceed it, the next required amount is the bound itself. That saturated case
+is the only one in which the next required amount equals the standing amount.
+
+The same bound applies to every other integer in the contract: extension
+trigger window and extension duration in seconds, expected and aggregate
+versions, state versions, bidder priorities, and event indexes. A
+configuration whose extension trigger window or extension duration exceeds
+the bound is invalid.
 
 Increment schedules are configurable. Each tier defines an inclusive lower
 bound and a positive increment. The applicable tier is the tier with the
@@ -121,8 +139,12 @@ its full maximum while the public status remains `reserve_not_met`. A maximum
 above reserve raises the standing amount to at least reserve and makes the
 public status `reserve_met`.
 
-The public contract exposes only reserve status, never the reserve amount. A
-bidding unit that closes below reserve produces `no_sale`, not a winner.
+The public contract exposes only reserve status, never the reserve amount.
+Confidential means unpublished, not undiscoverable: because reserve pressure
+stops the standing amount exactly at the reserve, a bidder whose maximum
+exceeds it, and any observer once status becomes `reserve_met`, can infer the
+amount from the public price. A bidding unit that closes below reserve
+produces `no_sale`, not a winner.
 
 ## Reducing an unexecuted proxy
 
@@ -134,6 +156,15 @@ A reduction is evaluated in authoritative command order. If intervening
 competition executes more of the proxy first, the executed floor rises and a
 now-invalid reduction is rejected.
 
+That rejection reports the bidder's own executed floor as
+`executed_floor_minor_units` so the bidder can resubmit a valid reduction. The
+field is bidder-own data: the executed amount belongs to the bidder whose proxy
+was used, and a host returns it only to that bidder over the command channel.
+When a sole bidder's proxy has executed up to reserve pressure the floor equals
+the confidential reserve, but that amount is already the bidder's public
+standing amount. The field never reveals another bidder's maximum, an
+unexecuted reserve, or any identity.
+
 An accepted reduction is privately audited. When it changes no public result,
 it emits no public price event and does not trigger a closing extension.
 
@@ -141,15 +172,35 @@ it emits no public price event and does not trigger a closing extension.
 
 The service assigns authoritative time and order at the bidding unit's command
 ordering boundary. Client clocks and client-supplied timestamps do not decide
-eligibility or priority.
+eligibility or priority. Authoritative timestamps carry an explicit UTC offset;
+a zone-less timestamp is invalid rather than interpreted in host-local time.
 
-A bid ordered strictly before the current closing time is eligible. A bid
-ordered exactly at or after closing time is rejected as closed. A bid ordered
-before closing remains eligible if its transaction commits afterward.
+Authoritative timestamps carry at most millisecond precision. A timestamp with
+more than three fractional digits is invalid rather than truncated, so an
+implementation whose native time type is millisecond-based can replay every
+command stream and compute every extended closing time exactly. The canonical
+serialized form is UTC with a `Z` designator; the fractional part is omitted
+when zero and otherwise trimmed of trailing zeros, for example
+`2026-09-01T13:00:00Z`, `2026-09-01T13:00:00.25Z`, and
+`2026-09-01T13:00:00.001Z`.
+
+Authoritative time is monotone across the accepted command sequence. A command
+whose authoritative time is earlier than the last accepted command's time is
+rejected as `effective_at_out_of_order`; an equal time is permitted.
+
+A bid or reduction ordered before the opening time is rejected as
+`bidding_not_open`. A bid ordered at or after opening and strictly before the
+current closing time is eligible. A bid ordered exactly at or after closing
+time is rejected as closed. A bid ordered before closing remains eligible if
+its transaction commits afterward. Operator reserve and schedule changes remain
+permitted before opening time.
 
 Extension trigger window and extension duration are configurable. A qualifying
 bid resets closing time to the authoritative bid time plus the configured
-extension duration; it does not add the duration to the prior closing time.
+extension duration; it does not add the duration to the prior closing time. An
+extension can only move closing later: when bid time plus duration would fall
+before the current closing time, closing time is unchanged and no
+`closing_time_changed` event is emitted.
 
 A qualifying bid is an accepted command that changes the public standing amount
 or leader. Increasing one's own private maximum without changing the public
@@ -237,6 +288,24 @@ Closing is represented by an explicit, ordered engine command rather than an
 implicit wall-clock mutation. A qualifying bid already ordered before the
 close command is evaluated first and may extend closing; later bids are
 rejected.
+
+## Amendments
+
+- 2026-09-01: clarified that extensions never shorten closing, that bids
+  before opening time are rejected, that authoritative time is monotone across
+  accepted commands, and that timestamps require an explicit offset. Backed by
+  conformance scenarios 027–029.
+- 2026-09-01: clarified that opening and closing times are required
+  configuration; an untimed bidding unit is outside this RFC.
+- 2026-09-01: bounded every amount at 2^53 − 1 with saturation of the next
+  required amount, and fixed authoritative timestamp precision at one
+  millisecond with a canonical serialized form, so independent implementations
+  in double-precision or 64-bit-integer languages reach identical outcomes.
+  Backed by conformance scenario 030.
+- 2026-09-01: extended the 2^53 − 1 bound from amounts to extension seconds,
+  versions, priorities, and event indexes, and declared a configuration with
+  extension seconds above the bound invalid. Backed by the shared integer
+  schema and the specification document validator.
 
 ## Alternatives considered
 

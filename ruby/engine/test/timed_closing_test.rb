@@ -43,7 +43,7 @@ class TimedClosingTest < Minitest::Test
   end
 
   def test_timestamp_round_trips_fractional_authoritative_time
-    timestamp = RBBB::Timestamp.parse("2026-09-01T12:59:59.999000Z")
+    timestamp = RBBB::Timestamp.parse("2026-09-01T12:59:59.999Z")
 
     assert_equal "2026-09-01T12:59:59.999Z", RBBB::Timestamp.dump(timestamp)
   end
