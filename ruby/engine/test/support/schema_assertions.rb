@@ -4,10 +4,11 @@ require "json"
 require "pathname"
 
 # A small JSON Schema 2020-12 checker covering the subset used by the RBBB
-# state schemas: types, enum/const, minimum/minLength/pattern, date-time,
-# properties/required/additionalProperties, items, $ref into $defs, oneOf,
-# and allOf with if/then. It keeps the engine free of runtime dependencies
-# while letting tests assert that produced documents satisfy the contract.
+# state and event schemas: types, enum/const, minimum/minLength/pattern,
+# date-time, properties/required/additionalProperties, items, $ref into
+# $defs or into sibling schema files, oneOf, and allOf with if/then. It
+# keeps the engine free of runtime dependencies while letting tests assert
+# that produced documents satisfy the contract.
 module SchemaAssertions
   ROOT = Pathname(__dir__).join("../../../..").expand_path
   TYPES = {
@@ -16,11 +17,11 @@ module SchemaAssertions
   }.freeze
 
   def load_schema(relative_path)
-    JSON.parse(ROOT.join(relative_path).read)
+    load_schema_file(ROOT.join(relative_path))
   end
 
   def assert_matches_schema(schema, document, root: schema, path: "document")
-    schema = resolve_schema_ref(schema, root)
+    schema, root = resolve_schema_ref(schema, root)
 
     types = Array(schema["type"])
     if types.any?
@@ -94,12 +95,59 @@ module SchemaAssertions
     false
   end
 
+  # Loaded schema documents keyed by absolute path, and the path each parsed
+  # root came from, so `$ref`s to sibling files resolve relative to the file
+  # that contains them (mirroring scripts/validate_documents.rb).
+  def schema_documents
+    @schema_documents ||= {}
+  end
+
+  def schema_sources
+    @schema_sources ||= {}.compare_by_identity
+  end
+
+  def load_schema_file(path)
+    schema_documents[path] ||= JSON.parse(path.read).tap { |schema| schema_sources[schema] = path }
+  end
+
+  # Returns the referenced schema node and the root document it lives in.
+  # A ref with a file part switches the root so nested `#/$defs` refs inside
+  # the target file resolve against that file.
   def resolve_schema_ref(schema, root)
-    return schema unless schema.is_a?(Hash) && schema["$ref"]
+    return [schema, root] unless schema.is_a?(Hash) && schema["$ref"]
 
     ref = schema.fetch("$ref")
-    raise ArgumentError, "only local $defs references are supported: #{ref}" unless ref.start_with?("#/")
+    file_part, fragment = ref.split("#", 2)
+    if file_part.empty?
+      target_root = root
+    else
+      source = schema_sources[root]
+      raise ArgumentError, "cannot resolve #{ref}: root schema was not loaded from a file" unless source
 
-    ref.delete_prefix("#/").split("/").reduce(root) { |node, token| node.fetch(token) }
+      target_path = source.dirname.join(file_part).cleanpath
+      unless target_path.to_s.start_with?("#{ROOT}/") && target_path.file?
+        raise ArgumentError, "unresolved $ref #{ref} from #{source.relative_path_from(ROOT)}"
+      end
+
+      target_root = load_schema_file(target_path)
+    end
+
+    [resolve_json_pointer(target_root, fragment), target_root]
+  end
+
+  def resolve_json_pointer(document, fragment)
+    return document if fragment.nil? || fragment.empty?
+    raise ArgumentError, "$ref fragment must be a JSON Pointer: ##{fragment}" unless fragment.start_with?("/")
+
+    fragment.delete_prefix("/").split("/").reduce(document) do |value, token|
+      decoded = token.gsub("~1", "/").gsub("~0", "~")
+      case value
+      when Hash then value.fetch(decoded)
+      when Array then value.fetch(Integer(decoded, 10))
+      else raise ArgumentError, "$ref ##{fragment} traverses a scalar"
+      end
+    end
+  rescue KeyError, IndexError
+    raise ArgumentError, "$ref ##{fragment} does not exist in the target schema"
   end
 end
