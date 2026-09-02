@@ -7,6 +7,16 @@ versioned artifacts.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.1.0.pre.2 — 2026-09-02
+
+Second experimental evaluation build. Adversarial review of the RFC 0001
+engine fixed four timing and input-boundary defects, and follow-up work
+closed the contract gaps that review surfaced. Specification target remains
+`0.1.0-draft`; the aggregate and rejection contracts changed shape, so treat
+this as incompatible with `0.1.0.pre.1`.
+
 - Bootstrap project governance, specification, conformance, and Ruby reference
   implementation structure.
 - Implement the first pure-Ruby RFC 0001 slice: exact money, configurable
