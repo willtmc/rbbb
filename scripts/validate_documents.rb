@@ -168,6 +168,7 @@ scenario_command_types = []
 scenario_public_event_types = []
 scenario_privileged_event_types = []
 scenario_rejection_reasons = []
+scenario_rejections = []
 
 scenario_paths.each do |path|
   scenario = YAML.safe_load_file(path, aliases: false)
@@ -207,6 +208,9 @@ scenario_paths.each do |path|
   scenario_public_event_types.concat(Array(expected["public_events"]).filter_map { |event| event["type"] })
   scenario_privileged_event_types.concat(Array(expected["privileged_events"]).filter_map { |event| event["type"] })
   scenario_rejection_reasons.concat(Array(expected["rejections"]).filter_map { |rejection| rejection["reason"] })
+  Array(expected["rejections"]).each_with_index do |rejection, index|
+    scenario_rejections << [relative(path), index, rejection] if rejection.is_a?(Hash)
+  end
 end
 
 command_base = schema_documents.fetch(ROOT.join("specification/commands/base.schema.json"))
@@ -244,6 +248,50 @@ missing_rejections = scenario_rejection_reasons.uniq - schema_rejections
 errors << "rejection schema omits conformance reasons: #{missing_rejections.join(', ')}" if missing_rejections.any?
 if rejection_schema.fetch("properties").key?("details")
   errors << "specification/rejections/rejection.schema.json: open-ended details risk privileged disclosure"
+end
+
+# Rejections may carry only finite, reason-specific fields. Each extra
+# property must be required by exactly one reason's conditional clause and
+# forbidden for every other reason, and scenarios may assert only declared
+# keys for the reason they name.
+rejection_base_fields = %w[command_id status reason]
+rejection_fields_by_reason = Hash.new { |hash, reason| hash[reason] = [] }
+Array(rejection_schema["allOf"]).each do |clause|
+  reason = clause.dig("if", "properties", "reason", "const")
+  fields = Array(clause.dig("then", "required"))
+  next if reason.nil? || fields.empty?
+
+  unless schema_rejections.include?(reason)
+    errors << "specification/rejections/rejection.schema.json: reason-specific clause names unknown reason #{reason}"
+  end
+  unless Array(clause.dig("else", "not", "required")).sort == fields.sort
+    errors << "specification/rejections/rejection.schema.json: #{fields.join(', ')} must be forbidden for reasons other than #{reason}"
+  end
+  rejection_fields_by_reason[reason].concat(fields)
+end
+scoped_rejection_fields = rejection_fields_by_reason.values.flatten
+duplicated_rejection_fields = scoped_rejection_fields.tally.select { |_, count| count > 1 }.keys
+if duplicated_rejection_fields.any?
+  errors << "specification/rejections/rejection.schema.json: rejection fields must belong to exactly one reason: #{duplicated_rejection_fields.join(', ')}"
+end
+unscoped_rejection_fields = rejection_schema.fetch("properties").keys - rejection_base_fields - scoped_rejection_fields
+if unscoped_rejection_fields.any?
+  errors << "specification/rejections/rejection.schema.json: rejection fields must be reason-specific: #{unscoped_rejection_fields.join(', ')}"
+end
+undeclared_rejection_fields = scoped_rejection_fields - rejection_schema.fetch("properties").keys
+if undeclared_rejection_fields.any?
+  errors << "specification/rejections/rejection.schema.json: reason-specific fields lack properties: #{undeclared_rejection_fields.join(', ')}"
+end
+unless rejection_schema["additionalProperties"] == false
+  errors << "specification/rejections/rejection.schema.json: additionalProperties must be false"
+end
+
+scenario_rejections.each do |label, index, rejection|
+  allowed_keys = rejection_base_fields + rejection_fields_by_reason.fetch(rejection["reason"], [])
+  undeclared_keys = rejection.keys - allowed_keys
+  next if undeclared_keys.empty?
+
+  errors << "#{label}: rejections[#{index}] contains keys the rejection schema does not declare for #{rejection['reason']}: #{undeclared_keys.join(', ')}"
 end
 
 forbidden_contract_keys = /maximum|reserve_minor_units|operator_id|reason|bidder_id|leader_id|winner_id/

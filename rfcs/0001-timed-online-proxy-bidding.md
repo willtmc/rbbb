@@ -138,6 +138,15 @@ A reduction is evaluated in authoritative command order. If intervening
 competition executes more of the proxy first, the executed floor rises and a
 now-invalid reduction is rejected.
 
+That rejection reports the bidder's own executed floor as
+`executed_floor_minor_units` so the bidder can resubmit a valid reduction. The
+field is bidder-own data: the executed amount belongs to the bidder whose proxy
+was used, and a host returns it only to that bidder over the command channel.
+When a sole bidder's proxy has executed up to reserve pressure the floor equals
+the confidential reserve, but that amount is already the bidder's public
+standing amount. The field never reveals another bidder's maximum, an
+unexecuted reserve, or any identity.
+
 An accepted reduction is privately audited. When it changes no public result,
 it emits no public price event and does not trigger a closing extension.
 

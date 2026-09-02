@@ -57,11 +57,26 @@ authority. The privileged event union is for an authenticated audit and
 persistence boundary; this draft intentionally does not expose that boundary
 as an HTTP endpoint.
 
-Ordinary rejection responses contain only the command identifier and a stable
-reason code. This experimental contract intentionally omits an open-ended
-details object: a future RFC may add finite, reason-specific public fields, but
-an arbitrary object would make accidental disclosure of a maximum, reserve, or
-identity too easy.
+Ordinary rejection responses contain the command identifier, a stable reason
+code, and at most the finite, reason-specific fields that
+`rejections/rejection.schema.json` declares. This experimental contract
+intentionally omits an open-ended details object: an arbitrary object would
+make accidental disclosure of a maximum, reserve, or identity too easy. Every
+additional field must be declared on the schema, gated to exactly one reason,
+and limited to data the rejected command's own author is already entitled to
+know. `scripts/validate_documents.rb` enforces that structure and that
+conformance scenarios assert no undeclared rejection keys.
+
+The only such field today is `executed_floor_minor_units`, which accompanies
+`maximum_below_executed_amount`. It reports the rejected bidder's own executed
+amount, the lowest maximum that bidder may still authorize, so the bidder can
+submit a valid reduction without a privileged query. It is bidder-own data:
+while that bidder leads it equals the public standing amount, and otherwise it
+equals the bidder's own fully executed maximum. When a sole bidder's proxy has
+executed up to reserve pressure the value coincides with the confidential
+reserve, but the bidder already observes that amount as the public standing
+amount. A host must return the field only to the bidder who issued the
+rejected command and must never place it in a public projection.
 
 All events emitted by one accepted command share its resulting
 `aggregate_version`. `event_index` gives their deterministic zero-based order;
