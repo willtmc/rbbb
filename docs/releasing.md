@@ -26,8 +26,9 @@ into the gem's trusted publisher and adds the maintainer as an owner.
 3. Review the diff for private data and public maximum-bid disclosure.
 4. Update the changelog and version files in a pull request.
 5. Require protected-branch CI to pass and merge normally.
-6. Create and push a signed, immutable `v<gem-version>` tag from the reviewed
-   merge commit. The tag must exactly match `RBBB::VERSION`.
+6. Create and push an annotated, immutable `v<gem-version>` tag from the
+   reviewed, GitHub-verified `main` merge commit. The tag must exactly match
+   `RBBB::VERSION`.
 7. Approve the `release` environment deployment. The pinned release workflow
    reruns verification, publishes through RubyGems trusted publishing, waits for
    registry propagation, and creates the matching GitHub prerelease with the
