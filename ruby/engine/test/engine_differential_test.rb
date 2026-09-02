@@ -24,34 +24,42 @@ class EngineDifferentialTest < Minitest::Test
   ].freeze
 
   def test_random_command_streams_preserve_invariants_and_replay_agreement
+    untimed_omissions = 0
     SEEDS.each do |seed|
       rng = Random.new(seed)
       RUNS_PER_SEED.times do |run|
-        exercise(rng, "seed #{seed} run #{run}")
+        untimed_omissions += exercise(rng, "seed #{seed} run #{run}")
       end
     end
+
+    assert_operator untimed_omissions, :>, 0,
+      "no accepted command on an untimed configuration omitted effective_at"
   end
 
   private
 
   def exercise(rng, label)
     configuration = random_configuration(rng)
+    untimed = configuration.closes_at.nil?
+    label = "#{label} (untimed)" if untimed
     engine = RBBB::Engine.new(configuration)
     state = engine.initial_state
     time = BASE + 60
     bid_ids = []
     reserve_changed = false
     accepted = 0
+    untimed_omissions = 0
 
     COMMANDS_PER_RUN.times do |index|
       time += rng.rand(1..400)
-      command = random_command(rng, state, bid_ids, "command-#{index}", time)
+      command = random_command(rng, state, bid_ids, "command-#{index}", time, untimed: untimed)
       decision = engine.decide(state, command)
       assert_equal decision.events.map(&:to_h), engine.decide(state, command).events.map(&:to_h),
         "#{label}: decide is not deterministic for #{command.inspect}"
       next unless decision.accepted?
 
       accepted += 1
+      untimed_omissions += 1 unless command.key?(:effective_at)
       bid_ids << command[:bid_id] if command[:type] == "place_bid"
       reserve_changed = true if command[:type] == "change_reserve"
       before = state
@@ -59,7 +67,7 @@ class EngineDifferentialTest < Minitest::Test
 
       assert_no_private_data_in_public_events(decision, label)
       assert_checkpoint_agreement(engine, decision, state, label)
-      if command[:type] == "place_bid"
+      if command[:type] == "place_bid" && before.closes_at
         assert_operator state.closes_at, :>=, before.closes_at,
           "#{label}: a bid moved closing time earlier: #{command.inspect}"
       end
@@ -72,9 +80,14 @@ class EngineDifferentialTest < Minitest::Test
     end
 
     assert_operator accepted, :>, 0, "#{label}: no command was accepted"
+    untimed_omissions
   end
 
+  # Most runs use a timed unit. The rest are untimed (no schedule, so no
+  # extension either): those accept commands without effective_at, which is
+  # the shape where a transition event carries no time for restore to see.
   def random_configuration(rng)
+    timed = rng.rand < 0.75
     RBBB::Configuration.new(
       currency: "USD",
       opening_minor_units: 10_000,
@@ -83,17 +96,25 @@ class EngineDifferentialTest < Minitest::Test
         {from_minor_units: 0, amount_minor_units: 1_000},
         {from_minor_units: 100_000, amount_minor_units: 2_500}
       ],
-      opens_at: BASE,
-      closes_at: BASE + 3600,
-      extension: [
+      opens_at: timed ? BASE : nil,
+      closes_at: timed ? BASE + 3600 : nil,
+      extension: timed ? [
         nil,
         {trigger_window_seconds: 300, duration_seconds: 300},
         {trigger_window_seconds: 300, duration_seconds: 60}
-      ].sample(random: rng)
+      ].sample(random: rng) : nil
     )
   end
 
-  def random_command(rng, state, bid_ids, command_id, time)
+  def random_command(rng, state, bid_ids, command_id, time, untimed:)
+    command = random_timed_command(rng, state, bid_ids, command_id, time)
+    # Only an untimed configuration accepts a command without effective_at;
+    # a timed one rejects it as invalid_command before any pricing runs.
+    command.delete(:effective_at) if untimed && rng.rand < 0.3
+    command
+  end
+
+  def random_timed_command(rng, state, bid_ids, command_id, time)
     effective_at = RBBB::Timestamp.dump(time)
     roll = rng.rand
     if roll < 0.55
@@ -131,7 +152,7 @@ class EngineDifferentialTest < Minitest::Test
        effective_at: effective_at}
     elsif roll < 0.95
       {command_id: command_id, type: "change_closing_time", operator_id: "operator-1",
-       reason: "review", closes_at: RBBB::Timestamp.dump(state.closes_at + rng.rand(-600..1200)),
+       reason: "review", closes_at: RBBB::Timestamp.dump((state.closes_at || time) + rng.rand(-600..1200)),
        effective_at: effective_at}
     else
       {command_id: command_id, type: "close_bidding", effective_at: effective_at}
