@@ -31,8 +31,8 @@
       "description": "Zero-based order among events emitted by the same accepted command and aggregate version."
     },
     "command_id": {"type": "string", "minLength": 1, "maxLength": 255},
-    "effective_at": {"type": "string", "format": "date-time"},
-    "recorded_at": {"type": "string", "format": "date-time"},
+    "effective_at": {"$ref": "../common/timestamp.schema.json"},
+    "recorded_at": {"$ref": "../common/timestamp.schema.json"},
     "data": {"type": "object"}
   }
 }

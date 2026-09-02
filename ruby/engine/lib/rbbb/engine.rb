@@ -117,9 +117,7 @@ module RBBB
       effective_at = authoritative_time(command)
       timing_rejection = reject_for_timing(state, command_id, effective_at, bidder: true)
       return timing_rejection if timing_rejection
-      unless maximum.is_a?(Integer) && maximum >= 0
-        return reject(command_id, "invalid_maximum")
-      end
+      return reject(command_id, "invalid_maximum") unless Money.amount?(maximum)
 
       existing = state.position_for(bidder_id)
       if state.positions.empty? && maximum < configuration.opening_minor_units
@@ -143,9 +141,7 @@ module RBBB
       effective_at = authoritative_time(command)
       timing_rejection = reject_for_timing(state, command_id, effective_at, bidder: true)
       return timing_rejection if timing_rejection
-      unless maximum.is_a?(Integer) && maximum >= 0
-        return reject(command_id, "invalid_maximum")
-      end
+      return reject(command_id, "invalid_maximum") unless Money.amount?(maximum)
 
       existing = state.position_for(bidder_id)
       return reject(command_id, "maximum_not_found") unless existing
@@ -194,7 +190,7 @@ module RBBB
       end
 
       new_reserve = command["reserve_minor_units"]
-      unless new_reserve.nil? || (new_reserve.is_a?(Integer) && new_reserve >= 0)
+      unless new_reserve.nil? || Money.amount?(new_reserve)
         return reject(command_id, "invalid_reserve")
       end
 
@@ -268,7 +264,7 @@ module RBBB
       standing = standing_amount(ranked, state.reserve_minor_units)
       standing = [standing, state.standing_minor_units || 0].max
       reserve_status = reserve_status_for(ranked.fetch(0).last, state.reserve_minor_units)
-      next_required = standing + configuration.increment_for(standing)
+      next_required = next_required_for(standing)
       public_result_changed = standing != state.standing_minor_units ||
         leader_id != state.leader_id
       closes_at = extended_closing_time(state, effective_at, public_result_changed)
@@ -647,7 +643,7 @@ module RBBB
       {
         "leader_id" => leader_id,
         "standing_minor_units" => standing,
-        "next_required_minor_units" => standing + configuration.increment_for(standing),
+        "next_required_minor_units" => next_required_for(standing),
         "reserve_status" => reserve_status_for(ranked.fetch(0).last, reserve_minor_units)
       }
     end
@@ -747,6 +743,12 @@ module RBBB
       # An extension may only push closing later. A duration shorter than the
       # remaining time must never pull the close forward.
       [state.closes_at, effective_at + configuration.extension.fetch("duration_seconds")].max
+    end
+
+    # The next required amount saturates at the interoperable bound so that
+    # no derived amount ever exceeds what a maximum may carry.
+    def next_required_for(standing)
+      [standing + configuration.increment_for(standing), Money::MAX_MINOR_UNITS].min
     end
 
     def standing_amount(ranked, reserve_minor_units)

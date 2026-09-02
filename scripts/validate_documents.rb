@@ -322,6 +322,42 @@ unless asyncapi.dig("components", "messages", "PublicEvent", "payload", "$ref") 
   errors << "specification/asyncapi.yaml: subscription must use the public event schema"
 end
 
+# Cross-language determinism: every amount and timestamp must go through the
+# shared bounded definitions so no implementation can accept a value that
+# another cannot represent exactly.
+money_schema = schema_documents.fetch(ROOT.join("specification/common/money.schema.json"))
+money_bound = money_schema.dig("$defs", "minorUnits", "maximum")
+errors << "specification/common/money.schema.json: minorUnits must declare maximum" unless money_bound
+money_schema.fetch("$defs").each do |name, definition|
+  next if definition["maximum"] == money_bound
+
+  errors << "specification/common/money.schema.json: $defs/#{name} must use the shared maximum"
+end
+schema_documents.each do |path, document|
+  next unless path.to_s.start_with?(ROOT.join("specification").to_s + "/")
+  next if path.dirname == ROOT.join("specification/common")
+
+  walk(document) do |node|
+    next unless node.is_a?(Hash) && node["properties"].is_a?(Hash)
+
+    node["properties"].each do |name, property|
+      next unless property.is_a?(Hash)
+
+      if name.end_with?("minor_units") && !property.key?("const") &&
+          !property["$ref"].to_s.start_with?("../common/money.schema.json#/$defs/")
+        errors << "#{relative(path)}: #{name} must reference a bounded money.schema.json definition"
+      end
+      timestamp_ref = "../common/timestamp.schema.json"
+      uses_timestamp = property["$ref"] == timestamp_ref ||
+        Array(property["oneOf"]).any? { |entry| entry["$ref"] == timestamp_ref }
+      if property["format"] == "date-time" ||
+          (name.end_with?("_at") && !uses_timestamp)
+        errors << "#{relative(path)}: #{name} must reference timestamp.schema.json"
+      end
+    end
+  end
+end
+
 event_base = schema_documents.fetch(ROOT.join("specification/events/base.schema.json"))
 unless event_base.fetch("required").include?("event_index")
   errors << "specification/events/base.schema.json: event_index is required for deterministic order"

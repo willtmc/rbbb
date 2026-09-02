@@ -52,11 +52,13 @@ module RBBB
 
     def validate_tier_types!
       tiers.each do |tier|
-        unless tier.from_minor_units.is_a?(Integer) && tier.from_minor_units >= 0
-          raise InvalidConfiguration, "increment lower bounds must be non-negative integers"
+        unless Money.amount?(tier.from_minor_units)
+          raise InvalidConfiguration,
+            "increment lower bounds must be non-negative integers no greater than #{Money::MAX_MINOR_UNITS}"
         end
-        unless tier.amount_minor_units.is_a?(Integer) && tier.amount_minor_units.positive?
-          raise InvalidConfiguration, "increments must be positive integers"
+        unless Money.amount?(tier.amount_minor_units) && tier.amount_minor_units.positive?
+          raise InvalidConfiguration,
+            "increments must be positive integers no greater than #{Money::MAX_MINOR_UNITS}"
         end
       end
     end

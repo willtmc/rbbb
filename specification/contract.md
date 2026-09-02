@@ -13,6 +13,22 @@ A bidding unit has exactly one configured ISO 4217 currency. Every amount in
 its commands, events, and state is therefore an integer field ending in
 `_minor_units`. Floating-point values and currency conversion are forbidden.
 
+Every `*_minor_units` field references one of the shared definitions in
+`common/money.schema.json`, which cap amounts at 9,007,199,254,740,991
+(2^53 − 1). The bound is what makes "same commands, same result" hold across
+languages: it is the largest integer that JSON, IEEE 754 doubles, and signed
+64-bit integers all represent exactly. `scripts/validate_documents.rb` fails
+if an amount property bypasses the shared definition.
+
+## Authoritative timestamps
+
+Every `*_at` field references `common/timestamp.schema.json`: RFC 3339 with an
+explicit UTC offset and at most three fractional digits. Millisecond precision
+is normative so that closing-time arithmetic (bid time plus extension
+duration) round-trips in millisecond-native runtimes. Implementations
+serialize UTC with `Z`, omit a zero fraction, and trim trailing zeros. The
+validator fails if a timestamp property bypasses the shared definition.
+
 The currency appears once in configuration and query state. Repeating a money
 object on every command would add a second source of truth and create a
 currency-mismatch failure mode without adding information.
@@ -113,6 +129,8 @@ conformance scenarios, and engine checks remain normative for relational and
 ordered invariants, including:
 
 - opening time precedes current closing time;
+- the next required amount exceeds the standing amount unless both sit on
+  the shared amount bound;
 - authoritative times never regress across accepted commands, and every
   timestamp carries an explicit UTC offset;
 - an extension never moves closing time earlier;

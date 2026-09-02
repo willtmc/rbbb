@@ -27,12 +27,11 @@ module RBBB
     def initialize(currency:, opening_minor_units:, increments:, reserve_minor_units: nil,
       opens_at: nil, closes_at: nil, extension: nil)
       Money.new(currency: currency, minor_units: opening_minor_units)
-      unless opening_minor_units >= 0
-        raise InvalidConfiguration, "opening amount must be non-negative"
+      unless Money.amount?(opening_minor_units)
+        raise InvalidConfiguration, "opening amount must be a non-negative integer no greater than #{Money::MAX_MINOR_UNITS}"
       end
-      if !reserve_minor_units.nil? &&
-          (!reserve_minor_units.is_a?(Integer) || reserve_minor_units.negative?)
-        raise InvalidConfiguration, "reserve must be a non-negative integer"
+      if !reserve_minor_units.nil? && !Money.amount?(reserve_minor_units)
+        raise InvalidConfiguration, "reserve must be a non-negative integer no greater than #{Money::MAX_MINOR_UNITS}"
       end
 
       @currency = currency.freeze

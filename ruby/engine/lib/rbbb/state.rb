@@ -331,7 +331,11 @@ module RBBB
           standing_minor_units.between?(0, leader.maximum_minor_units)
         raise InvalidState, "standing amount must be within the leader maximum"
       end
-      unless next_required_minor_units > standing_minor_units
+      # The next required amount saturates at the interoperable bound, so the
+      # two are permitted to be equal only when both sit on that bound.
+      saturated = standing_minor_units == Money::MAX_MINOR_UNITS &&
+        next_required_minor_units == Money::MAX_MINOR_UNITS
+      unless saturated || next_required_minor_units > standing_minor_units
         raise InvalidState, "next required amount must exceed standing amount"
       end
 

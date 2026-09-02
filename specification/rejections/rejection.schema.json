@@ -38,8 +38,7 @@
       ]
     },
     "executed_floor_minor_units": {
-      "type": "integer",
-      "minimum": 0,
+      "$ref": "../common/money.schema.json#/$defs/minorUnits",
       "description": "Only with reason maximum_below_executed_amount: the rejected bidder's own executed amount, which is the lowest maximum that bidder may still authorize. It is bidder-own data and must be returned only to that bidder."
     }
   },

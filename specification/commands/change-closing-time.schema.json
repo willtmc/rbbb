@@ -13,7 +13,7 @@
         "type": {"const": "change_closing_time"},
         "operator_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
-        "closes_at": {"type": "string", "format": "date-time"}
+        "closes_at": {"$ref": "../common/timestamp.schema.json"}
       }
     }
   ],

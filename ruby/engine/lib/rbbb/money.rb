@@ -5,13 +5,26 @@ module RBBB
   class Money
     include Comparable
 
+    # Largest amount any RFC 0001 field may carry: 2**53 - 1. Every conforming
+    # implementation must produce identical results, and this is the largest
+    # integer that is exact in all of JSON, IEEE 754 doubles, and 64-bit integers.
+    MAX_MINOR_UNITS = (2**53) - 1
+
     attr_reader :currency, :minor_units
+
+    # True when value is a non-negative integer inside the interoperable range.
+    def self.amount?(value)
+      value.is_a?(Integer) && value >= 0 && value <= MAX_MINOR_UNITS
+    end
 
     def initialize(currency:, minor_units:)
       unless currency.is_a?(String) && currency.match?(/\A[A-Z]{3}\z/)
         raise InvalidMoney, "currency must be a three-letter uppercase code"
       end
       raise InvalidMoney, "minor_units must be an integer" unless minor_units.is_a?(Integer)
+      if minor_units.abs > MAX_MINOR_UNITS
+        raise InvalidMoney, "minor_units must not exceed #{MAX_MINOR_UNITS}"
+      end
 
       @currency = currency.freeze
       @minor_units = minor_units
