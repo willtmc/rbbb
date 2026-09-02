@@ -41,3 +41,7 @@ versioned artifacts.
   comparison error.
 - Add a seeded differential test that checks structural invariants and
   incremental-versus-replay pricing agreement across random command streams.
+- Declare `executed_floor_minor_units` as the finite, reason-specific rejection
+  field for `maximum_below_executed_amount`, replace the engine's open-ended
+  rejection details with that explicit field, and make document validation
+  reject undeclared or unscoped rejection keys.

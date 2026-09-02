@@ -67,6 +67,36 @@ class ProxyReductionTest < Minitest::Test
 
     assert_equal "maximum_not_found", missing.rejection.fetch("reason")
     assert_equal "maximum_not_reduced", unchanged.rejection.fetch("reason")
+    assert_equal %w[command_id reason], missing.rejection.keys
+    assert_equal %w[command_id reason], unchanged.rejection.keys
+  end
+
+  def test_reduction_below_executed_floor_reports_only_the_bidder_own_floor
+    state = competed_state(@engine)
+    decision = reduce(@engine, state, maximum: 20_000)
+
+    assert decision.rejected?
+    assert_equal "maximum_below_executed_amount", decision.rejection.fetch("reason")
+    assert_equal 31_000, decision.rejection.fetch("executed_floor_minor_units")
+    assert_equal state.position_for("bidder-a").executed_minor_units,
+      decision.rejection.fetch("executed_floor_minor_units")
+    assert_equal %w[command_id reason executed_floor_minor_units], decision.rejection.keys
+  end
+
+  def test_sole_bidder_floor_under_reserve_pressure_equals_public_standing_amount
+    configuration = RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      reserve_minor_units: 40_000
+    )
+    engine = RBBB::Engine.new(configuration)
+    state = place(engine, engine.initial_state, "command-1", "bidder-a", 50_000)
+    decision = reduce(engine, state, maximum: 20_000)
+
+    assert_equal 40_000, state.standing_minor_units
+    assert_equal state.standing_minor_units, decision.rejection.fetch("executed_floor_minor_units")
+    refute decision.rejection.key?("reserve_minor_units")
   end
 
   private

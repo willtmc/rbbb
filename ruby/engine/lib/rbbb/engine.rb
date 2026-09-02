@@ -170,7 +170,7 @@ module RBBB
         return reject(
           command_id,
           "maximum_below_executed_amount",
-          "executed_floor_minor_units" => existing.executed_minor_units
+          executed_floor_minor_units: existing.executed_minor_units
         )
       end
 
@@ -795,8 +795,8 @@ module RBBB
       end
     end
 
-    def reject(command_id, reason, details = {})
-      Decision.rejected(command_id: command_id, reason: reason, details: details)
+    def reject(command_id, reason, **fields)
+      Decision.rejected(command_id: command_id, reason: reason, **fields)
     end
 
     def present_string?(value)
