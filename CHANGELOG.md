@@ -67,3 +67,6 @@ versioned artifacts.
   0001 configuration and state schemas; a missing or null timestamp raises
   `InvalidConfiguration` instead of producing an untimed unit whose state
   views can never validate. RFC 0001 does not define untimed bidding units.
+- `State` now requires `opens_at` and `closes_at` as well and always emits
+  them from `to_h`; the engine drops the nil-timestamp guards that were
+  unreachable once configuration and state are both timed.

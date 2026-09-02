@@ -296,7 +296,9 @@ module RBBB
       if reserve_minor_units.nil? != reserve_status.nil?
         raise InvalidState, "reserve and reserve status must be present together"
       end
-      if opens_at && closes_at && opens_at >= closes_at
+      raise InvalidState, "state is missing opens_at" if opens_at.nil?
+      raise InvalidState, "state is missing closes_at" if closes_at.nil?
+      if opens_at >= closes_at
         raise InvalidState, "opens_at must be earlier than closes_at"
       end
       validate_authorization_history!
