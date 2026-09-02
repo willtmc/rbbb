@@ -46,6 +46,12 @@ end
 unless specification.metadata.fetch("rbbb_release_status") == "experimental"
   fail_verification("evaluation gem must remain experimental")
 end
+release_tag = "v#{specification.version}"
+%w[changelog_uri documentation_uri source_code_uri].each do |key|
+  unless specification.metadata.fetch(key).include?(release_tag)
+    fail_verification("#{key} must identify the immutable #{release_tag} source")
+  end
+end
 canonical_specification_version = REPOSITORY_ROOT.join("specification/VERSION").read.strip
 unless RBBB::SPECIFICATION_VERSION == canonical_specification_version
   fail_verification("runtime and canonical specification versions differ")

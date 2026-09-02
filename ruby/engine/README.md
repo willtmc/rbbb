@@ -113,14 +113,22 @@ from the aggregate.
 
 ## Install the evaluation gem
 
-Version `0.1.0.pre.2` is an experimental evaluation package. It has no runtime
-dependencies and supports Ruby 3.2 and newer. Until a maintainer publishes it
-to a registry, build an installable artifact from a reviewed commit:
+Version `0.1.0.pre.3` is an experimental evaluation package. It has no runtime
+dependencies and supports Ruby 3.2 and newer. Install the exact prerelease from
+RubyGems.org:
+
+```sh
+gem install rbbb --version 0.1.0.pre.3
+ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
+```
+
+To build the same version from a reviewed checkout:
 
 ```sh
 cd ruby/engine
+bundle exec rake package:verify
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.2.gem
+gem install ./rbbb-0.1.0.pre.3.gem
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 
@@ -129,6 +137,9 @@ For local application evaluation with Bundler:
 ```ruby
 gem "rbbb", path: "/path/to/rbbb/ruby/engine"
 ```
+
+The [matching GitHub release](https://github.com/willtmc/rbbb/releases) carries
+the same `.gem` artifact and its SHA-256 checksum.
 
 The installed package exposes its implementation version, claimed
 specification version, and release status as `RBBB::VERSION`,

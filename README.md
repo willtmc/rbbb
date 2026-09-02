@@ -49,31 +49,41 @@ framework and persistence concerns do not belong inside the auction rules.
 
 ## Current status
 
-RFC 0001 defines the accepted timed online proxy-bidding baseline, backed by 29
-language-neutral conformance scenarios. The Ruby reference engine now covers
-all scenarios 001–029. This completes the behavior exercised by the initial
-RFC suite, not the persistence, API, security, or operational work required for
-production. The matching command, event, rejection, configuration, and state
-schemas are experimental rather than a stable compatibility promise. Anything
-marked `draft` may still change before the first stable release.
+RFC 0001 defines the accepted timed online proxy-bidding baseline, backed by
+the language-neutral conformance suite. The Ruby reference engine runs every
+timed-proxy scenario in that suite. This completes the behavior exercised by
+the initial RFC suite, not the persistence, API, security, or operational work
+required for production. The matching command, event, rejection,
+configuration, and state schemas are experimental rather than a stable
+compatibility promise. Anything marked `draft` may still change before the
+first stable release.
 
 See [ROADMAP.md](ROADMAP.md), [docs/architecture.md](docs/architecture.md), and
 [specification/README.md](specification/README.md) for the planned path.
 
 ## Evaluate the Ruby gem
 
-The reference engine is packaged as the pre-stable `rbbb` gem. From a reviewed
-checkout:
+The reference engine is packaged as the pre-stable `rbbb` gem. Install the
+current evaluation build from RubyGems.org with an exact prerelease version:
+
+```sh
+gem install rbbb --version 0.1.0.pre.3
+```
+
+To build the same version from a reviewed checkout:
 
 ```sh
 cd ruby/engine
+bundle exec rake package:verify
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.2.gem
+gem install ./rbbb-0.1.0.pre.3.gem
 ```
 
 This artifact is for evaluation and historical replay only. It is not a hosted
 service and must not be used to accept or resolve live bids. See the
-[Ruby engine guide](ruby/engine/README.md) for installation and usage.
+[Ruby engine guide](ruby/engine/README.md) for installation and usage, or the
+[GitHub releases](https://github.com/willtmc/rbbb/releases) for downloadable
+artifacts and checksums.
 
 ## Contributing
 

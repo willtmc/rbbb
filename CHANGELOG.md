@@ -9,6 +9,18 @@ versioned artifacts.
 
 Nothing yet.
 
+## 0.1.0.pre.3 — 2026-09-02
+
+Third experimental evaluation build. Engine behavior and the claimed
+`0.1.0-draft` specification are unchanged from `0.1.0.pre.2`.
+
+- Include the corrected rejected-command example in the packaged README.
+- Keep public project status synchronized with all 30 RFC 0001 conformance
+  scenarios without duplicating a fragile scenario count in overview prose.
+- Point package documentation and source metadata at the immutable version tag.
+- Add tag/version verification and tokenless RubyGems trusted publishing through
+  a protected GitHub `release` environment.
+
 ## 0.1.0.pre.2 — 2026-09-02
 
 Second experimental evaluation build. Adversarial review of the RFC 0001
