@@ -112,14 +112,14 @@ from the aggregate.
 
 ## Install the evaluation gem
 
-Version `0.1.0.pre.1` is an experimental evaluation package. It has no runtime
+Version `0.1.0.pre.2` is an experimental evaluation package. It has no runtime
 dependencies and supports Ruby 3.2 and newer. Until a maintainer publishes it
 to a registry, build an installable artifact from a reviewed commit:
 
 ```sh
 cd ruby/engine
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.1.gem
+gem install ./rbbb-0.1.0.pre.2.gem
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 

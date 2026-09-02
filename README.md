@@ -68,7 +68,7 @@ checkout:
 ```sh
 cd ruby/engine
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.1.gem
+gem install ./rbbb-0.1.0.pre.2.gem
 ```
 
 This artifact is for evaluation and historical replay only. It is not a hosted
