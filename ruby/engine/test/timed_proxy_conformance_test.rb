@@ -31,6 +31,9 @@ class TimedProxyConformanceTest < Minitest::Test
     024-close-below-reserve-produces-no-sale.yaml
     025-close-without-bids-produces-no-bid.yaml
     026-lowering-reserve-does-not-unwind-standing-amount.yaml
+    027-extension-never-shortens-closing.yaml
+    028-bid-before-opening-time-rejected.yaml
+    029-out-of-order-authoritative-time-rejected.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

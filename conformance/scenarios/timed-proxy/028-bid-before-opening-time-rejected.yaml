@@ -1,0 +1,14 @@
+name: Bid ordered before opening time is rejected and bid at opening time is eligible
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 50000, effective_at: "2026-09-01T11:59:59.999Z"}
+  - {command_id: command-2, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 50000, effective_at: "2026-09-01T12:00:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
+  rejections:
+    - {command_id: command-1, reason: bidding_not_open}
+  final_state: {leader_id: bidder-a, standing_minor_units: 10000}

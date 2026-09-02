@@ -47,6 +47,9 @@ module RBBB
         return reject(command_id, "stale_aggregate_version")
       end
       return reject(command_id, "bidding_closed") if state.closed?
+      if time_regressed?(state, authoritative_time(values))
+        return reject(command_id, "effective_at_out_of_order")
+      end
 
       case values.fetch("type")
       when "place_bid"
@@ -69,9 +72,14 @@ module RBBB
     end
 
     def apply(state, events)
-      transition = events.find do |event|
+      transitions = events.select do |event|
         event.privileged? && STATE_TRANSITION_EVENTS.include?(event.type)
       end
+      if transitions.length > 1
+        raise InvalidState, "apply accepts the events of exactly one accepted command"
+      end
+
+      transition = transitions.first
       return state unless transition
 
       aggregate_version = transition.data.fetch("aggregate_version")
@@ -93,6 +101,7 @@ module RBBB
         ),
         opens_at: state.opens_at,
         closes_at: transition.data.fetch("closes_at", state.closes_at),
+        last_effective_at: transition.data["effective_at"] || state.last_effective_at,
         authorization_history: transition.data.fetch(
           "authorization_history",
           state.authorization_history
@@ -120,7 +129,7 @@ module RBBB
       return reject(command_id, "bid_id_already_exists") if state.bid_record_for(bid_id)
 
       effective_at = authoritative_time(command)
-      timing_rejection = reject_for_timing(state, command_id, effective_at)
+      timing_rejection = reject_for_timing(state, command_id, effective_at, bidder: true)
       return timing_rejection if timing_rejection
       unless maximum.is_a?(Integer) && maximum >= 0
         return reject(command_id, "invalid_maximum")
@@ -146,7 +155,7 @@ module RBBB
       maximum = command["maximum_minor_units"]
       command_id = command["command_id"]
       effective_at = authoritative_time(command)
-      timing_rejection = reject_for_timing(state, command_id, effective_at)
+      timing_rejection = reject_for_timing(state, command_id, effective_at, bidder: true)
       return timing_rejection if timing_rejection
       unless maximum.is_a?(Integer) && maximum >= 0
         return reject(command_id, "invalid_maximum")
@@ -726,11 +735,21 @@ module RBBB
       nil
     end
 
-    def reject_for_timing(state, command_id, effective_at)
-      return reject(command_id, "invalid_command") if state.closes_at && !effective_at
+    def reject_for_timing(state, command_id, effective_at, bidder: false)
+      scheduled = state.closes_at || (bidder && state.opens_at)
+      return reject(command_id, "invalid_command") if scheduled && !effective_at
+      if bidder && state.opens_at && effective_at < state.opens_at
+        return reject(command_id, "bidding_not_open")
+      end
       return reject(command_id, "bidding_closed") if state.closes_at && effective_at >= state.closes_at
 
       nil
+    end
+
+    def time_regressed?(state, effective_at)
+      return false unless effective_at && state.last_effective_at
+
+      effective_at < state.last_effective_at
     end
 
     def extended_closing_time(state, effective_at, public_result_changed)
@@ -740,7 +759,9 @@ module RBBB
       trigger_window = configuration.extension.fetch("trigger_window_seconds")
       return state.closes_at if effective_at < state.closes_at - trigger_window
 
-      effective_at + configuration.extension.fetch("duration_seconds")
+      # An extension may only push closing later. A duration shorter than the
+      # remaining time must never pull the close forward.
+      [state.closes_at, effective_at + configuration.extension.fetch("duration_seconds")].max
     end
 
     def standing_amount(ranked, reserve_minor_units)

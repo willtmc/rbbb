@@ -16,6 +16,8 @@
         "invalid_command",
         "unsupported_command",
         "stale_aggregate_version",
+        "effective_at_out_of_order",
+        "bidding_not_open",
         "bidding_closed",
         "bid_id_already_exists",
         "invalid_maximum",

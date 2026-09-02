@@ -20,8 +20,9 @@ module RBBB
 
     attr_reader :version, :positions, :leader_id, :standing_minor_units,
       :next_required_minor_units, :reserve_status, :opens_at, :closes_at,
-      :reserve_minor_units, :authorization_history, :reserve_history,
-      :voided_bid_ids, :status, :result, :winner_id, :winning_minor_units
+      :last_effective_at, :reserve_minor_units, :authorization_history,
+      :reserve_history, :voided_bid_ids, :status, :result, :winner_id,
+      :winning_minor_units
 
     def self.empty(configuration)
       new(
@@ -34,6 +35,7 @@ module RBBB
         reserve_minor_units: configuration.reserve_minor_units,
         opens_at: configuration.opens_at,
         closes_at: configuration.closes_at,
+        last_effective_at: nil,
         authorization_history: [],
         reserve_history: [],
         voided_bid_ids: [],
@@ -43,7 +45,8 @@ module RBBB
 
     def initialize(version:, positions:, leader_id:, standing_minor_units:,
       next_required_minor_units:, reserve_status: nil, opens_at: nil, closes_at: nil,
-      reserve_minor_units: nil, authorization_history: [], reserve_history: [],
+      last_effective_at: nil, reserve_minor_units: nil,
+      authorization_history: [], reserve_history: [],
       voided_bid_ids: [], status: "open", result: nil, winner_id: nil,
       winning_minor_units: nil)
       @version = version
@@ -57,6 +60,7 @@ module RBBB
       @reserve_minor_units = reserve_minor_units
       @opens_at = coerce_timestamp(opens_at, "opens_at")
       @closes_at = coerce_timestamp(closes_at, "closes_at")
+      @last_effective_at = coerce_timestamp(last_effective_at, "last_effective_at")
       @authorization_history = authorization_history.map do |entry|
         coerce_authorization(entry)
       end.freeze
@@ -100,6 +104,7 @@ module RBBB
       }
       result["opens_at"] = Timestamp.dump(opens_at) if opens_at
       result["closes_at"] = Timestamp.dump(closes_at) if closes_at
+      result["last_effective_at"] = Timestamp.dump(last_effective_at) if last_effective_at
       if leader_id
         result["leader_maximum_minor_units"] = positions.fetch(leader_id).maximum_minor_units
         result["leader_executed_minor_units"] = positions.fetch(leader_id).executed_minor_units
