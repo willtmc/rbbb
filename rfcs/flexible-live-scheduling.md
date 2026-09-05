@@ -148,7 +148,9 @@ If topology changed while discovering the affected set, the operation must
 retry discovery or reject as stale; it must not lock an incomplete old set.
 An accepted retry with the same command ID returns the original receipt, not a
 second mutation. Different content under a retained command ID is rejected.
-Exact retention and archive rules remain part of the service contract.
+The [proposed service contract](proposals/flexible-live-scheduling/service-contract.md)
+requires receipts throughout the mutable auction lifetime and sealing before
+archival; restored mutation requires restored deduplication history.
 
 When a bid orders first, it uses the old topology. A later scheduling command
 must observe the resulting versions and deadline or fail its preconditions.
@@ -213,7 +215,9 @@ A lost response cannot cause a retry to duplicate events or notification intent.
 Proposed rejection categories include stale revision/version, incomplete affected
 set, duplicate membership, conflicting group definitions, invalid schedule/policy,
 shortening not explicitly authorized, elapsed/closed unit, out-of-order time,
-and unsupported capability. Exact stable codes belong in the future schema work.
+and unsupported capability. Closed codes are defined in the proposed contract
+schema; rejection precedence and control-plane receipt retention are specified
+in the service contract.
 
 A rejected operation changes no unit, group, price, membership, deadline, event
 history, or notification intent. Diagnostics may identify the affected public
@@ -242,9 +246,11 @@ synthetic inputs and observable outcomes for normal edits, shortening, stale
 previews, partial group changes, ordering races, crash/retry, privacy, and close.
 They are intentionally outside the executable accepted conformance suite.
 
-Before acceptance, convert them into schema-validated language-neutral scenarios,
-including exact public/privileged event batches and rejection documents. Passing
-current tests is not evidence that an implementation supports this proposal.
+They now have [26 machine-readable behavioral vectors covering 44 steps](proposals/flexible-live-scheduling/behavior-vectors.md),
+including complete seeded unit states, exact expected resulting states, and
+public/privileged record batches. Fixture checks replay the independent-unit
+seed/bid/close portions and validate the proposed shapes. They do not execute a
+coordinator. Passing current tests is not evidence of scheduling support.
 
 ## Privacy and security
 
@@ -265,22 +271,26 @@ RFC 0001's `change_closing_time`. Baseline implementations continue rejecting
 post-bid shortening and do not claim linked-group support. An unsupported host
 must reject these operations, not decompose them into unsafe independent edits.
 
-Acceptance requires capability/version negotiation, updated specifications and
-schemas, executable scenarios, reference implementation, service transaction
-coverage, and migration guidance together. Stable units must retain compatible
-private state across topology revisions. No release or production-readiness
-claim is made by publishing this proposed RFC.
+RFC acceptance requires maintainer agreement on the proposed capability,
+schemas, behavioral vectors, and transaction contract before implementation of
+new semantics. Advertising implementation support is a later gate: updated
+specifications, every behavioral vector executed against the coordinator,
+service transaction/failure coverage, and migration guidance. This separates
+agreement on the contract from certification of code implementing it. Stable
+units must retain compatible private state across topology revisions. No release
+or production-readiness claim is made by publishing this proposed RFC.
 
 ## Unresolved questions
 
 1. Review the proposed command/event names, capability identifier, and exact
    revision-vector schemas before treating them as a compatibility promise.
-2. Initial reference-service serialization design and its load/failure tests.
-3. Resource bounds for affected sets and atomic event batches. Reject oversized
-   requests explicitly; do not split one promised atomic regrouping into chunks.
-4. Convert all review scenarios into behavioral conformance sequences with
-   fully initialized unit states and exact expected event batches. Structural
-   contract validation does not satisfy this requirement.
+2. Review the selected auction-row transaction boundary, permanent receipt
+   retention while mutable, and complete-commit replay contract.
+3. Review the initial 4,096-unit / 4 MiB submission / 16 MiB batch ceilings and
+   16-level parsing bound. These are proposed limits, not measured capacity.
+4. Approve the behavioral vectors, then implement the coordinator and execute
+   them plus the service concurrency/failure gates. Fixture and independent-unit
+   checks do not satisfy coordinator conformance.
 
 Immediate forced closing, post-close reopening, already-invoiced outcomes, and
 correction workflows remain separate scope. Minimum notice lead time remains

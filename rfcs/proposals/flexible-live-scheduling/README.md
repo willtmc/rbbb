@@ -6,6 +6,16 @@ endpoint, engine command, stable capability, or production-readiness claim.
 
 ## Artifacts
 
+- [`service-contract.md`](service-contract.md): selected auction-row ordering,
+  atomic records/receipts, retry/archive rules, replay mapping and resource profile.
+- [`submission.schema.json`](submission.schema.json): untrusted intent without
+  caller-supplied principal or authoritative time.
+- [`resource-profile.json`](resource-profile.json): proposed machine-readable
+  ceilings, not load-certification evidence.
+- [`behavior-vectors.md`](behavior-vectors.md): 26 vectors / 44 steps with exact
+  expected states and records, covering all 18 review cases. Coordinator
+  execution remains unimplemented.
+
 - [`contract.schema.json`](contract.schema.json): JSON Schema 2020-12 union of
   command, public-change, privileged audit, notification-intent, and rejection
   documents. Individual definitions are addressable under `$defs`.
@@ -15,8 +25,7 @@ endpoint, engine command, stable capability, or production-readiness claim.
   rejection example illustrates the alternative failure document; it is not an
   additional event emitted by the successful operation.
 - [`../flexible-live-scheduling-scenarios.md`](../flexible-live-scheduling-scenarios.md):
-  the broader behavioral review cases, still awaiting executable coordinator
-  conformance sequences.
+  the human-readable review cases underlying the new behavioral vectors.
 
 The provisional capability token is `flexible_live_scheduling_draft_1`. Unknown
 or unsupported capability tokens must not fall back to baseline independent
@@ -43,9 +52,11 @@ condition needs current-state validation, not merely JSON Schema.
 The proposed identifier length cap is 128 characters; the privileged reason cap
 is 2,048 characters. Revisions and durations reuse the baseline safe-integer
 bound; time reuses its explicit-offset, at-most-millisecond contract. Positive
-extension duration is enforced structurally. The service must additionally
-advertise and enforce finite affected-set and message-size limits before this
-capability can be accepted. It may not split a promised atomic edit to fit them.
+extension duration is enforced structurally. The proposed service profile sets a 4,096-unit ceiling, 4 MiB submission and
+16 MiB encoded-batch bounds, and a 16-level parsing bound. Schema checks enforce
+submitted membership/vector cardinality; actual parsing, discovered-set and
+batch-byte admission guards require the future service implementation. A
+promised atomic edit may not be split to fit them.
 
 ## Trust and publication boundary
 
@@ -100,8 +111,8 @@ following remain semantic guards and behavioral conformance requirements:
 
 The proposed `no_change` rejection avoids creating a new scheduling revision or
 notification intent for an edit with no scheduling effect. Retries of an already
-accepted command still return the original receipt. Exact rejection precedence
-and service resource bounds must be settled before behavioral acceptance.
+accepted command still return the original receipt. Rejection precedence and resource bounds are now specified in the proposed
+service contract. They still require implementation and behavioral verification.
 
 The proposal stays outside `specification/` and the accepted executable
 `conformance/scenarios/` suite until those requirements are fulfilled. Existing

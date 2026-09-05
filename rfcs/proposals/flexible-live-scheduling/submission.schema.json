@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/rfcs/proposals/flexible-live-scheduling/submission.schema.json",
+  "title": "Proposed untrusted scheduling submission",
+  "x-rbbb-status": "proposed",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability",
+    "type",
+    "command_id",
+    "auction_id",
+    "expected_schedule_revision",
+    "expected_units",
+    "reason",
+    "allow_shortening",
+    "resulting_closing_sets",
+    "retired_group_ids"
+  ],
+  "properties": {
+    "capability": {
+      "const": "flexible_live_scheduling_draft_1"
+    },
+    "type": {
+      "enum": [
+        "revise_closing_schedule",
+        "reconfigure_closing_groups"
+      ]
+    },
+    "command_id": {
+      "$ref": "contract.schema.json#/$defs/identifier"
+    },
+    "auction_id": {
+      "$ref": "contract.schema.json#/$defs/identifier"
+    },
+    "expected_schedule_revision": {
+      "$ref": "contract.schema.json#/$defs/revision"
+    },
+    "expected_units": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "contract.schema.json#/$defs/unit_version"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "reason": {
+      "$ref": "contract.schema.json#/$defs/reason"
+    },
+    "allow_shortening": {
+      "type": "boolean"
+    },
+    "resulting_closing_sets": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "contract.schema.json#/$defs/closing_set"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "retired_group_ids": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "contract.schema.json#/$defs/identifier"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "revise_closing_schedule"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "retired_group_ids": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

@@ -108,6 +108,7 @@
         },
         "member_unit_ids": {
           "type": "array",
+          "maxItems": 4096,
           "items": {
             "$ref": "#/$defs/identifier"
           },
@@ -184,6 +185,7 @@
         },
         "expected_units": {
           "type": "array",
+          "maxItems": 4096,
           "items": {
             "$ref": "#/$defs/unit_version"
           },
@@ -201,6 +203,7 @@
         },
         "resulting_closing_sets": {
           "type": "array",
+          "maxItems": 4096,
           "items": {
             "$ref": "#/$defs/closing_set"
           },
@@ -209,6 +212,7 @@
         },
         "retired_group_ids": {
           "type": "array",
+          "maxItems": 4096,
           "items": {
             "$ref": "#/$defs/identifier"
           },
@@ -503,6 +507,7 @@
             "unsupported_capability",
             "command_id_reused",
             "resource_limit_exceeded",
+            "auction_sealed",
             "version_exhausted",
             "no_change"
           ]
