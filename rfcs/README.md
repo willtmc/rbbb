@@ -16,6 +16,13 @@ contract, compatibility guarantee, or governance model.
 An RFC may be proposed, accepted, rejected, withdrawn, or superseded. Merging a
 proposed document does not make it normative unless its status says accepted.
 
+## Proposals under review
+
+- [Flexible live scheduling and closing groups](flexible-live-scheduling.md):
+  adding and regrouping units during bidding, explicit earlier/later deadlines,
+  atomic changes, and audit/notification boundaries. Proposed only; it does not
+  amend RFC 0001 or claim implementation support.
+
 ## Evaluation questions
 
 - Can an auctioneer explain the behavior in plain language?
