@@ -1,0 +1,513 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/rfcs/proposals/flexible-live-scheduling/contract.schema.json",
+  "title": "Proposed flexible live scheduling documents",
+  "description": "Proposal contract shapes only; not an accepted capability or implemented behavior. Cross-state rules require coordinator conformance.",
+  "x-rbbb-status": "proposed",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/command"
+    },
+    {
+      "$ref": "#/$defs/public_change"
+    },
+    {
+      "$ref": "#/$defs/audit_event"
+    },
+    {
+      "$ref": "#/$defs/notification_intent"
+    },
+    {
+      "$ref": "#/$defs/rejection"
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$(?![\\s\\S])"
+    },
+    "revision": {
+      "$ref": "../../../specification/common/integer.schema.json"
+    },
+    "timestamp": {
+      "$ref": "../../../specification/common/timestamp.schema.json"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "\\S"
+    },
+    "extension": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "trigger_window_seconds",
+            "duration_seconds"
+          ],
+          "properties": {
+            "trigger_window_seconds": {
+              "$ref": "#/$defs/revision"
+            },
+            "duration_seconds": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/revision"
+                },
+                {
+                  "minimum": 1
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "unit_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit_id",
+        "version"
+      ],
+      "properties": {
+        "unit_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "version": {
+          "$ref": "#/$defs/revision"
+        }
+      }
+    },
+    "closing_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "member_unit_ids",
+        "closes_at",
+        "extension"
+      ],
+      "properties": {
+        "group_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "member_unit_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "closes_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "extension": {
+          "$ref": "#/$defs/extension"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "group_id": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "group_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "member_unit_ids": {
+                "maxItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "type",
+        "command_id",
+        "auction_id",
+        "effective_at",
+        "expected_schedule_revision",
+        "expected_units",
+        "operator_id",
+        "reason",
+        "allow_shortening",
+        "resulting_closing_sets",
+        "retired_group_ids"
+      ],
+      "properties": {
+        "capability": {
+          "const": "flexible_live_scheduling_draft_1"
+        },
+        "type": {
+          "enum": [
+            "revise_closing_schedule",
+            "reconfigure_closing_groups"
+          ]
+        },
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "auction_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "effective_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expected_schedule_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "expected_units": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unit_version"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "operator_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "allow_shortening": {
+          "type": "boolean"
+        },
+        "resulting_closing_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/closing_set"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "retired_group_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "revise_closing_schedule"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "retired_group_ids": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "public_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "type",
+        "command_id",
+        "commit_id",
+        "auction_id",
+        "effective_at",
+        "visibility",
+        "schedule_revision",
+        "unit_versions",
+        "resulting_closing_sets",
+        "retired_group_ids"
+      ],
+      "properties": {
+        "capability": {
+          "const": "flexible_live_scheduling_draft_1"
+        },
+        "type": {
+          "const": "closing_configuration_changed"
+        },
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "commit_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "auction_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "effective_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "visibility": {
+          "const": "public"
+        },
+        "schedule_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "unit_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unit_version"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "resulting_closing_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/closing_set"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "retired_group_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      }
+    },
+    "audit_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "type",
+        "command_id",
+        "commit_id",
+        "auction_id",
+        "effective_at",
+        "visibility",
+        "operator_id",
+        "reason",
+        "allow_shortening",
+        "previous_schedule_revision",
+        "schedule_revision",
+        "previous_unit_versions",
+        "unit_versions",
+        "previous_closing_sets",
+        "resulting_closing_sets",
+        "retired_group_ids"
+      ],
+      "properties": {
+        "capability": {
+          "const": "flexible_live_scheduling_draft_1"
+        },
+        "type": {
+          "const": "closing_configuration_committed"
+        },
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "commit_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "auction_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "effective_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "visibility": {
+          "const": "privileged"
+        },
+        "operator_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "allow_shortening": {
+          "type": "boolean"
+        },
+        "previous_schedule_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "schedule_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "previous_unit_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unit_version"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "unit_versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unit_version"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "previous_closing_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/closing_set"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "resulting_closing_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/closing_set"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "retired_group_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      }
+    },
+    "notification_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "type",
+        "command_id",
+        "commit_id",
+        "auction_id",
+        "effective_at",
+        "visibility",
+        "affected_unit_ids",
+        "change_kinds",
+        "audience"
+      ],
+      "properties": {
+        "capability": {
+          "const": "flexible_live_scheduling_draft_1"
+        },
+        "type": {
+          "const": "closing_change_notice"
+        },
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "commit_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "auction_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "effective_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "visibility": {
+          "const": "privileged"
+        },
+        "affected_unit_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "change_kinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "shortened",
+              "extended",
+              "membership",
+              "policy"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "audience": {
+          "const": "affected_participants"
+        }
+      }
+    },
+    "rejection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "type",
+        "command_id",
+        "reason"
+      ],
+      "properties": {
+        "capability": {
+          "const": "flexible_live_scheduling_draft_1"
+        },
+        "type": {
+          "const": "closing_change_rejected"
+        },
+        "command_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "reason": {
+          "enum": [
+            "stale_revision",
+            "incomplete_affected_set",
+            "duplicate_membership",
+            "conflicting_group_definition",
+            "invalid_schedule",
+            "invalid_extension_policy",
+            "shortening_not_allowed",
+            "not_authorized",
+            "elapsed_or_closed_unit",
+            "effective_at_out_of_order",
+            "unsupported_capability",
+            "command_id_reused",
+            "resource_limit_exceeded",
+            "version_exhausted",
+            "no_change"
+          ]
+        }
+      }
+    }
+  }
+}

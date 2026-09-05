@@ -18,6 +18,19 @@ It does **not** change RFC 0001 today. Its post-bid shortening prohibition and
 independent-unit model remain the current baseline until a successor capability
 is accepted, specified, tested, and implemented.
 
+## Maintainer direction recorded for the next draft
+
+The approved direction is to permit explicit shortening to a strictly future
+deadline, leave minimum-notice policy to the host, and keep immediate forced
+closing and post-close reopening as separate operations. This resolves those
+policy forks without accepting this entire RFC or changing the baseline engine.
+
+[Proposed machine-readable contracts](proposals/flexible-live-scheduling/README.md)
+now define reviewable command, public-change, audit, notification-intent, and
+rejection shapes. Their executable tests validate document structure and example
+consistency only; there is not yet a scheduling coordinator or behavioral
+conformance implementation.
+
 ## Policy question
 
 How can a live auction remain editable without allowing a catalog edit to
@@ -260,15 +273,16 @@ claim is made by publishing this proposed RFC.
 
 ## Unresolved questions
 
-1. Final command/event names, capability identifier, and exact revision-vector
-   schemas; these must be portable before implementation begins.
-2. Whether immediate forced closing belongs in the first capability or a later
-   separate command. This proposal does not allow zero-time/backdated reschedules.
-3. Whether any notice lead time should be engine-enforced. The current proposal
-   leaves notice policy to the host and requires a strictly future deadline,
-   explicit shortening authorization, and durable notification intent.
-4. Initial reference-service serialization design and its load/failure tests.
-5. Resource bounds for affected sets and atomic event batches. Reject oversized
+1. Review the proposed command/event names, capability identifier, and exact
+   revision-vector schemas before treating them as a compatibility promise.
+2. Initial reference-service serialization design and its load/failure tests.
+3. Resource bounds for affected sets and atomic event batches. Reject oversized
    requests explicitly; do not split one promised atomic regrouping into chunks.
-6. Post-close reopening, already-invoiced outcomes, and correction workflows are
-   separate scope; topology editing must not implicitly authorize them.
+4. Convert all review scenarios into behavioral conformance sequences with
+   fully initialized unit states and exact expected event batches. Structural
+   contract validation does not satisfy this requirement.
+
+Immediate forced closing, post-close reopening, already-invoiced outcomes, and
+correction workflows remain separate scope. Minimum notice lead time remains
+host policy; this scheduling capability requires a strictly future deadline,
+explicit shortening authorization, and durable notification intent.
