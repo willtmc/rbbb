@@ -75,7 +75,7 @@ replay mismatch and proxy adjustment after restart.
 
 This implementation replays the entire journal per operation and retains
 unbounded history. It is intended for correctness evaluation, not auction-scale
-load. Checkpointing, durable notification delivery,
+load. Checkpointing, production notification transport,
 live regrouping, authentication, backups and operational recovery tooling remain
 separate work. It is not a deployed bidding service or a production-readiness
 claim. Keep the adapter and engine source pinned when reopening existing data.
@@ -116,3 +116,55 @@ Run `bundle exec ruby -Ilib:test test/durable_group_close_test.rb` from
 `ruby/engine` for mixed outcomes, shared-deadline enforcement, member refusal,
 restart/retry, actual process crashes, competing processes and privacy tests.
 Notification delivery and external invoicing remain separate from this commit.
+
+## Public result delivery
+
+The committed journal also serves as a durable public-results outbox. No separate
+enqueue step can be lost between saving a bid or group close and making its
+result available. Each accepted journal entry yields one envelope containing
+only `delivery_id`, `clock` and `units`; rejected bids yield none. A group close
+is one envelope containing every member's public outcome. The feed contains
+historical committed projections, not necessarily the latest query state.
+
+```ruby
+host.deliver_next_public(consumer_id: "public-feed") do |payload|
+  # Your receiver must persist delivery_id with its applied update atomically.
+  receiver.apply_once(payload.fetch("delivery_id"), payload)
+  # Return normally only after the receiver confirms success; raise on failure.
+end
+```
+
+This example supplies no network transport and sends no email or bidder notices.
+The caller's receiver implements the actual delivery. The callback executes
+outside the database lock. A failure leaves the entry pending; returning normally
+acknowledges it in a separate SQLite transaction. `nil` means nothing is pending.
+For separate workers, `next_public_delivery(consumer_id:)` returns an envelope
+and `acknowledge_public_delivery(consumer_id:, delivery_id:)` advances its cursor.
+Only the next pending envelope may be acknowledged. Repeated acknowledgment is
+a no-op, and one consumer's cursor never advances another's.
+
+Delivery is **at least once**. A crash after the receiver accepts an update but
+before acknowledgment causes the same stable ID to be delivered again. The ID
+combines a database-persisted stream UUID and journal sequence. The receiver must
+deduplicate that ID atomically with its own side effects. This is not an
+exactly-once guarantee for arbitrary external systems. Run one worker per consumer
+for ordered callback execution; there is no lease preventing concurrent callbacks
+for the same consumer. Separate consumers can independently read the whole stream.
+
+The adapter validates journal replay before exposing results and explicitly
+selects only public projections. Privileged events, winner identities, maxima
+and command IDs are excluded. Do not use this public feed as an invoice input:
+privileged, authorized accounting handoff is separate work.
+
+Opening an existing database creates delivery metadata without changing its
+journal. A new consumer starts at the oldest accepted commit, including commits
+saved before this feature; nothing is sent automatically. Keep the database and
+its delivery metadata together during backup/restore. Restoring an older backup
+can redeliver records, so receiver deduplication remains necessary. Do not run
+independently writable copies of the same database as distinct streams.
+
+Run `bundle exec ruby -Ilib:test test/public_delivery_test.rb` from `ruby/engine`
+for restart/ack recovery, actual process exit after receiver handoff, callback
+failure, cursor ordering, independent consumers, privacy, retries and rollback.
+Full-history replay, checkpointing and production transport operations remain
+separate from this local evaluation example.

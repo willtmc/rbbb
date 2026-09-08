@@ -20,3 +20,5 @@ clock results and retry receipts across process restarts. It tests crash recover
 and competing local processes; it remains an evaluation adapter outside the gem.
 
 The durable adapter also [closes every group member in one transaction](durable-shared-group-host.md#closing-all-members-together), with per-lot outcomes and restart-safe retries.
+
+The [public-results outbox](durable-shared-group-host.md#public-result-delivery) retains delivery progress across restarts and supplies stable IDs for receiver deduplication. It sends no external messages by itself.
