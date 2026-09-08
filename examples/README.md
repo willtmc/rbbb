@@ -18,3 +18,5 @@ retries; durable database integration remains separate.
 The [SQLite host example](durable-shared-group-host.md) retains bids, shared
 clock results and retry receipts across process restarts. It tests crash recovery
 and competing local processes; it remains an evaluation adapter outside the gem.
+
+The durable adapter also [closes every group member in one transaction](durable-shared-group-host.md#closing-all-members-together), with per-lot outcomes and restart-safe retries.
