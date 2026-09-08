@@ -63,3 +63,7 @@ publication with one durable transaction and group-wide lock/CAS covering state,
 clock, receipts and an event outbox. Authentication, authoritative time assignment,
 durable retry retention, crash recovery and outbox delivery require separate
 implementation and tests. No database or deployment guarantee is claimed here.
+
+A [separate SQLite adapter](durable-shared-group-host.md) now demonstrates local
+durable transactions and restart recovery using this host. Its documented
+limits still apply; this in-memory class remains unchanged.

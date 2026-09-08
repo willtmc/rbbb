@@ -3,3 +3,6 @@
 source "https://rubygems.org"
 
 gemspec
+
+# Development-only dependency for the durable host integration example.
+gem "sqlite3", "~> 2.0"
