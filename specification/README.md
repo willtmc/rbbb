@@ -48,3 +48,8 @@ facts through public contracts.
 The current draft version is recorded in `VERSION`. Implementations will claim
 specific specification and conformance-suite versions rather than claiming
 compatibility with an unqualified project name.
+
+## Shared closing-clock component
+
+The optional [shared clock](shared-closing-clock.md) consumes accepted core bid
+records under scoped RFC 0003. It is not a linked-group transactional service.

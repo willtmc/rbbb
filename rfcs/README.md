@@ -31,3 +31,6 @@ proposed document does not make it normative unless its status says accepted.
 - [RFC 0002: Initial closing schedule planning](0002-initial-closing-schedules.md)
   defines minute batches and nonconsecutive group planning. It does not accept
   the separate live scheduling coordinator or change baseline bidding semantics.
+
+- [RFC 0003: Fixed-membership shared closing clock](0003-shared-closing-clock.md)
+  accepts the clock component only, not the full live scheduling coordinator.
