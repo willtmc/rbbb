@@ -7,7 +7,10 @@ versioned artifacts.
 
 ## Unreleased
 
-Nothing yet.
+- Add the RFC 0002 initial closing schedule planner: minute batches, arbitrary
+  group membership, latest-member defaults and explicit initial overrides.
+  This does not add live group coordination or change baseline bids.
+
 
 ## 0.1.0.pre.3 — 2026-09-02
 
