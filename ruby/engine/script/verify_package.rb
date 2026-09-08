@@ -20,6 +20,7 @@ EXPECTED_FILES = %w[
   lib/rbbb/engine.rb
   lib/rbbb/event.rb
   lib/rbbb/increment_schedule.rb
+  lib/rbbb/initial_closing_schedule.rb
   lib/rbbb/money.rb
   lib/rbbb/state.rb
   lib/rbbb/timestamp.rb
@@ -110,6 +111,11 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
     abort "installed gem rejected smoke bid" unless decision.accepted?
     state = engine.apply(state, decision.events)
     abort "installed gem produced wrong standing amount" unless state.standing_minor_units == 1_000
+
+    schedule = RBBB::InitialClosingSchedule.plan(unit_ids: %w[a b c],
+      opens_at: "2030-01-01T12:00:00Z", first_closes_at: "2030-01-01T13:00:00Z",
+      lots_per_minute: 2, groups: [{"group_id" => "g", "unit_ids" => %w[a c]}])
+    abort "installed planner returned wrong group deadline" unless schedule.fetch("unit_closes_at").fetch("a") == "2030-01-01T13:01:00Z"
 
     puts JSON.generate(
       version: RBBB::VERSION,

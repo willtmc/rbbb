@@ -1,0 +1,57 @@
+{
+  "id": "initial-nonconsecutive-group",
+  "input": {
+    "unit_ids": [
+      "lot-12",
+      "lot-20",
+      "lot-47",
+      "lot-60",
+      "lot-103",
+      "lot-110"
+    ],
+    "opens_at": "2030-01-01T14:00:00Z",
+    "first_closes_at": "2030-01-01T15:00:00Z",
+    "lots_per_minute": 2,
+    "groups": [
+      {
+        "group_id": "group-a",
+        "unit_ids": [
+          "lot-103",
+          "lot-12",
+          "lot-47"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "version": 1,
+    "scope": "initial_schedule_plan_only",
+    "initial_closes_at": {
+      "lot-12": "2030-01-01T15:00:00Z",
+      "lot-20": "2030-01-01T15:00:00Z",
+      "lot-47": "2030-01-01T15:01:00Z",
+      "lot-60": "2030-01-01T15:01:00Z",
+      "lot-103": "2030-01-01T15:02:00Z",
+      "lot-110": "2030-01-01T15:02:00Z"
+    },
+    "unit_closes_at": {
+      "lot-12": "2030-01-01T15:02:00Z",
+      "lot-20": "2030-01-01T15:00:00Z",
+      "lot-47": "2030-01-01T15:02:00Z",
+      "lot-60": "2030-01-01T15:01:00Z",
+      "lot-103": "2030-01-01T15:02:00Z",
+      "lot-110": "2030-01-01T15:02:00Z"
+    },
+    "groups": [
+      {
+        "group_id": "group-a",
+        "unit_ids": [
+          "lot-103",
+          "lot-12",
+          "lot-47"
+        ],
+        "closes_at": "2030-01-01T15:02:00Z"
+      }
+    ]
+  }
+}

@@ -111,6 +111,30 @@ never carries a bidder, leader, or winner identity, a maximum, the reserve
 amount, or audit history; serve it rather than hand-rolling a projection
 from the aggregate.
 
+## Initial closing schedule planning (unreleased)
+
+`RBBB::InitialClosingSchedule.plan` implements the scoped
+[RFC 0002](../../rfcs/0002-initial-closing-schedules.md) initial planner in this
+checkout. It is not included in the published `0.1.0.pre.3` artifact.
+
+```ruby
+plan = RBBB::InitialClosingSchedule.plan(
+  unit_ids: %w[lot-12 lot-20 lot-47 lot-60 lot-103 lot-110],
+  opens_at: "2030-01-01T14:00:00Z",
+  first_closes_at: "2030-01-01T15:00:00Z",
+  lots_per_minute: 2,
+  groups: [{"group_id" => "group-a", "unit_ids" => %w[lot-12 lot-47 lot-103]}]
+)
+plan.fetch("unit_closes_at").fetch("lot-12") # => "2030-01-01T15:02:00Z"
+```
+
+The three group members share 15:02; unrelated lots retain their minute slots.
+A group's optional `closes_at` explicitly overrides its initial default.
+See the [input/output contract](../../specification/initial-closing-schedule.md).
+This computes a plan only. It cannot change a live auction or provide linked
+soft-close behavior to independent RFC 0001 engines. Live group coordination
+and proxy-adjustment scheduling rules require separate implementation.
+
 ## Install the evaluation gem
 
 Version `0.1.0.pre.3` is an experimental evaluation package. It has no runtime

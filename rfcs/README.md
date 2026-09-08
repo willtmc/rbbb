@@ -25,3 +25,9 @@ proposed document does not make it normative unless its status says accepted.
 - Can another language implement it from the public contract alone?
 - Are failure, retry, and audit behavior testable?
 - Is configuration finite and composable rather than arbitrary code?
+
+## Accepted scoped additions
+
+- [RFC 0002: Initial closing schedule planning](0002-initial-closing-schedules.md)
+  defines minute batches and nonconsecutive group planning. It does not accept
+  the separate live scheduling coordinator or change baseline bidding semantics.

@@ -19,6 +19,9 @@ Normative requirements live in:
 If two normative sources conflict, that is a specification defect. Do not
 silently choose one; open an issue and add a conformance case with the fix.
 
+See also the optional [initial closing schedule planner](initial-closing-schedule.md),
+governed by scoped RFC 0002. It does not change baseline bidding commands.
+
 ## Stability markers
 
 Documents and schemas may carry one of these statuses:
