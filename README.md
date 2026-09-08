@@ -47,6 +47,9 @@ new_state = engine.apply(current_state, decision.events)
 Rails, PostgreSQL, HTTP, and real-time delivery may surround that core, but
 framework and persistence concerns do not belong inside the auction rules.
 
+Try the [synthetic multi-unit walkthrough](examples/README.md) for interleaved
+bidding, independent soft closes, event replay, and explicit capability limits.
+
 ## Current status
 
 RFC 0001 defines the accepted timed online proxy-bidding baseline, backed by
