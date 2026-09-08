@@ -224,3 +224,33 @@ not publish a successful subset.
 **Then:** reject. When the request explicitly chooses a valid common policy,
 all subsequent group extensions use it. The former policy of whichever member
 happened to be listed first never wins implicitly.
+
+
+## FLS-19 — Minute batches and nonconsecutive soft-close members
+
+**Given:** explicit display order 12, 20, 47, 60, 103, 110; two lots per
+minute beginning at 15:00; a group containing 12, 47 and 103.
+
+**Then:** initial minute slots are 15:00, 15:00, 15:01, 15:01, 15:02, 15:02.
+The group's default deadline is 15:02 for all three members. Lots 20, 60 and
+110 retain their slots. No implicit renumbering, adjacency requirement,
+sub-minute staggering, or compaction of remaining lots occurs.
+
+**When:** a new qualifying bid arrives on lot 47 at 15:01 with a three-minute
+trigger window and duration.
+
+**Then:** lots 12, 47 and 103 all close no earlier than 15:04; the other lots
+remain unchanged. Another qualifying group bid at 15:03 moves the group to
+15:06. Group members cannot close separately during the quiet period.
+
+## FLS-20 — Proxy adjustments do not move the clock
+
+**Given:** the preceding group is scheduled for 15:02.
+
+**When:** an existing proxy maximum is raised or reduced at 15:01.
+
+**Then:** all closing times remain unchanged, including when the adjustment
+changes a public projection. Normal bidding validity checks still apply; this
+scenario grants no permission to reduce below an executed floor. The proposed
+capability must distinguish proxy adjustments from new competing bids. Current
+engine behavior and the existing private-only example alone do not certify it.

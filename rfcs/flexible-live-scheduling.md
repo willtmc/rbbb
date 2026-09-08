@@ -25,6 +25,13 @@ deadline, leave minimum-notice policy to the host, and keep immediate forced
 closing and post-close reopening as separate operations. This resolves those
 policy forks without accepting this entire RFC or changing the baseline engine.
 
+Additional maintainer direction: generate initial closing schedules in batches
+of N lots per minute, not evenly spaced sub-minute intervals. Soft-close groups
+may contain nonconsecutive lot numbers. Default a group's initial deadline to
+the latest scheduled deadline among its members, with an explicit override.
+Adjusting an existing proxy authorization must not extend closing. These
+decisions refine this proposal; they do not accept the entire RFC.
+
 [Proposed machine-readable contracts](proposals/flexible-live-scheduling/README.md)
 now define reviewable command, public-change, audit, notification-intent, and
 rejection shapes. Their executable tests validate document structure and example
@@ -80,6 +87,34 @@ the host submits an explicit scheduling command containing the intended result.
 This separation permits simple display-only rearrangement without rewriting
 bidding state, and lets another host implement a different catalog UX while
 using the same engine semantics.
+
+### 2a. Initial closing order and minute batches
+
+The host supplies an explicit ordered list of stable unit IDs, a first closing
+time, and a positive integer N for lots per minute. Positions 1 through N
+receive the first closing time; positions N+1 through 2N receive that time plus
+one minute, and so on. There is no evenly spaced every-60/N-seconds mode in this
+proposal. Displayed lot numbers are labels, not arithmetic positions or group
+identities: gaps and nonnumeric labels do not change the supplied order.
+
+First assign these per-unit scheduled times, then resolve soft-close groups. A
+group's default initial deadline is the latest assigned time of any member.
+All its members share that deadline, including members with nonconsecutive lot
+numbers. Ungrouped lots retain their assigned times. Group formation does not
+compact the remaining minute batches; N controls the initial schedule, not a
+guarantee of how many lots ultimately close in any minute after grouping or
+extensions.
+
+A host may explicitly override the default group deadline. The resolved time
+must be submitted in the scheduling command; the coordinator never guesses it
+from member order. Overrides and later recalculation of a live schedule remain
+subject to the same future-time, shortening-authorization and expected-version
+guards as other schedule changes. Reordering a displayed catalog alone does
+not automatically recalculate an already announced live schedule.
+
+See the [minute-batch examples](proposals/flexible-live-scheduling/minute-batch-examples.json)
+for synthetic nonconsecutive groups, unchanged intervening lots, and proxy
+adjustments. These are proposed examples, not coordinator execution proof.
 
 ### 3. Proposed command surfaces
 
@@ -169,8 +204,13 @@ Within a group, apply RFC 0001's qualifying-bid rule using the group's shared
 trigger window and duration. If a qualifying bid extends closing, the proposed
 new group deadline is the greater of the current group deadline and the
 command's effective time plus duration. Every member changes in the same
-atomic transition. Private-only maximum changes do not create a new qualifying
-extension merely because a unit belongs to a group.
+atomic transition. Adjustments to an existing proxy authorization, including increases or
+reductions of its maximum, do not reset an individual or group closing clock.
+This exclusion is about the operation's meaning, not merely whether its public
+projection changes. A new competing bid may qualify under the accepted bidding
+rules; a proxy adjustment must not be relabeled as a new bid to extend time.
+The future capability must specify and test that distinction before support is
+claimed; this text does not change the current baseline engine.
 
 Changing membership or manually editing a schedule is not a bid and does not
 itself trigger a second automatic extension. The explicitly requested deadline
@@ -231,8 +271,9 @@ unit or stale scheduling revision, but never disclose private bidding values.
   a genuinely necessary earlier deadline impossible without a workaround.
 - **Let hosts rewrite deadlines directly:** flexible initially, but bypasses the
   canonical order, audit trail, replay, and cross-implementation conformance.
-- **Always use the latest member deadline:** safe from accidental shortening,
-  but still a hidden policy choice; this proposal requires an explicit result.
+- **Implicit coordinator choice of a member deadline:** rejected. The host
+  defaults initial group planning to the latest member deadline, but submits
+  the resolved result explicitly; later edits remain deliberate commands.
 - **Use a single auction-wide serialization stream:** straightforward and safe;
   may constrain throughput. It remains an implementation option, not a mandate.
 - **Immediate forced close in the scheduling command:** flexible but combines

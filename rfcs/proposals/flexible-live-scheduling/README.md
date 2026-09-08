@@ -6,6 +6,12 @@ endpoint, engine command, stable capability, or production-readiness claim.
 
 ## Artifacts
 
+- [`minute-batch-examples.json`](minute-batch-examples.json): proposed initial
+  schedule examples for minute batches, nonconsecutive groups and proxy-adjustment
+  exclusions. Separate from the 26 coordinator vectors; fixture checks are not
+  scheduler implementation tests.
+
+
 - [`service-contract.md`](service-contract.md): selected auction-row ordering,
   atomic records/receipts, retry/archive rules, replay mapping and resource profile.
 - [`submission.schema.json`](submission.schema.json): untrusted intent without
@@ -13,7 +19,8 @@ endpoint, engine command, stable capability, or production-readiness claim.
 - [`resource-profile.json`](resource-profile.json): proposed machine-readable
   ceilings, not load-certification evidence.
 - [`behavior-vectors.md`](behavior-vectors.md): 26 vectors / 44 steps with exact
-  expected states and records, covering all 18 review cases. Coordinator
+  expected states and records, covering the original 18 review cases. The new FLS-19/20 planning and
+  proxy-adjustment examples are separate and still need coordinator vectors. Coordinator
   execution remains unimplemented.
 
 - [`contract.schema.json`](contract.schema.json): JSON Schema 2020-12 union of

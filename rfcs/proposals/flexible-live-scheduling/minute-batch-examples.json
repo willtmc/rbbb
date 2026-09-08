@@ -1,0 +1,82 @@
+{
+  "status": "proposed_examples_not_coordinator_execution",
+  "first_close": "2030-01-01T15:00:00Z",
+  "lots_per_minute": 2,
+  "ordered_units": [
+    {
+      "unit_id": "unit-a",
+      "lot_number": "12"
+    },
+    {
+      "unit_id": "unit-b",
+      "lot_number": "20"
+    },
+    {
+      "unit_id": "unit-c",
+      "lot_number": "47"
+    },
+    {
+      "unit_id": "unit-d",
+      "lot_number": "60"
+    },
+    {
+      "unit_id": "unit-e",
+      "lot_number": "103"
+    },
+    {
+      "unit_id": "unit-f",
+      "lot_number": "110"
+    }
+  ],
+  "initial_slots": {
+    "unit-a": "15:00",
+    "unit-b": "15:00",
+    "unit-c": "15:01",
+    "unit-d": "15:01",
+    "unit-e": "15:02",
+    "unit-f": "15:02"
+  },
+  "group_members": [
+    "unit-a",
+    "unit-c",
+    "unit-e"
+  ],
+  "resolved_closes": {
+    "unit-a": "15:02",
+    "unit-b": "15:00",
+    "unit-c": "15:02",
+    "unit-d": "15:01",
+    "unit-e": "15:02",
+    "unit-f": "15:02"
+  },
+  "extension_minutes": 3,
+  "independent_cases": [
+    {
+      "operation": "new_qualifying_bid",
+      "unit_id": "unit-c",
+      "at": "15:01",
+      "expected_group_close": "15:04"
+    },
+    {
+      "operation": "increase_existing_proxy",
+      "unit_id": "unit-c",
+      "at": "15:01",
+      "public_projection_changed": false,
+      "expected_group_close": "15:02"
+    },
+    {
+      "operation": "increase_existing_proxy",
+      "unit_id": "unit-c",
+      "at": "15:01",
+      "public_projection_changed": true,
+      "expected_group_close": "15:02"
+    },
+    {
+      "operation": "reduce_existing_proxy",
+      "unit_id": "unit-e",
+      "at": "15:01",
+      "public_projection_changed": true,
+      "expected_group_close": "15:02"
+    }
+  ]
+}
