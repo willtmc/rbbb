@@ -12,3 +12,9 @@ The [fixed-group host example](shared-group-host.md) composes real engine bids
 with the shared clock, serializes simultaneous requests, and commits retry
 receipts with the result in a process-local store. Its tests cover failures and
 retries; durable database integration remains separate.
+
+## Durable local shared-group host
+
+The [SQLite host example](durable-shared-group-host.md) retains bids, shared
+clock results and retry receipts across process restarts. It tests crash recovery
+and competing local processes; it remains an evaluation adapter outside the gem.
