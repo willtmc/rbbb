@@ -1,0 +1,12 @@
+{
+  "id": "nonconsecutive-shared-quiet-period",
+  "group_id": "group-a",
+  "unit_ids": ["lot-12", "lot-47", "lot-103"],
+  "closes_at": "2030-01-01T13:00:00Z",
+  "quiet_period_seconds": 180,
+  "steps": [
+    {"unit_id": "lot-12", "effective_at": "2030-01-01T12:59:00Z", "expected_closes_at": "2030-01-01T13:02:00Z", "expected_revision": 1},
+    {"unit_id": "lot-47", "effective_at": "2030-01-01T13:01:00Z", "expected_closes_at": "2030-01-01T13:04:00Z", "expected_revision": 2},
+    {"unit_id": "lot-103", "effective_at": "2030-01-01T13:03:00Z", "expected_closes_at": "2030-01-01T13:06:00Z", "expected_revision": 3}
+  ]
+}

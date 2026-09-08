@@ -22,6 +22,7 @@ EXPECTED_FILES = %w[
   lib/rbbb/increment_schedule.rb
   lib/rbbb/initial_closing_schedule.rb
   lib/rbbb/money.rb
+  lib/rbbb/shared_closing_clock.rb
   lib/rbbb/state.rb
   lib/rbbb/timestamp.rb
   lib/rbbb/version.rb
@@ -116,6 +117,13 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
       opens_at: "2030-01-01T12:00:00Z", first_closes_at: "2030-01-01T13:00:00Z",
       lots_per_minute: 2, groups: [{"group_id" => "g", "unit_ids" => %w[a c]}])
     abort "installed planner returned wrong group deadline" unless schedule.fetch("unit_closes_at").fetch("a") == "2030-01-01T13:01:00Z"
+
+    clock = RBBB::SharedClosingClock.new(group_id: "g", unit_ids: %w[a c],
+      closes_at: "2026-09-01T13:00:00Z", quiet_period_seconds: 180)
+    late = engine.decide(state, command_id: "late", type: "place_bid", bidder_id: "challenger",
+      maximum_minor_units: 6_000, effective_at: "2026-09-01T12:59:00Z")
+    extended = clock.after_decision(unit_id: "a", decision: late, expected_revision: 0)
+    abort "installed group clock did not extend" unless RBBB::Timestamp.dump(extended.deadline_for("c")) == "2026-09-01T13:02:00Z"
 
     puts JSON.generate(
       version: RBBB::VERSION,

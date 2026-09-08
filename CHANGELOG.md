@@ -7,6 +7,11 @@ versioned artifacts.
 
 ## Unreleased
 
+- Add the fixed-membership shared closing-clock component. New qualifying bids
+  extend all members; proxy adjustments do not. Atomic host integration remains
+  separate, and baseline per-unit bidding semantics are unchanged.
+
+
 - Add the RFC 0002 initial closing schedule planner: minute batches, arbitrary
   group membership, latest-member defaults and explicit initial overrides.
   This does not add live group coordination or change baseline bids.

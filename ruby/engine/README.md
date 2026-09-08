@@ -135,6 +135,32 @@ This computes a plan only. It cannot change a live auction or provide linked
 soft-close behavior to independent RFC 0001 engines. Live group coordination
 and proxy-adjustment scheduling rules require separate implementation.
 
+## Shared closing clock (unreleased)
+
+`RBBB::SharedClosingClock` is the scoped [RFC 0003](../../rfcs/0003-shared-closing-clock.md)
+clock component for a fixed set of units:
+
+```ruby
+clock = RBBB::SharedClosingClock.new(
+  group_id: "group-a", unit_ids: %w[lot-12 lot-47 lot-103],
+  closes_at: "2030-01-01T15:00:00Z", quiet_period_seconds: 180
+)
+# decision comes from a synchronized unit engine, with independent extension disabled.
+updated = clock.after_decision(unit_id: "lot-47", decision: decision, expected_revision: 0)
+updated.public_view
+```
+
+A new qualifying accepted bid during the quiet period extends the shared
+clock to bid time plus the quiet period; every member reads the same deadline.
+Proxy adjustments and rejected bids do not extend it. Stale revisions,
+unrecognized members, unsynchronized deadlines and time regression are refused.
+
+This is **not a complete linked bidding service**. The host still must synchronize
+per-unit state and atomically commit the entire group transition with events and
+receipts. `due?` only indicates that the common deadline has arrived; it does not
+close outcomes. Live regrouping and group transaction/recovery work are separate.
+See the [component contract](../../specification/shared-closing-clock.md).
+
 ## Install the evaluation gem
 
 Version `0.1.0.pre.3` is an experimental evaluation package. It has no runtime
