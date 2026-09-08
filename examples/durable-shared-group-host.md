@@ -75,7 +75,44 @@ replay mismatch and proxy adjustment after restart.
 
 This implementation replays the entire journal per operation and retains
 unbounded history. It is intended for correctness evaluation, not auction-scale
-load. Checkpointing, durable notification delivery, group outcome commits,
+load. Checkpointing, durable notification delivery,
 live regrouping, authentication, backups and operational recovery tooling remain
 separate work. It is not a deployed bidding service or a production-readiness
 claim. Keep the adapter and engine source pinned when reopening existing data.
+
+## Closing all members together
+
+After the shared deadline, a scheduler can call:
+
+```ruby
+receipt = host.close_group(command_id: "group-close-a",
+  effective_at: "2030-01-01T13:02:00Z", expected_revision: 1)
+receipt.public_units # sold, no_sale or no_bid outcome for every member
+```
+
+Use the current clock revision from `public_view`. The host refuses an early or
+stale close. It evaluates each member's existing `close_bidding` command against
+the shared deadline in stable ID order, then commits all resulting decisions in
+one journal row. The engine still computes each member's own winner and price;
+this adapter adds no pricing rules or new engine events. If any member refuses
+closing, none of the prepared outcomes is published. Scheduler validation failures
+are exceptions without a saved receipt; the scheduler can try again when due.
+
+The group close uses the same command-ID namespace as bids. An identical retry
+returns the original per-member decisions after restart; changed request reuse
+is refused. A new close request against already-closed members is refused. Bids
+after committed closing receive the existing engine's closed rejection. Bid and
+close processing use the same database write lock, so their race cannot publish
+part of a group close. A close retains the shared clock revision; members' closed
+states prevent further bidding.
+
+`CloseReceipt#decisions` contains privileged engine records, including winner
+identities and private maxima. Publish only `public_units`/`clock`. Original
+member events are retained separately within the single durable group receipt.
+Old bid-only journal rows keep their existing representation and replay path;
+new group-close rows require this updated adapter when reopening the database.
+
+Run `bundle exec ruby -Ilib:test test/durable_group_close_test.rb` from
+`ruby/engine` for mixed outcomes, shared-deadline enforcement, member refusal,
+restart/retry, actual process crashes, competing processes and privacy tests.
+Notification delivery and external invoicing remain separate from this commit.

@@ -57,7 +57,7 @@ repeated extensions, simultaneous duplicate/distinct requests, failed publicatio
 retries, projection reconstruction, proxy adjustments, stale requests and privacy.
 
 This store is volatile, single-process, and retains unbounded history. It does
-not survive restart, coordinate multiple servers, implement group outcome commits,
+not survive restart, coordinate multiple servers,
 regroup membership, or deliver notifications. A production adapter must replace
 publication with one durable transaction and group-wide lock/CAS covering state,
 clock, receipts and an event outbox. Authentication, authoritative time assignment,
@@ -67,3 +67,8 @@ implementation and tests. No database or deployment guarantee is claimed here.
 A [separate SQLite adapter](durable-shared-group-host.md) now demonstrates local
 durable transactions and restart recovery using this host. Its documented
 limits still apply; this in-memory class remains unchanged.
+
+`close_group(command_id:, effective_at:, expected_revision:)` now composes all
+member closing decisions before publishing one snapshot. See the
+[durable adapter closing flow](durable-shared-group-host.md#closing-all-members-together)
+for deadline, retry, privacy and atomicity behavior.

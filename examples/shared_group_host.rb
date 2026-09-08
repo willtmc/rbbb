@@ -5,6 +5,7 @@ module RBBBExamples
   # Process-local reference host; not durable storage or a public service API.
   class SharedGroupHost
     Receipt = Struct.new(:decision, :clock, :public_units, keyword_init: true)
+    CloseReceipt = Struct.new(:decisions, :clock, :public_units, keyword_init: true)
     Snapshot = Struct.new(:states, :clock, :receipts, :event_batches, keyword_init: true)
 
     def initialize(configurations:, clock:)
@@ -59,6 +60,43 @@ module RBBBExamples
       end
     end
 
+    # Compose existing close_bidding decisions; publish only when all succeed.
+    def close_group(command_id:, effective_at:, expected_revision:)
+      request = normalize_close_request(command_id, effective_at, expected_revision)
+      @mutex.synchronize do
+        before = @snapshot
+        if (saved = before.receipts[command_id])
+          raise ArgumentError, "command ID reused for a different request" unless saved.first == request
+          return saved.last
+        end
+        unless expected_revision == before.clock.revision
+          raise RBBB::InvalidState, "stale clock revision"
+        end
+        unless before.clock.due?(at: request.fetch("command").fetch("effective_at"))
+          raise RBBB::InvalidState, "shared closing time not reached"
+        end
+        states = before.states.dup
+        decisions = {}
+        batches = before.event_batches.dup
+        @engines.keys.sort.each do |id|
+          engine = @engines.fetch(id)
+          state = synchronized_state(states.fetch(id), before.clock)
+          decision = engine.decide(state, request.fetch("command"))
+          raise RBBB::InvalidState, "member close refused: #{decision.rejection.fetch('reason')}" if decision.rejected?
+          states[id] = engine.apply(state, decision.events)
+          decisions[id] = decision
+          batches << {"unit_id" => id, "events" => decision.events, "clock" => before.clock}.freeze
+        end
+        receipt = CloseReceipt.new(decisions: decisions.freeze,
+          clock: before.clock.public_view.transform_values { |v| v.freeze }.freeze,
+          public_units: public_units(states, before.clock)).freeze
+        receipts = before.receipts.merge(request.fetch("command").fetch("command_id") => [request, receipt].freeze).freeze
+        publish(Snapshot.new(states: states.freeze, clock: before.clock,
+          receipts: receipts, event_batches: batches.freeze).freeze)
+        receipt
+      end
+    end
+
     def public_view
       @mutex.synchronize { public_units(@snapshot.states, @snapshot.clock) }
     end
@@ -79,6 +117,16 @@ module RBBBExamples
       states.to_h do |id, state|
         [id, synchronized_state(state, clock).public_view.transform_values { |v| v.freeze }.freeze]
       end.freeze
+    end
+
+    def normalize_close_request(command_id, effective_at, revision)
+      unless command_id.is_a?(String) && !command_id.empty? && revision.is_a?(Integer)
+        raise ArgumentError, "invalid close request"
+      end
+      time = RBBB::Timestamp.dump(RBBB::Timestamp.parse(effective_at)).freeze
+      {"operation" => "close_group", "expected_revision" => revision,
+        "command" => {"command_id" => command_id.dup.freeze,
+          "type" => "close_bidding", "effective_at" => time}.freeze}.freeze
     end
 
     def normalize_request(unit_id, command, revision)

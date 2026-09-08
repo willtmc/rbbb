@@ -36,12 +36,17 @@ module RBBBExamples
         request = host.send(:normalize_request, unit_id, command, expected_revision)
         receipt = host.submit(unit_id: request.fetch("unit_id"), command: request.fetch("command"),
           expected_revision: expected_revision)
-        id = request.fetch("command").fetch("command_id")
-        unless db.get_first_value("SELECT 1 FROM commits WHERE command_id = ?", [id])
-          db.execute("INSERT INTO commits (command_id, request, result) VALUES (?, ?, ?)",
-            [id, canonical(request), canonical(receipt_document(receipt))])
-          before_commit(db)
-        end
+        persist(db, request, receipt)
+        receipt
+      end
+    end
+
+    def close_group(command_id:, effective_at:, expected_revision:)
+      transaction do |db|
+        host = restore(db)
+        request = host.send(:normalize_close_request, command_id, effective_at, expected_revision)
+        receipt = dispatch(host, request)
+        persist(db, request, receipt)
         receipt
       end
     end
@@ -72,8 +77,7 @@ module RBBBExamples
       db.execute("SELECT command_id, request, result FROM commits ORDER BY sequence").each do |id, request_json, expected|
         request = JSON.parse(request_json)
         raise RBBB::InvalidState, "journal command identity mismatch" unless request.fetch("command").fetch("command_id") == id
-        receipt = host.submit(unit_id: request.fetch("unit_id"), command: request.fetch("command"),
-          expected_revision: request.fetch("expected_revision"))
+        receipt = dispatch(host, request)
         unless canonical(receipt_document(receipt)) == expected
           raise RBBB::InvalidState, "journal replay differs from committed result"
         end
@@ -81,7 +85,34 @@ module RBBBExamples
       host
     end
 
+    def persist(db, request, receipt)
+      id = request.fetch("command").fetch("command_id")
+      return if db.get_first_value("SELECT 1 FROM commits WHERE command_id = ?", [id])
+      db.execute("INSERT INTO commits (command_id, request, result) VALUES (?, ?, ?)",
+        [id, canonical(request), canonical(receipt_document(receipt))])
+      before_commit(db)
+    end
+
+    def dispatch(host, request)
+      case request["operation"]
+      when nil
+        host.submit(unit_id: request.fetch("unit_id"), command: request.fetch("command"),
+          expected_revision: request.fetch("expected_revision"))
+      when "close_group"
+        host.close_group(command_id: request.fetch("command").fetch("command_id"),
+          effective_at: request.fetch("command").fetch("effective_at"),
+          expected_revision: request.fetch("expected_revision"))
+      else
+        raise RBBB::InvalidState, "unknown journal operation"
+      end
+    end
+
     def receipt_document(receipt)
+      if receipt.is_a?(SharedGroupHost::CloseReceipt)
+        return {"decisions" => receipt.decisions.transform_values { |decision|
+          {"events" => decision.events.map { |event| {"visibility" => event.visibility.to_s, "data" => event.to_h} }}
+        }, "clock" => receipt.clock, "units" => receipt.public_units}
+      end
       {"events" => receipt.decision.events.map { |event| {"visibility" => event.visibility.to_s, "data" => event.to_h} },
         "rejection" => receipt.decision.rejection, "clock" => receipt.clock, "units" => receipt.public_units}
     end
