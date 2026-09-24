@@ -501,6 +501,7 @@
             "invalid_schedule",
             "invalid_extension_policy",
             "shortening_not_allowed",
+            "shortening_lead_too_short",
             "not_authorized",
             "elapsed_or_closed_unit",
             "effective_at_out_of_order",
@@ -510,6 +511,27 @@
             "auction_sealed",
             "version_exhausted",
             "no_change"
+          ]
+        }
+      }
+    },
+    "scheduling_policy": {
+      "description": "Trusted per-auction host policy, fixed before the auction accepts scheduling commands. Not part of any submitted intent.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_shortening_lead_seconds"
+      ],
+      "properties": {
+        "minimum_shortening_lead_seconds": {
+          "description": "A shortened deadline must be at least this many seconds after the command's authoritative effective time. Positive; extensions are not subject to it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/revision"
+            },
+            {
+              "minimum": 1
+            }
           ]
         }
       }

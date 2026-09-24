@@ -21,7 +21,8 @@ is accepted, specified, tested, and implemented.
 ## Maintainer direction recorded for the next draft
 
 The approved direction is to permit explicit shortening to a strictly future
-deadline, leave minimum-notice policy to the host, and keep immediate forced
+deadline, let the host choose the minimum shortening lead (which the
+coordinator then enforces), and keep immediate forced
 closing and post-close reopening as separate operations. This resolves those
 policy forks without accepting this entire RFC or changing the baseline engine.
 
@@ -29,8 +30,17 @@ Additional maintainer direction: generate initial closing schedules in batches
 of N lots per minute, not evenly spaced sub-minute intervals. Soft-close groups
 may contain nonconsecutive lot numbers. Default a group's initial deadline to
 the latest scheduled deadline among its members, with an explicit override.
-Adjusting an existing proxy authorization must not extend closing. These
-decisions refine this proposal; they do not accept the entire RFC.
+The current leader adjusting their own proxy authorization must not extend
+closing. These decisions refine this proposal; they do not accept the entire RFC.
+
+Maintainer review (2026-09-24) narrowed two of those decisions before
+acceptance. First, the non-extending adjustment covers only the current
+leader's own changes; any accepted command that changes the leader is a
+qualifying bid, so an outbid bidder cannot raise an existing maximum in the
+final seconds to take the lead without triggering the extension. Second, the
+coordinator enforces a trusted, per-auction minimum shortening lead. A
+strictly future deadline alone would permit a one-millisecond shortening,
+which is a forced close in everything but name.
 
 [Proposed machine-readable contracts](proposals/flexible-live-scheduling/README.md)
 now define reviewable command, public-change, audit, notification-intent, and
@@ -160,7 +170,17 @@ core. The expected versions bind approval to the inspected state; a new bid or
 concurrent edit makes that preview stale rather than silently broadening it.
 
 The proposed scheduling operations accept only new deadlines strictly later
-than their authoritative effective time and the unit's opening time. They do
+than their authoritative effective time and the unit's opening time.
+
+A shortened deadline must also be at least the auction's
+`minimum_shortening_lead_seconds` after the command's authoritative effective
+time; otherwise the operation rejects as `shortening_lead_too_short`. The host
+chooses the value (a positive integer; a sensible default is at least the
+extension duration) and fixes it in trusted per-auction scheduling policy
+before the auction accepts scheduling commands. It is never part of a
+submitted intent, and a request cannot lower it. Deadlines that do not shorten
+any unit are not subject to it. Attaching a unit to a group whose deadline is
+earlier than the unit's own counts as shortening that unit. They do
 not backdate closure, and they do not provide a disguised immediate-close
 operation. An already elapsed deadline cannot be extended through a late
 schedule edit merely because a background close command has not run yet.
@@ -204,13 +224,24 @@ Within a group, apply RFC 0001's qualifying-bid rule using the group's shared
 trigger window and duration. If a qualifying bid extends closing, the proposed
 new group deadline is the greater of the current group deadline and the
 command's effective time plus duration. Every member changes in the same
-atomic transition. Adjustments to an existing proxy authorization, including increases or
-reductions of its maximum, do not reset an individual or group closing clock.
-This exclusion is about the operation's meaning, not merely whether its public
-projection changes. A new competing bid may qualify under the accepted bidding
-rules; a proxy adjustment must not be relabeled as a new bid to extend time.
-The future capability must specify and test that distinction before support is
-claimed; this text does not change the current baseline engine.
+atomic transition.
+
+The current leader's own adjustments to their proxy authorization, increases
+or reductions of their maximum, do not reset an individual or group closing
+clock, even when the public projection changes (for example, a raise that
+crosses the reserve and moves the price to it). This departs from RFC 0001,
+where any change to the public standing amount qualifies, and applies only
+under this capability. A reduction cannot go below the executed floor, so in
+practice it never changes the public result.
+
+Every other accepted bidding command follows RFC 0001's qualifying rule. In
+particular, any accepted command that changes the leader is a qualifying bid,
+whether it is a new bidder's first maximum or an outbid bidder raising an
+existing one. Otherwise a bidder could hold a token early bid and raise it in
+the final seconds to take the lead with no chance for others to respond. The
+test is who led before the command, evaluated in authoritative order, not how
+the host labels the request. This text does not change the current baseline
+engine.
 
 Changing membership or manually editing a schedule is not a bid and does not
 itself trigger a second automatic extension. The explicitly requested deadline
@@ -254,7 +285,8 @@ A lost response cannot cause a retry to duplicate events or notification intent.
 
 Proposed rejection categories include stale revision/version, incomplete affected
 set, duplicate membership, conflicting group definitions, invalid schedule/policy,
-shortening not explicitly authorized, elapsed/closed unit, out-of-order time,
+shortening not explicitly authorized, shortening inside the minimum lead,
+elapsed/closed unit, out-of-order time,
 and unsupported capability. Closed codes are defined in the proposed contract
 schema; rejection precedence and control-plane receipt retention are specified
 in the service contract.
@@ -287,7 +319,7 @@ synthetic inputs and observable outcomes for normal edits, shortening, stale
 previews, partial group changes, ordering races, crash/retry, privacy, and close.
 They are intentionally outside the executable accepted conformance suite.
 
-They now have [26 machine-readable behavioral vectors covering 44 steps](proposals/flexible-live-scheduling/behavior-vectors.md),
+They now have [29 machine-readable behavioral vectors covering 47 steps](proposals/flexible-live-scheduling/behavior-vectors.md),
 including complete seeded unit states, exact expected resulting states, and
 public/privileged record batches. Fixture checks replay the independent-unit
 seed/bid/close portions and validate the proposed shapes. They do not execute a
@@ -334,6 +366,7 @@ or production-readiness claim is made by publishing this proposed RFC.
    checks do not satisfy coordinator conformance.
 
 Immediate forced closing, post-close reopening, already-invoiced outcomes, and
-correction workflows remain separate scope. Minimum notice lead time remains
-host policy; this scheduling capability requires a strictly future deadline,
-explicit shortening authorization, and durable notification intent.
+correction workflows remain separate scope. The host chooses the minimum
+shortening lead; this scheduling capability enforces it, together with a
+strictly future deadline, explicit shortening authorization, and durable
+notification intent.

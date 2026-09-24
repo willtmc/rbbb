@@ -22,6 +22,8 @@ fully reproducible synthetic bid sequences in executable scenarios.
   duration. Explicit resulting policies are included with topology changes.
 - Expected revisions refer to the actual current scheduling/unit revisions
   unless a scenario deliberately makes them stale.
+- The auction's trusted scheduling policy sets
+  `minimum_shortening_lead_seconds` to 180 (equal to the extension duration).
 - Actor `operator-demo` is authorized by the host, except in the unauthorized
   case. Reasons are privileged, not public strings.
 - A successful manual change emits exactly one logical scheduling commit and
@@ -104,9 +106,10 @@ the two existing times is not treated as an extension-only operation.
 **When:** a schedule operation requests 11:59:59.999 or exactly 12:00, even with
 shortening permission.
 
-**Then:** reject with unchanged state. A deadline of 12:00:00.001 is a strictly
-future candidate under this proposal, subject to all other guards. The policy
-question of a minimum notice interval remains explicitly open in the RFC.
+**Then:** reject with unchanged state as an invalid schedule. A deadline of
+12:00:00.001 is strictly future but still rejects, as
+`shortening_lead_too_short`: it falls inside the 180-second minimum shortening
+lead (see FLS-22). Strictly future is necessary, not sufficient.
 
 ## FLS-08 — A delayed close worker does not authorize resurrection
 
@@ -247,10 +250,37 @@ remain unchanged. Another qualifying group bid at 15:03 moves the group to
 
 **Given:** the preceding group is scheduled for 15:02.
 
-**When:** an existing proxy maximum is raised or reduced at 15:01.
+**When:** the current leader raises or reduces their own existing maximum at 15:01.
 
-**Then:** all closing times remain unchanged, including when the adjustment
-changes a public projection. Normal bidding validity checks still apply; this
-scenario grants no permission to reduce below an executed floor. The proposed
-capability must distinguish proxy adjustments from new competing bids. Current
-engine behavior and the existing private-only example alone do not certify it.
+**Then:** all closing times remain unchanged, including when a raise crosses the
+reserve and moves the public price to it. Normal bidding validity checks still
+apply; a reduction cannot go below the executed floor, so it never changes the
+public result. This exemption covers only the current leader's own adjustments
+(see FLS-21). Current engine behavior and the existing private-only example
+alone do not certify it.
+
+## FLS-21 — An outbid bidder raising to take the lead extends the group
+
+**Given:** A and B share `group-left` closing at 15:00. On A, `bidder-a` leads
+with a 3,000 maximum; `bidder-y` was outbid with an existing 1,500 maximum.
+
+**When:** at 14:59, `bidder-y` raises their existing maximum to 4,000.
+
+**Then:** `bidder-y` takes the lead at 3,100. This is a qualifying bid, not a
+proxy adjustment: A and B both extend to 15:02 in one atomic transition.
+Labeling the request as an "increase" does not exempt it; the test is whether
+the command changes the leader. Without this rule a bidder could hold a token
+early bid and take the lead in the final seconds with no extension.
+
+## FLS-22 — Minimum shortening lead boundary
+
+**Given:** A closes at 15:00; authoritative time is 12:00; the auction's
+minimum shortening lead is 180 seconds.
+
+**When:** an authorized operation that explicitly allows shortening requests
+12:03:00, or separately 12:02:59.999.
+
+**Then:** 12:03:00 (exactly the minimum) commits normally. 12:02:59.999 rejects
+as `shortening_lead_too_short` with unchanged state and no notification
+intent. The lead comes from trusted per-auction policy, never from the
+request. Extensions are not subject to it.

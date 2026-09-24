@@ -2,6 +2,7 @@
 
 require_relative "test_helper"
 require_relative "support/schema_assertions"
+require "time"
 
 # Checks fixture integrity and the already-accepted independent-unit portions.
 # NO scheduling coordinator is invoked. Passing is not behavioral certification.
@@ -22,9 +23,9 @@ class FlexibleSchedulingVectorsTest < Minitest::Test
   end
 
   def test_all_review_cases_have_identifiable_unverified_vectors
-    assert_equal (1..18).map { |i| format("FLS-%02d", i) }, @vectors.map { |v| v.fetch("review_case") }.uniq.sort
-    assert_equal 26, @vectors.size
-    assert_equal 44, @vectors.sum { |v| v.fetch("steps").size }
+    assert_equal [*1..18, 21, 22].map { |i| format("FLS-%02d", i) }, @vectors.map { |v| v.fetch("review_case") }.uniq.sort
+    assert_equal 29, @vectors.size
+    assert_equal 47, @vectors.sum { |v| v.fetch("steps").size }
     assert_equal @vectors.size, @vectors.map { |v| v.fetch("id") }.uniq.size
     @vectors.each { |v| assert_equal "proposed_behavior_not_coordinator_verified", v.fetch("status") }
   end
@@ -158,6 +159,45 @@ class FlexibleSchedulingVectorsTest < Minitest::Test
         before = expected.fetch("state")
       end
     end
+  end
+
+  def test_accepted_shortening_respects_the_trusted_minimum_lead
+    @vectors.each { |vector| document("scheduling_policy", vector.fetch("scheduling_policy")) }
+    each_step do |vector, before, action, expected|
+      next unless action.fetch("kind") == "operator_edit" && expected.fetch("new_records").any?
+
+      lead = vector.fetch("scheduling_policy").fetch("minimum_shortening_lead_seconds")
+      earliest = Time.iso8601(action.fetch("command").fetch("effective_at")) + lead
+      action.fetch("command").fetch("resulting_closing_sets").each do |closing_set|
+        closes_at = Time.iso8601(closing_set.fetch("closes_at"))
+        closing_set.fetch("member_unit_ids").each do |unit_id|
+          next unless closes_at < Time.iso8601(before.fetch("units").fetch(unit_id).fetch("closes_at"))
+
+          assert_operator closes_at, :>=, earliest, "#{vector.fetch('id')} shortens #{unit_id} inside the minimum lead"
+        end
+      end
+    end
+  end
+
+  def test_minimum_lead_boundary_accepts_exactly_the_lead_and_rejects_one_millisecond_less
+    outcomes = @vectors.select { |v| v.fetch("review_case") == "FLS-22" }.to_h do |vector|
+      [vector.fetch("id"), vector.fetch("steps").first.fetch("expected").fetch("rejection_reason")]
+    end
+    assert_equal({"FLS-22-minimum" => nil, "FLS-22-short" => "shortening_lead_too_short"}, outcomes)
+    assert_equal "shortening_lead_too_short", @vectors.find { |v| v.fetch("id") == "FLS-07-future" }.fetch("steps").first.fetch("expected").fetch("rejection_reason")
+    assert_raises(Minitest::Assertion) { document("scheduling_policy", {"minimum_shortening_lead_seconds" => 0}) }
+    refute_includes @submission.fetch("properties").keys, "minimum_shortening_lead_seconds"
+  end
+
+  def test_non_leader_raise_that_takes_the_lead_extends_the_whole_group
+    step = @vectors.find { |v| v.fetch("id") == "FLS-21" }.fetch("steps").first
+    assert_equal "bid", step.fetch("action").fetch("kind")
+    events = step.fetch("expected").fetch("new_records").select { |r| r.key?("unit_id") }.map { |r| r.fetch("event") }
+    assert_equal %w[maximum_increased standing_bid_changed closing_time_changed], events.map { |e| e.fetch("type") }
+    assert events.find { |e| e.fetch("type") == "standing_bid_changed" }.fetch("leader_changed")
+    group = step.fetch("expected").fetch("state").fetch("closing_sets").find { |set| set["group_id"] == "group-left" }
+    assert_equal %w[unit-a unit-b], group.fetch("member_unit_ids")
+    assert_equal "2031-04-17T15:02:00Z", group.fetch("closes_at")
   end
 
   def test_submission_cannot_supply_server_identity_or_clock

@@ -102,7 +102,8 @@ requests, stopping at the first failure:
 7. elapsed or terminal units;
 8. out-of-order trusted time (defense for embedded callers);
 9. invalid extension policy or invalid requested deadline;
-10. shortening permission and explicit shortening intent;
+10. shortening permission and explicit shortening intent, then the minimum
+    shortening lead (`shortening_lead_too_short`);
 11. no scheduling effect;
 12. revision exhaustion and encoded batch limits.
 
@@ -131,7 +132,13 @@ affect. A deployment may advertise
 a smaller immutable profile for an auction before accepting commands. Profile
 changes cannot invalidate an in-flight preview: apply a different profile only
 at an explicit sealed migration boundary or to new auctions. Previews return the
-profile identity. A host must never split one promised atomic operation into
+profile identity.
+
+The auction's scheduling policy (`minimum_shortening_lead_seconds`, see
+`$defs/scheduling_policy` in the contract schema) follows the same rule: the
+host fixes it before the auction accepts scheduling commands, and it changes
+only at an explicit sealed migration boundary. Previews return it so an
+operator sees the earliest permitted shortened deadline before confirming. A host must never split one promised atomic operation into
 several smaller writes as an overflow workaround.
 
 The request-byte limit bounds parsing work; the discovered-unit limit bounds

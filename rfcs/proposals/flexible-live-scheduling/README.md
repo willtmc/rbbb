@@ -8,7 +8,8 @@ endpoint, engine command, stable capability, or production-readiness claim.
 
 - [`minute-batch-examples.json`](minute-batch-examples.json): proposed initial
   schedule examples for minute batches, nonconsecutive groups and proxy-adjustment
-  exclusions. Separate from the 26 coordinator vectors; fixture checks are not
+  exclusions, labeled by bidder role (only the current leader's own adjustment
+  is non-extending). Separate from the 29 coordinator vectors; fixture checks are not
   scheduler implementation tests.
 
 
@@ -18,8 +19,10 @@ endpoint, engine command, stable capability, or production-readiness claim.
   caller-supplied principal or authoritative time.
 - [`resource-profile.json`](resource-profile.json): proposed machine-readable
   ceilings, not load-certification evidence.
-- [`behavior-vectors.md`](behavior-vectors.md): 26 vectors / 44 steps with exact
-  expected states and records, covering the original 18 review cases. The new FLS-19/20 planning and
+- [`behavior-vectors.md`](behavior-vectors.md): 29 vectors / 47 steps with exact
+  expected states and records, covering the original 18 review cases plus FLS-21
+  (outbid bidder takes the lead and extends the group) and FLS-22 (minimum
+  shortening lead boundary). The FLS-19/20 planning and
   proxy-adjustment examples are separate and still need coordinator vectors. Coordinator
   execution remains unimplemented.
 
@@ -45,7 +48,9 @@ Both `revise_closing_schedule` and `reconfigure_closing_groups` include:
 
 - command/auction/operator IDs and authoritative effective time;
 - `expected_schedule_revision` and a nonempty `expected_units` version vector;
-- a nonblank privileged reason and an explicit `allow_shortening` boolean;
+- a nonblank privileged reason and an explicit `allow_shortening` boolean
+  (the minimum shortening lead is trusted per-auction policy,
+  `$defs/scheduling_policy`, never a request field);
 - `resulting_closing_sets`, the complete requested partition of affected units;
 - `retired_group_ids`, explicitly empty when no groups are retired.
 

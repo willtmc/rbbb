@@ -1,7 +1,7 @@
 # Behavioral vector format and execution boundary
 
-[`behavior-vectors.jsonl`](behavior-vectors.jsonl) contains **26 invented vectors,
-44 steps**, covering all 18 review cases, with branches for equal timestamps,
+[`behavior-vectors.jsonl`](behavior-vectors.jsonl) contains **29 invented vectors,
+47 steps**, covering the 18 original review cases plus FLS-21 and FLS-22, with branches for equal timestamps,
 elapsed versus terminal units, immediate versus future deadlines, incomplete
 versus duplicate membership, and committed/rolled-back/rejected retries.
 
@@ -9,6 +9,9 @@ Each JSONL line is one independent case. No real auction records were used.
 
 ## Inputs and exact expectations
 
+- `scheduling_policy` is trusted per-auction configuration
+  (`minimum_shortening_lead_seconds`, 180 in every vector). It is fixed before
+  the auction accepts scheduling commands and never comes from a submission.
 - `unit_setup` supplies complete configurations and actual baseline command
   sequences. Empty new units have empty command sequences, not fabricated bids.
   The independent engine reconstructs every starting unit exactly.
@@ -45,7 +48,9 @@ records are separate projections and do not advance unit versions twice.
 
 `test/flexible_scheduling_vectors_test.rb` checks:
 
-- all 18 review case IDs are covered and every vector is explicitly unverified;
+- all 20 review case IDs are covered and every vector is explicitly unverified;
+- every vector declares a schema-valid trusted `scheduling_policy`, and every
+  accepted shortening lands at or after `effective_at` plus its minimum lead;
 - every initial snapshot is reproducible from independently authored baseline commands;
 - every expected unit snapshot is valid, with coherent complete membership/deadlines;
 - closed command/event/submission shapes and preservation of private bidding

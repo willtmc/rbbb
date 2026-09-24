@@ -55,12 +55,16 @@
       "operation": "new_qualifying_bid",
       "unit_id": "unit-c",
       "at": "15:01",
+      "bidder_role": "new_bidder",
+      "leader_changed": true,
       "expected_group_close": "15:04"
     },
     {
       "operation": "increase_existing_proxy",
       "unit_id": "unit-c",
       "at": "15:01",
+      "bidder_role": "current_leader",
+      "leader_changed": false,
       "public_projection_changed": false,
       "expected_group_close": "15:02"
     },
@@ -68,14 +72,30 @@
       "operation": "increase_existing_proxy",
       "unit_id": "unit-c",
       "at": "15:01",
+      "bidder_role": "current_leader",
+      "leader_changed": false,
       "public_projection_changed": true,
+      "note": "Leader raise that crosses reserve; the public price jumps to reserve but the leader is unchanged.",
       "expected_group_close": "15:02"
+    },
+    {
+      "operation": "increase_existing_proxy",
+      "unit_id": "unit-c",
+      "at": "15:01",
+      "bidder_role": "non_leader",
+      "leader_changed": true,
+      "public_projection_changed": true,
+      "note": "An outbid bidder raising an existing maximum to take the lead is a qualifying bid, not an adjustment.",
+      "expected_group_close": "15:04"
     },
     {
       "operation": "reduce_existing_proxy",
       "unit_id": "unit-e",
       "at": "15:01",
-      "public_projection_changed": true,
+      "bidder_role": "current_leader",
+      "leader_changed": false,
+      "public_projection_changed": false,
+      "note": "A reduction cannot go below the executed floor, so it cannot change the public result.",
       "expected_group_close": "15:02"
     }
   ]
