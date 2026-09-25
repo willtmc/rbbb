@@ -1,10 +1,24 @@
-# Proposed RFC: Flexible live scheduling and closing groups
+# RFC 0004: Flexible live scheduling and closing groups
 
-- Status: proposed; not accepted or implemented
-- Author: RBBB contributors, for maintainer review
+- Status: accepted (contract); coordinator not implemented
+- Author: RBBB contributors
+- Maintainer decision: Will McLemore, 2026-09-24
 - Created: 2026-09-05
-- Specification target: future optional capability; identifier and version unassigned
-- Discussion: [issue #33](https://github.com/willtmc/rbbb/issues/33)
+- Accepted: 2026-09-24
+- Specification target: future optional capability `flexible_live_scheduling_draft_1`
+- Discussion: [issue #33](https://github.com/willtmc/rbbb/issues/33), PR #34
+
+## Decision
+
+The maintainer accepts this contract: the intended semantics, command and event
+shapes, rejection codes, behavioral vectors, reference-service transaction
+contract, and initial resource profile. This is agreement on behavior, not
+certification of code. No implementation may advertise the capability until it
+passes the acceptance gates under Compatibility. Acceptance does not authorize
+a package release or live bidding.
+
+This decision amends [RFC 0003](0003-shared-closing-clock.md): its clock now
+follows the narrowed proxy-adjustment rule in section 6.
 
 ## Summary
 
@@ -42,7 +56,7 @@ coordinator enforces a trusted, per-auction minimum shortening lead. A
 strictly future deadline alone would permit a one-millisecond shortening,
 which is a forced close in everything but name.
 
-[Proposed machine-readable contracts](proposals/flexible-live-scheduling/README.md)
+[Machine-readable contracts](proposals/flexible-live-scheduling/README.md)
 now define reviewable command, public-change, audit, notification-intent, and
 rejection shapes. Their executable tests validate document structure and example
 consistency only; there is not yet a scheduling coordinator or behavioral
@@ -344,26 +358,27 @@ RFC 0001's `change_closing_time`. Baseline implementations continue rejecting
 post-bid shortening and do not claim linked-group support. An unsupported host
 must reject these operations, not decompose them into unsafe independent edits.
 
-RFC acceptance requires maintainer agreement on the proposed capability,
-schemas, behavioral vectors, and transaction contract before implementation of
-new semantics. Advertising implementation support is a later gate: updated
+Maintainer agreement on the capability, schemas, behavioral vectors, and
+transaction contract was recorded on 2026-09-24. Advertising implementation
+support is a later gate: updated
 specifications, every behavioral vector executed against the coordinator,
 service transaction/failure coverage, and migration guidance. This separates
 agreement on the contract from certification of code implementing it. Stable
 units must retain compatible private state across topology revisions. No release
-or production-readiness claim is made by publishing this proposed RFC.
+or production-readiness claim is made by accepting this RFC.
 
-## Unresolved questions
+## Remaining work
 
-1. Review the proposed command/event names, capability identifier, and exact
-   revision-vector schemas before treating them as a compatibility promise.
-2. Review the selected auction-row transaction boundary, permanent receipt
-   retention while mutable, and complete-commit replay contract.
-3. Review the initial 4,096-unit / 4 MiB submission / 16 MiB batch ceilings and
-   16-level parsing bound. These are proposed limits, not measured capacity.
-4. Approve the behavioral vectors, then implement the coordinator and execute
-   them plus the service concurrency/failure gates. Fixture and independent-unit
-   checks do not satisfy coordinator conformance.
+Accepted with this RFC: the command/event names and capability token, the
+revision-vector schemas, the auction-row transaction boundary, permanent
+receipt retention while mutable, complete-commit replay, and the initial
+4,096-unit / 4 MiB submission / 16 MiB batch / 16-level parsing profile. The
+profile limits are still unmeasured, not capacity claims.
+
+Still required before support can be claimed: implement the coordinator, execute
+every behavioral vector against it, and pass the service concurrency/failure
+gates. Fixture and independent-unit checks do not satisfy coordinator
+conformance.
 
 Immediate forced closing, post-close reopening, already-invoiced outcomes, and
 correction workflows remain separate scope. The host chooses the minimum

@@ -1,15 +1,15 @@
-# Flexible live scheduling: proposed conformance scenarios
+# Flexible live scheduling: accepted review scenarios
 
-These are **draft review scenarios**, not accepted conformance requirements or
-executable certification. They accompany the [proposed RFC](../flexible-live-scheduling.md).
+These review scenarios were accepted with RFC 0004 on 2026-09-24. They are not
+yet executable certification: no coordinator runs them. They accompany [RFC 0004](../0004-flexible-live-scheduling.md).
 All identifiers, dates, and situations below are invented. No real auction data
 or proprietary payloads are used.
 
-The command/event names are provisional. Before acceptance, expand each scenario
+The command/event names were accepted with RFC 0004. Each scenario was expanded
 into exact schema-validated configurations, commands, event batches, rejections,
 and final public/privileged state expectations. Existing valid bid states are
-represented here as `S_A`, `S_B`, and `S_C`; those symbols must be replaced with
-fully reproducible synthetic bid sequences in executable scenarios.
+represented here as `S_A`, `S_B`, and `S_C`; `behavior-vectors.jsonl` replaces them with
+fully reproducible synthetic bid sequences.
 
 ## Common review setup
 

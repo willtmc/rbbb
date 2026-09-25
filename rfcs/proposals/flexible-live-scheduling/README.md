@@ -1,7 +1,7 @@
 # Proposed scheduling contracts
 
-Status: **proposed, not accepted or implemented**. These documents accompany
-[the live-scheduling RFC](../../flexible-live-scheduling.md). They do not add an
+Status: **accepted contract (RFC 0004, 2026-09-24); not implemented**. These documents accompany
+[the live-scheduling RFC](../../0004-flexible-live-scheduling.md). They do not add an
 endpoint, engine command, stable capability, or production-readiness claim.
 
 ## Artifacts

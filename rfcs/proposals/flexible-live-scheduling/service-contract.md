@@ -1,8 +1,8 @@
-# Proposed reference-service transaction contract
+# Reference-service transaction contract
 
-Status: **proposed; no service implementation or load certification**.
-This resolves the initial design choices in the [RFC](../../flexible-live-scheduling.md),
-not the acceptance or implementation gate. Other implementations may use a
+Status: **accepted with RFC 0004 (2026-09-24); no service implementation or load certification**.
+This records the design choices accepted with the [RFC](../../0004-flexible-live-scheduling.md),
+not the implementation gate. Other implementations may use a
 semantically equivalent sequencer/fenced transaction.
 
 ## 1. Ordering and transaction boundary

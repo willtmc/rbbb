@@ -18,10 +18,7 @@ proposed document does not make it normative unless its status says accepted.
 
 ## Proposals under review
 
-- [Flexible live scheduling and closing groups](flexible-live-scheduling.md):
-  adding and regrouping units during bidding, explicit earlier/later deadlines,
-  atomic changes, and audit/notification boundaries. Proposed only; it does not
-  amend RFC 0001 or claim implementation support.
+None.
 
 ## Evaluation questions
 
@@ -41,3 +38,9 @@ proposed document does not make it normative unless its status says accepted.
 
 - [RFC 0003: Fixed-membership shared closing clock](0003-shared-closing-clock.md)
   accepts the clock component only, not the full live scheduling coordinator.
+  Amended by RFC 0004 (proxy-adjustment rule).
+
+- [RFC 0004: Flexible live scheduling and closing groups](0004-flexible-live-scheduling.md)
+  accepts the live regrouping/rescheduling contract, including a minimum
+  shortening lead and leader-change extensions. The coordinator is not yet
+  implemented and no support is advertised.
