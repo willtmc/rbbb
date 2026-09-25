@@ -4,8 +4,9 @@ require "json"
 require "pathname"
 
 # A small JSON Schema 2020-12 checker covering the subset used by the RBBB
-# state and event schemas: types, enum/const, minimum/minLength/pattern,
-# date-time, properties/required/additionalProperties, items, $ref into
+# state and event schemas: types, enum/const, minimum/maximum, string lengths,
+# pattern/date-time, properties/required/additionalProperties, array lengths
+# and uniqueness, items, chained $ref into
 # $defs or into sibling schema files, oneOf, and allOf with if/then. It
 # keeps the engine free of runtime dependencies while letting tests assert
 # that produced documents satisfy the contract.
@@ -34,23 +35,34 @@ module SchemaAssertions
     if schema.key?("const")
       schema["const"].nil? ? assert_nil(document, path) : assert_equal(schema["const"], document, path)
     end
-    if document.is_a?(Integer) && schema.key?("minimum")
-      assert_operator document, :>=, schema["minimum"], "#{path} is below minimum"
+    if document.is_a?(Numeric)
+      assert_operator document, :>=, schema["minimum"], "#{path} is below minimum" if schema.key?("minimum")
+      assert_operator document, :<=, schema["maximum"], "#{path} is above maximum" if schema.key?("maximum")
     end
     if document.is_a?(String)
       if schema.key?("minLength")
         assert_operator document.length, :>=, schema["minLength"], "#{path} is too short"
       end
-      assert_match(Regexp.new(schema["pattern"]), document, path) if schema.key?("pattern")
+      assert_operator document.length, :<=, schema["maxLength"], "#{path} is too long" if schema.key?("maxLength")
+      if schema.key?("pattern")
+        # JSON Schema uses ECMA's string-start ^, not Ruby's line-start ^.
+        pattern = schema["pattern"].sub(/\A\^/) { "\\A" }
+        assert_match(Regexp.new(pattern), document, path)
+      end
       if schema["format"] == "date-time"
         RBBB::Timestamp.parse(document)
       end
     end
 
     assert_object_matches(schema, document, root, path) if document.is_a?(Hash)
-    if document.is_a?(Array) && schema["items"]
-      document.each_with_index do |item, index|
-        assert_matches_schema(schema["items"], item, root: root, path: "#{path}[#{index}]")
+    if document.is_a?(Array)
+      assert_operator document.length, :>=, schema["minItems"], "#{path} has too few items" if schema.key?("minItems")
+      assert_operator document.length, :<=, schema["maxItems"], "#{path} has too many items" if schema.key?("maxItems")
+      assert_equal document.length, document.uniq.length, "#{path} has duplicate items" if schema["uniqueItems"]
+      if schema["items"]
+        document.each_with_index do |item, index|
+          assert_matches_schema(schema["items"], item, root: root, path: "#{path}[#{index}]")
+        end
       end
     end
     if schema["oneOf"]
@@ -114,8 +126,18 @@ module SchemaAssertions
   # A ref with a file part switches the root so nested `#/$defs` refs inside
   # the target file resolve against that file.
   def resolve_schema_ref(schema, root)
-    return [schema, root] unless schema.is_a?(Hash) && schema["$ref"]
+    seen = []
+    while schema.is_a?(Hash) && schema["$ref"]
+      location = [schema.object_id, root.object_id]
+      raise ArgumentError, "cyclic schema reference" if seen.include?(location)
 
+      seen << location
+      schema, root = resolve_single_schema_ref(schema, root)
+    end
+    [schema, root]
+  end
+
+  def resolve_single_schema_ref(schema, root)
     ref = schema.fetch("$ref")
     file_part, fragment = ref.split("#", 2)
     if file_part.empty?

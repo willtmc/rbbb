@@ -1,0 +1,10 @@
+{
+  "status": "proposed_not_load_certified",
+  "profile_id": "reference_scheduling_4096_v1",
+  "max_affected_units": 4096,
+  "max_resulting_closing_sets": 4096,
+  "max_retired_group_ids": 4096,
+  "max_json_nesting_depth": 16,
+  "max_submission_utf8_bytes": 4194304,
+  "max_event_batch_utf8_bytes": 16777216
+}

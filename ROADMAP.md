@@ -44,6 +44,12 @@ Quantity, choice, linked soft-close groups, multi-parcel bidding, additional
 auctioneer overrides, and other formats remain out of scope until their
 semantics are specified and tested.
 
+[Flexible live scheduling and closing groups](rfcs/flexible-live-scheduling.md)
+is now proposed for review: mutable group membership and explicit earlier/later
+deadlines during bidding, with atomic ordering and auditable operator actions.
+Its synthetic review scenarios are not accepted conformance requirements, and
+the current engine's behavior is unchanged.
+
 An optional rule that realigns a proxy-clipped short increment to the regular
 increment grid is explicitly deferred. The v0.1 baseline permits short
 increments and calculates the next required amount from the resulting standing
