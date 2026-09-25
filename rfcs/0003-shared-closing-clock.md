@@ -9,13 +9,18 @@
 Implement the approved shared quiet-period rule for arbitrary group members.
 A qualifying new bid within the last X seconds keeps every member open until
 at least bid time plus X seconds. Repeated qualifying bids restart that quiet
-period. Existing proxy-authority increases and reductions never extend time,
-even if the public standing changes. Rejected bids never extend time.
+period. The current leader's own proxy increases and reductions never extend
+time, even if the public standing changes (for example, crossing the reserve).
+An outbid bidder raising an existing maximum is a qualifying bid, whether or not
+it retakes the lead. Rejected bids never extend time.
 
-The component consumes the existing pure engine's accepted decision records:
-`maximum_accepted` together with `standing_bid_changed` qualifies; existing
-proxy adjustments (`maximum_increased` or `maximum_reduced`) do not. This
-classification follows existing engine event meanings, not a caller's boolean.
+The component consumes the existing pure engine's accepted decision records.
+An accepted decision with a public `standing_bid_changed` event qualifies,
+except the current leader adjusting their own maximum (`maximum_increased` or
+`maximum_reduced` whose bidder is the resulting leader, with `leader_changed`
+false). Any decision whose `standing_bid_changed` reports `leader_changed`
+qualifies. This classification follows existing engine event meanings, not a
+caller's boolean.
 
 ## Component boundary
 
@@ -54,3 +59,11 @@ millisecond/four-digit-year contract. Overflow returns no new clock.
 
 The baseline RFC 0001 engine and its independent extension behavior remain
 unchanged. No linked-group service or release capability is advertised here.
+
+## Amendments
+
+- 2026-09-24 ([RFC 0004](0004-flexible-live-scheduling.md) decision): narrowed
+  the non-extending proxy adjustment to the current leader's own changes. The
+  original rule let an outbid bidder raise an existing maximum in the final
+  seconds and retake the lead without extending the group, which defeats soft
+  close. No release contained the original rule.

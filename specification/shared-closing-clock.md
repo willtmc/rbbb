@@ -12,8 +12,11 @@ produce outcomes or close units by itself.
 
 Accepted decision records must contain exactly one privileged transition of
 type `maximum_accepted`, `maximum_increased` or `maximum_reduced`. Its closing
-time must equal the clock's current deadline. Only `maximum_accepted` with a
-public `standing_bid_changed` event qualifies to reset the quiet period.
+time must equal the clock's current deadline. A decision with a public
+`standing_bid_changed` event qualifies to reset the quiet period, unless it is
+the current leader adjusting their own maximum: a `maximum_increased` or
+`maximum_reduced` whose `bidder_id` equals its `leader_id` while
+`leader_changed` is false. A `leader_changed` decision always qualifies.
 The record's authoritative time controls the arithmetic. A host must obtain
 these records from the engine; untrusted event deserialization is not an API.
 
