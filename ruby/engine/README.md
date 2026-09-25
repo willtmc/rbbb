@@ -152,7 +152,8 @@ updated.public_view
 
 A new qualifying accepted bid during the quiet period extends the shared
 clock to bid time plus the quiet period; every member reads the same deadline.
-Proxy adjustments and rejected bids do not extend it. Stale revisions,
+The current leader's own proxy adjustments and rejected bids do not extend it;
+an outbid bidder raising an existing maximum does (RFC 0004). Stale revisions,
 unrecognized members, unsynchronized deadlines and time regression are refused.
 
 This is **not a complete linked bidding service**. The host still must synchronize

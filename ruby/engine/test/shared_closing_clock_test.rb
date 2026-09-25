@@ -9,10 +9,10 @@ class SharedClosingClockTest < Minitest::Test
       closes_at: "2030-01-01T13:00:00Z", quiet_period_seconds: 180, **extra)
   end
 
-  def engine(deadline)
+  def engine(deadline, **extra)
     RBBB::Engine.new(RBBB::Configuration.new(currency: "USD", opening_minor_units: 1000,
       increments: [{from_minor_units: 0, amount_minor_units: 100}],
-      opens_at: "2030-01-01T12:00:00Z", closes_at: RBBB::Timestamp.dump(deadline)))
+      opens_at: "2030-01-01T12:00:00Z", closes_at: RBBB::Timestamp.dump(deadline), **extra))
   end
 
   def bid(core, state, id: "bid", bidder: "bidder-a", maximum: 5000, at: "2030-01-01T12:59:00Z", type: "place_bid")
@@ -37,7 +37,7 @@ class SharedClosingClockTest < Minitest::Test
     assert current.due?(at: "2030-01-01T13:06:00Z")
   end
 
-  def test_existing_proxy_increase_does_not_extend_even_when_lead_changes
+  def test_outbid_bidder_raising_to_retake_the_lead_extends_the_group
     current = clock
     core = engine(current.closes_at)
     state = core.initial_state
@@ -45,6 +45,30 @@ class SharedClosingClockTest < Minitest::Test
     state = core.apply(state, first.events)
     challenger = bid(core, state, id: "b", bidder: "bidder-b", maximum: 3000, at: "2030-01-01T12:31:00Z")
     state = core.apply(state, challenger.events)
+    raise_decision = bid(core, state, id: "raise", maximum: 4000)
+    assert_equal "maximum_increased", raise_decision.events.find(&:privileged?).type
+    assert raise_decision.events.find { |event| event.type == "standing_bid_changed" }.data.fetch("leader_changed")
+    result = current.after_decision(unit_id: "lot-12", decision: raise_decision, expected_revision: 0)
+    assert_equal "2030-01-01T13:02:00Z", result.public_view.fetch("closes_at")
+    assert_equal 1, result.revision
+  end
+
+  def test_outbid_bidder_raising_the_price_without_retaking_the_lead_extends
+    current = clock
+    core = engine(current.closes_at)
+    state = core.apply(core.initial_state, bid(core, core.initial_state, id: "a", bidder: "bidder-a", maximum: 5000, at: "2030-01-01T12:30:00Z").events)
+    state = core.apply(state, bid(core, state, id: "b", bidder: "bidder-b", maximum: 1500, at: "2030-01-01T12:31:00Z").events)
+    raise_decision = bid(core, state, id: "raise", bidder: "bidder-b", maximum: 2500)
+    standing = raise_decision.events.find { |event| event.type == "standing_bid_changed" }
+    refute standing.data.fetch("leader_changed")
+    result = current.after_decision(unit_id: "lot-12", decision: raise_decision, expected_revision: 0)
+    assert_equal "2030-01-01T13:02:00Z", result.public_view.fetch("closes_at")
+  end
+
+  def test_leader_own_increase_does_not_extend_even_when_it_crosses_reserve
+    current = clock
+    core = engine(current.closes_at, reserve_minor_units: 3000)
+    state = core.apply(core.initial_state, bid(core, core.initial_state, id: "a", maximum: 2000, at: "2030-01-01T12:30:00Z").events)
     adjustment = bid(core, state, id: "raise", maximum: 4000)
     assert adjustment.events.any? { |event| event.type == "standing_bid_changed" }
     result = current.after_decision(unit_id: "lot-12", decision: adjustment, expected_revision: 0)

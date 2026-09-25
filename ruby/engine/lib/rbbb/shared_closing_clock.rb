@@ -41,7 +41,7 @@ module RBBB
       end
       time = parse_time(data["effective_at"])
       raise InvalidState, "accepted decision outside clock ordering" if time >= closes_at || (last_effective_at && time < last_effective_at)
-      qualifying = transition.type == "maximum_accepted" && decision.events.any? { |event| event.public? && event.type == "standing_bid_changed" }
+      qualifying = qualifying?(transition, decision)
       deadline = closes_at
       if qualifying && time >= closes_at - quiet_period_seconds
         deadline = parse_time([closes_at, time + quiet_period_seconds].max)
@@ -70,6 +70,16 @@ module RBBB
     end
 
     private
+
+    # RFC 0004: any accepted change to the public standing qualifies, except the
+    # current leader adjusting their own maximum. A leader change always qualifies.
+    def qualifying?(transition, decision)
+      standing = decision.events.find { |event| event.public? && event.type == "standing_bid_changed" }
+      return false unless standing
+      return true if standing.data["leader_changed"]
+
+      transition.type == "maximum_accepted" || transition.data["leader_id"] != transition.data["bidder_id"]
+    end
 
     def parse_time(value)
       time = Timestamp.parse(value)
