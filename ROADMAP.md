@@ -40,9 +40,10 @@ decision remains before Phase 1 is complete.
 
 ## Later RFCs
 
-Quantity, choice, linked soft-close groups, multi-parcel bidding, additional
-auctioneer overrides, and other formats remain out of scope until their
-semantics are specified and tested.
+Quantity, choice, multi-parcel bidding, additional auctioneer overrides, and
+other formats remain out of scope until their semantics are specified and
+tested. Linked soft-close groups are specified by RFCs 0002-0004 (below); what
+remains for them is implementation, not a new RFC.
 
 [RFC 0004: Flexible live scheduling and closing groups](rfcs/0004-flexible-live-scheduling.md)
 was accepted on 2026-09-24: mutable group membership and explicit earlier/later
