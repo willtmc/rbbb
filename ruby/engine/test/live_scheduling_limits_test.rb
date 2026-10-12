@@ -81,6 +81,25 @@ class LiveSchedulingLimitsTest < Minitest::Test
     assert_empty rejected.records
   end
 
+  def test_projector_refuses_partial_manual_and_automatic_commits
+    core = coordinator(2)
+    edit = decide(core, intent(core))
+    assert_raises(RBBB::InvalidState) do
+      RBBB::LiveScheduling::Projector.apply(snapshot: core.snapshot, configurations: core.configurations, records: edit.records.drop(1))
+    end
+    extended_sets = edit.state['closing_sets'].map { |set| set.merge('extension' => {'trigger_window_seconds' => 120, 'duration_seconds' => 180}) }
+    next_core = RBBB::LiveScheduling::Coordinator.new(auction_id: core.auction_id, configurations: core.configurations,
+      snapshot: edit.state.merge('closing_sets' => extended_sets), policy: core.policy)
+    bid = next_core.bid(unit_id: 'unit-0000', command: {'type' => 'place_bid', 'command_id' => 'late-bid',
+      'bidder_id' => 'synthetic-bidder', 'maximum_minor_units' => 3000}, effective_at: '2031-04-17T14:59:00Z', commit_id: 'bid-commit')
+    assert_nil bid.rejection_reason
+    [bid.records.select { |record| record.key?('unit_id') }, bid.records.reject { |record| record.key?('unit_id') }].each do |partial|
+      assert_raises(RBBB::InvalidState) do
+        RBBB::LiveScheduling::Projector.apply(snapshot: next_core.snapshot, configurations: next_core.configurations, records: partial)
+      end
+    end
+  end
+
   def test_no_change_and_exhaustion_cannot_advance_revision
     core = coordinator(1)
     unchanged = intent(core).merge('resulting_closing_sets' => core.snapshot['closing_sets'])

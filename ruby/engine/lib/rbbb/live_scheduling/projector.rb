@@ -12,6 +12,19 @@ module RBBB
         baseline, deltas = records.partition { |record| record.key?("unit_id") }
         changes = deltas.select { |record| record["type"] == "closing_configuration_changed" }
         raise InvalidState, "multiple scheduling deltas" if changes.size > 1
+        unless deltas.empty?
+          types = deltas.map { |record| record['type'] }
+          manual = types == %w[closing_configuration_committed closing_configuration_changed closing_change_notice] && baseline.empty?
+          automatic = types == ['closing_configuration_changed'] && !baseline.empty?
+          raise InvalidState, "incomplete commit projection" unless manual || automatic
+          if manual
+            audit, change, notice = deltas
+            shared = %w[capability command_id commit_id auction_id effective_at]
+            raise InvalidState, "commit identity conflict" unless shared.all? { |key| audit[key] == change[key] && notice[key] == change[key] }
+            raise InvalidState, "audit revision conflict" unless audit['previous_schedule_revision'] == snapshot['schedule_revision']
+            raise InvalidState, "audit delta conflict" unless %w[schedule_revision unit_versions resulting_closing_sets retired_group_ids].all? { |key| audit[key] == change[key] }
+          end
+        end
         baseline.group_by { |record| record.fetch("unit_id") }.sort.each do |id, entries|
           before = State.from_h(state.fetch("units").fetch(id))
           engine = Engine.new(Configuration.from_h(configurations.fetch(id).merge("closes_at" => before.to_h["closes_at"])))
@@ -22,7 +35,15 @@ module RBBB
           end
           state["units"][id] = engine.apply(before, events).to_h
         end
-        return state if changes.empty?
+        if changes.empty?
+          changed_schedule = baseline.any? do |record|
+            id = record.fetch('unit_id')
+            before, after = snapshot['units'].fetch(id), state['units'].fetch(id)
+            LiveScheduling.time(before['closes_at']) != LiveScheduling.time(after['closes_at']) || before['status'] != after['status']
+          end
+          raise InvalidState, "missing scheduling delta" if changed_schedule
+          return state
+        end
         change = changes.first
         raise InvalidState, "scheduling revision gap" unless change.fetch("schedule_revision") == snapshot.fetch("schedule_revision") + 1
         versions = change.fetch("unit_versions")

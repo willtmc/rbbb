@@ -18,7 +18,9 @@ module RBBB
       def parse(raw, profile: PROFILE)
         raise Invalid, "request size exceeded" unless raw.is_a?(String) && raw.bytesize <= profile.fetch("request_bytes")
         raise Invalid, "invalid UTF-8" unless raw.dup.force_encoding(Encoding::UTF_8).valid_encoding?
-        normalize(JSON.parse(raw, object_class: UniqueObject, max_nesting: profile.fetch("depth")))
+        # New JSON releases can bypass custom []= while building objects; require
+        # parser-level rejection too. UniqueObject retains protection on older JSON.
+        normalize(JSON.parse(raw, object_class: UniqueObject, allow_duplicate_key: false, max_nesting: profile.fetch("depth")))
       rescue JSON::ParserError, JSON::NestingError, EncodingError => e
         raise Invalid, e.message
       end
