@@ -1,6 +1,6 @@
 # RFC 0004: Flexible live scheduling and closing groups
 
-- Status: accepted (contract); coordinator not implemented
+- Status: accepted (contract); unreleased coordinator slice implemented, service certification incomplete
 - Author: RBBB contributors
 - Maintainer decision: Will McLemore, 2026-09-24
 - Created: 2026-09-05
@@ -58,9 +58,9 @@ which is a forced close in everything but name.
 
 [Machine-readable contracts](proposals/flexible-live-scheduling/README.md)
 now define reviewable command, public-change, audit, notification-intent, and
-rejection shapes. Their executable tests validate document structure and example
-consistency only; there is not yet a scheduling coordinator or behavioral
-conformance implementation.
+rejection shapes. Original fixture tests validate structure and consistency;
+separate [implementation tests](../docs/live-scheduling-implementation.md) now
+execute the coordinator. Remaining service gates still block capability claims.
 
 ## Policy question
 
@@ -336,8 +336,10 @@ They are intentionally outside the executable accepted conformance suite.
 They now have [29 machine-readable behavioral vectors covering 47 steps](proposals/flexible-live-scheduling/behavior-vectors.md),
 including complete seeded unit states, exact expected resulting states, and
 public/privileged record batches. Fixture checks replay the independent-unit
-seed/bid/close portions and validate the proposed shapes. They do not execute a
-coordinator. Passing current tests is not evidence of scheduling support.
+seed/bid/close portions and validate the proposed shapes. Separate coordinator
+and SQLite-host tests now execute all 29 vectors and compare exact results;
+see the [implementation evidence and remaining gates](../docs/live-scheduling-implementation.md).
+Passing those tests is not certification of a host's complete scheduling support.
 
 ## Privacy and security
 
@@ -375,10 +377,12 @@ receipt retention while mutable, complete-commit replay, and the initial
 4,096-unit / 4 MiB submission / 16 MiB batch / 16-level parsing profile. The
 profile limits are still unmeasured, not capacity claims.
 
-Still required before support can be claimed: implement the coordinator, execute
-every behavioral vector against it, and pass the service concurrency/failure
-gates. Fixture and independent-unit checks do not satisfy coordinator
-conformance.
+The optional coordinator slice now executes every supplied behavioral vector,
+with 4,096-unit boundary and separate-process race tests. Still required before
+support can be claimed: complete registration/void ordering, process-kill and
+archive/restore certification, authorized projection/resynchronization gates,
+and specification integration. See the implementation guide for exact evidence.
+Fixture and independent-unit checks alone do not satisfy coordinator conformance.
 
 Immediate forced closing, post-close reopening, already-invoiced outcomes, and
 correction workflows remain separate scope. The host chooses the minimum

@@ -162,6 +162,21 @@ receipts. `due?` only indicates that the common deadline has arrived; it does no
 close outcomes. Live regrouping and group transaction/recovery work are separate.
 See the [component contract](../../specification/shared-closing-clock.md).
 
+## Live scheduling coordinator (unreleased implementation slice)
+
+Explicitly require `rbbb/live_scheduling` for the RFC 0004 pure coordinator,
+closed intent boundary and whole-commit privileged projector. The SQLite
+[reference host](../../examples/live_scheduling_host.rb) fences edits, bids and
+group closes across independent processes and retains receipts/events/outbox
+atomically. It does not change the baseline engine or published capabilities.
+
+All supplied behavioral vectors now execute against that adapter, with exact
+state/record/receipt assertions; 4,096-unit merge/split and separate-process race
+tests also run. Live inventory registration/void ordering and the remaining
+service certification gates are **not yet complete**. Do not advertise the
+capability or run a pilot from this slice. See the
+[implementation and migration guide](../../docs/live-scheduling-implementation.md).
+
 ## Install the evaluation gem
 
 Version `0.1.0.pre.3` is an experimental evaluation package. It has no runtime
