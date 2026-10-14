@@ -74,10 +74,20 @@ copy/restore test preserves accepted and rejected receipts, authorization,
 command identity, pending delivery and the sealed mutation boundary. These are
 SQLite reference-host tests, not deployment/load certification.
 
+Operator `void_bid` now shares the reference host's durable transaction,
+principal-bound receipt index and outbox. The host assigns operator identity and
+time and requires a current `void` permission, including receipt replay. Voids
+use the existing engine semantics without extending a linked group's deadline.
+Tests cover retained replay, denied disclosure, changed-intent refusal and atomic
+rollback of state, receipts, history and outbox. This is not void race/process-kill
+certification or a public admission API.
+
 **Still required before advertising support:**
 
-- live inventory registration and every operator unit mutation (including voids)
+- live inventory registration and the remaining operator unit mutations
   must use the same durable ordering boundary, with registration fault tests;
+- void/edit and void/close independent-process races and void crash recovery
+  must extend the new transaction/replay/rollback coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to
   every remaining mutation entry point and deployment archive/restore workflow;
 - a deployment's authenticated admission layer, public/private projection

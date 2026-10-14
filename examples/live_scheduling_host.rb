@@ -62,6 +62,16 @@ module RBBBExamples
       submit({"kind" => "bid", "unit_id" => unit_id, "command" => command}, principal_id, ["bid"])
     end
 
+    def void_bid(unit_id:, command:, principal_id:, permissions:)
+      RBBB::LiveScheduling::Intent.identifier(unit_id)
+      RBBB::LiveScheduling::Intent.identifier(principal_id)
+      allowed = %w[type command_id bid_id reason notification_policy]
+      raise ArgumentError, "unknown void property" unless (command.keys - allowed).empty?
+      raise ArgumentError, "unsupported void operation" unless command["type"] == "void_bid"
+      RBBB::LiveScheduling::Intent.identifier(command["command_id"])
+      submit({"kind" => "void", "unit_id" => unit_id, "command" => command}, principal_id, permissions)
+    end
+
     def close(group_id: nil, unit_id: nil, command_id:, principal_id:, permissions:)
       raise ArgumentError, "choose exactly one closing set" unless !!group_id != !!unit_id
       RBBB::LiveScheduling::Intent.identifier(group_id || unit_id)
@@ -116,7 +126,7 @@ module RBBBExamples
       command_id = request.fetch(request["kind"] == "edit" ? "intent" : "command").fetch("command_id")
       response = transaction do |db|
         saved = db.get_first_row("SELECT principal, fingerprint, response FROM receipts WHERE tenant = ? AND auction = ? AND command = ?", [tenant_id, auction_id, command_id])
-        required = {"edit" => "schedule", "bid" => "bid", "close" => "close"}.fetch(request["kind"])
+        required = {"edit" => "schedule", "bid" => "bid", "void" => "void", "close" => "close"}.fetch(request["kind"])
         if saved
           next rejection("not_authorized") unless saved[0] == principal && permissions.include?(required)
           next rejection("command_id_reused").merge("receipt_retained" => true) unless saved[1] == fingerprint
@@ -143,6 +153,8 @@ module RBBBExamples
             coordinator.edit(intent: request["intent"], principal_id: principal, permissions: permissions, effective_at: at, commit_id: commit_id)
           when "bid"
             coordinator.bid(unit_id: request["unit_id"], command: request["command"].merge("bidder_id" => principal), effective_at: at, commit_id: commit_id)
+          when "void"
+            coordinator.void_bid(unit_id: request["unit_id"], command: request["command"].merge("operator_id" => principal), effective_at: at, commit_id: commit_id)
           when "close"
             coordinator.close(group_id: request["group_id"], unit_id: request["unit_id"], command: request["command"], effective_at: at, commit_id: commit_id)
           end

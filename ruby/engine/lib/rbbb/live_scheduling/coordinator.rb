@@ -131,6 +131,24 @@ module RBBB
         reject("invalid_request")
       end
 
+      def void_bid(unit_id:, command:, effective_at:, commit_id:)
+        return reject("invalid_request") unless snapshot["units"].key?(unit_id)
+        set = snapshot["closing_sets"].find { |item| item["member_unit_ids"].include?(unit_id) }
+        at = LiveScheduling.time(effective_at)
+        return reject("effective_at_out_of_order") if set["member_unit_ids"].any? { |id| snapshot["units"][id]["last_effective_at"] && LiveScheduling.time(snapshot["units"][id]["last_effective_at"]) > at }
+        return reject("version_exhausted") if snapshot["units"][unit_id]["version"] >= MAX_SAFE_INTEGER
+        engine = unit_engine(unit_id, set, extension: nil)
+        before = State.from_h(snapshot["units"].fetch(unit_id))
+        decision = engine.decide(before, command.merge("effective_at" => LiveScheduling.dump_time(at)))
+        return reject(decision.rejection.fetch("reason")) if decision.rejected?
+        state = LiveScheduling.copy(snapshot)
+        state["units"][unit_id] = engine.apply(before, decision.events).to_h
+        records = decision.events.map { |event| {"unit_id" => unit_id, "event" => event.to_h} }
+        result(state, records, commit_id: commit_id)
+      rescue ArgumentError, RangeError
+        reject("invalid_request")
+      end
+
       def close(group_id: nil, unit_id: nil, command:, effective_at:, commit_id:)
         set = snapshot["closing_sets"].find { |item| group_id ? item["group_id"] == group_id : item["group_id"].nil? && item["member_unit_ids"] == [unit_id] }
         return reject("invalid_request") unless set

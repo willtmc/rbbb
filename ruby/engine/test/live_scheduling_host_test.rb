@@ -26,6 +26,46 @@ class LiveSchedulingHostTest < Minitest::Test
 
   def copy(value) = RBBB::LiveScheduling.copy(value)
 
+  def test_operator_void_is_durable_authorized_and_does_not_extend_the_group
+    bid = {"type" => "place_bid", "command_id" => "void-target", "bid_id" => "bid-target", "maximum_minor_units" => 5000}
+    assert_nil @host.bid(unit_id: "unit-c", command: bid, principal_id: "bidder-new")["rejection_reason"]
+    before = @host.snapshot
+    command = {"type" => "void_bid", "command_id" => "void-command", "bid_id" => "bid-target",
+      "reason" => "Synthetic operator correction", "notification_policy" => "affected"}
+    response = @host.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"])
+    assert_nil response["rejection_reason"]
+    assert_equal before["closing_sets"], @host.snapshot["closing_sets"]
+    assert_equal before["schedule_revision"], @host.snapshot["schedule_revision"]
+    assert_equal ["bid-target"], @host.snapshot["units"]["unit-c"]["voided_bid_ids"]
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal response.merge("replayed" => true), reopened.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"])
+    denied = reopened.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: [])
+    assert_equal "not_authorized", denied["rejection_reason"]
+    assert_empty denied["records"]
+    assert_equal "command_id_reused", reopened.void_bid(unit_id: "unit-c", command: command.merge("reason" => "Changed"), principal_id: "operator-demo", permissions: ["void"])["rejection_reason"]
+    assert_raises(ArgumentError) { reopened.void_bid(unit_id: "unit-c", command: command.merge("operator_id" => "spoof"), principal_id: "operator-demo", permissions: ["void"]) }
+  end
+
+  def test_void_commit_failure_rolls_back_state_receipt_history_and_outbox
+    @host.bid(unit_id: "unit-c", command: {"type" => "place_bid", "command_id" => "rollback-target", "bid_id" => "rollback-bid", "maximum_minor_units" => 5000}, principal_id: "bidder-new")
+    before = @host.snapshot
+    history = @host.records
+    count = @host.receipt_count
+    failing = Class.new(RBBBExamples::LiveSchedulingHost) do
+      private
+      def before_commit(_db) = raise("synthetic commit failure")
+    end.new(**@args)
+    command = {"type" => "void_bid", "command_id" => "rollback-void", "bid_id" => "rollback-bid", "reason" => "Synthetic correction", "notification_policy" => "affected"}
+    assert_raises(RuntimeError) { failing.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"]) }
+    assert_equal before, @host.snapshot
+    assert_equal history, @host.records
+    assert_equal count, @host.receipt_count
+    batches = []
+    @host.deliver_pending { |batch| batches << batch }
+    assert_equal history, batches.flat_map { |batch| batch.map { |record| record["record"] } }
+    assert_nil @host.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"])["rejection_reason"]
+  end
+
   def test_same_principal_receipt_is_returned_before_clock_or_state_revalidation
     first = edit
     @args[:clock] = -> { raise "clock must not be allocated on replay" }
