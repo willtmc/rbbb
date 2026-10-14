@@ -66,6 +66,68 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_nil @host.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"])["rejection_reason"]
   end
 
+  def reserve_command(id = "reserve-command", amount = 100)
+    {"type" => "change_reserve", "command_id" => id, "reserve_minor_units" => amount,
+      "reason" => "Synthetic reserve correction", "notification_policy" => "affected"}
+  end
+
+  def reserve(host = @host, command = reserve_command, principal = "operator-demo", permissions = ["reserve"])
+    host.change_reserve(unit_id: "unit-c", command: command, principal_id: principal, permissions: permissions)
+  end
+
+  def test_reserve_change_is_durable_authorized_and_preserves_scheduling
+    before = @host.snapshot
+    response = reserve
+    assert_nil response["rejection_reason"]
+    after = @host.snapshot
+    assert_equal 100, after["units"]["unit-c"]["reserve_minor_units"]
+    assert_equal before["units"]["unit-c"]["version"] + 1, after["units"]["unit-c"]["version"]
+    normalize_sets = ->(sets) { sets.map { |set| set.merge("closes_at" => RBBB::Timestamp.dump(RBBB::Timestamp.parse(set["closes_at"]))) } }
+    assert_equal normalize_sets.call(before["closing_sets"]), normalize_sets.call(after["closing_sets"])
+    assert_equal before["schedule_revision"], after["schedule_revision"]
+    @host.seal!
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args.merge(clock: -> { raise "replay must not allocate time" }))
+    assert_equal response.merge("replayed" => true), reserve(reopened)
+    [reserve(reopened, reserve_command, "other-operator"), reserve(reopened, reserve_command, "operator-demo", [])].each do |denied|
+      assert_equal "not_authorized", denied["rejection_reason"]
+      assert_empty denied["records"]
+    end
+    assert_equal "command_id_reused", reserve(reopened, reserve_command("reserve-command", 50))["rejection_reason"]
+    %w[operator_id effective_at].each do |field|
+      assert_raises(ArgumentError) { reserve(@host, reserve_command.merge(field => "spoof")) }
+    end
+  end
+
+  def test_reserve_commit_failure_rolls_back_and_retry_commits_once
+    before, history, count = @host.snapshot, @host.records, @host.receipt_count
+    failing = Class.new(RBBBExamples::LiveSchedulingHost) do
+      private
+      def before_commit(_db) = raise("synthetic commit failure")
+    end.new(**@args)
+    assert_raises(RuntimeError) { reserve(failing) }
+    assert_equal before, @host.snapshot
+    assert_equal history, @host.records
+    assert_equal count, @host.receipt_count
+    assert_equal 0, @host.deliver_pending { flunk "rolled-back reserve published" }
+    response = reserve
+    assert_nil response["rejection_reason"]
+    assert_equal count + 1, @host.receipt_count
+    assert_equal response.merge("replayed" => true), reserve
+    delivered = []
+    assert_equal 1, @host.deliver_pending { |batch| delivered.concat(batch.map { |item| item["record"] }) }
+    assert_equal response["records"], delivered
+  end
+
+  def test_reserve_increase_after_bidding_retains_rejection_without_domain_effects
+    assert_nil @host.bid(unit_id: "unit-c", command: {"type" => "place_bid", "command_id" => "reserve-bid", "bid_id" => "reserve-bid-id", "maximum_minor_units" => 5000}, principal_id: "bidder-new")["rejection_reason"]
+    before, history = @host.snapshot, @host.records
+    response = reserve(@host, reserve_command("increase", 6000))
+    assert_equal "reserve_may_not_increase_after_first_bid", response["rejection_reason"]
+    assert_equal before, @host.snapshot
+    assert_equal history, @host.records
+    assert_equal response.merge("replayed" => true), reserve(@host, reserve_command("increase", 6000))
+  end
+
   def test_same_principal_receipt_is_returned_before_clock_or_state_revalidation
     first = edit
     @args[:clock] = -> { raise "clock must not be allocated on replay" }
@@ -174,6 +236,47 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_nil results[0]["rejection_reason"]
     assert_includes ["elapsed_or_closed_unit", "stale_revision"], results[1]["rejection_reason"]
     %w[unit-a unit-b].each { |id| assert_equal "closed", @host.snapshot["units"][id]["status"] }
+  end
+
+  def test_reserve_process_kill_before_and_after_commit
+    before = @host.snapshot
+    kill_at(:before_commit) { |host| reserve(host) }
+    assert_equal before, @host.snapshot
+    assert_equal 0, @host.receipt_count
+    assert_empty @host.records
+    assert_equal 0, @host.deliver_pending { flunk "uncommitted reserve delivery" }
+    kill_at(:after_commit) { |host| reserve(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal 100, reopened.snapshot["units"]["unit-c"]["reserve_minor_units"]
+    assert_equal 1, reopened.receipt_count
+    response = reserve(reopened)
+    assert response["replayed"]
+    assert_nil response["rejection_reason"]
+    assert_equal reopened.records, response["records"]
+    assert_equal 1, reopened.deliver_pending { |batch| assert_equal response["records"], batch.map { |item| item["record"] } }
+  end
+
+  def test_independent_process_reserve_bid_race_respects_durable_order
+    results = race do |host, index|
+      if index.zero?
+        reserve(host, reserve_command("race-reserve", 6000))
+      else
+        host.bid(unit_id: "unit-c", command: {"type" => "place_bid", "command_id" => "race-reserve-bid", "bid_id" => "race-reserve-bid-id", "maximum_minor_units" => 5000}, principal_id: "bidder-new")
+      end
+    end
+    assert_nil results[1]["rejection_reason"]
+    assert_includes [nil, "reserve_may_not_increase_after_first_bid"], results[0]["rejection_reason"]
+    unit = @host.snapshot["units"]["unit-c"]
+    if results[0]["rejection_reason"]
+      assert_nil unit["reserve_minor_units"]
+      assert_equal 1, unit["version"]
+    else
+      assert_equal 6000, unit["reserve_minor_units"]
+      assert_equal 2, unit["version"]
+    end
+    assert_equal 2, @host.receipt_count
+    assert_equal 7, @host.snapshot["schedule_revision"]
+    assert_equal results[0].merge("replayed" => true), reserve(@host, reserve_command("race-reserve", 6000))
   end
 
   def test_process_kill_before_commit_rolls_back_state_receipt_and_outbox

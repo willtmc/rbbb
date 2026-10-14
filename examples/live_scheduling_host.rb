@@ -72,6 +72,16 @@ module RBBBExamples
       submit({"kind" => "void", "unit_id" => unit_id, "command" => command}, principal_id, permissions)
     end
 
+    def change_reserve(unit_id:, command:, principal_id:, permissions:)
+      RBBB::LiveScheduling::Intent.identifier(unit_id)
+      RBBB::LiveScheduling::Intent.identifier(principal_id)
+      allowed = %w[type command_id reserve_minor_units reason notification_policy]
+      raise ArgumentError, "unknown reserve property" unless (command.keys - allowed).empty?
+      raise ArgumentError, "unsupported reserve operation" unless command["type"] == "change_reserve"
+      RBBB::LiveScheduling::Intent.identifier(command["command_id"])
+      submit({"kind" => "reserve", "unit_id" => unit_id, "command" => command}, principal_id, permissions)
+    end
+
     def close(group_id: nil, unit_id: nil, command_id:, principal_id:, permissions:)
       raise ArgumentError, "choose exactly one closing set" unless !!group_id != !!unit_id
       RBBB::LiveScheduling::Intent.identifier(group_id || unit_id)
@@ -126,7 +136,7 @@ module RBBBExamples
       command_id = request.fetch(request["kind"] == "edit" ? "intent" : "command").fetch("command_id")
       response = transaction do |db|
         saved = db.get_first_row("SELECT principal, fingerprint, response FROM receipts WHERE tenant = ? AND auction = ? AND command = ?", [tenant_id, auction_id, command_id])
-        required = {"edit" => "schedule", "bid" => "bid", "void" => "void", "close" => "close"}.fetch(request["kind"])
+        required = {"edit" => "schedule", "bid" => "bid", "void" => "void", "reserve" => "reserve", "close" => "close"}.fetch(request["kind"])
         if saved
           next rejection("not_authorized") unless saved[0] == principal && permissions.include?(required)
           next rejection("command_id_reused").merge("receipt_retained" => true) unless saved[1] == fingerprint
@@ -155,6 +165,8 @@ module RBBBExamples
             coordinator.bid(unit_id: request["unit_id"], command: request["command"].merge("bidder_id" => principal), effective_at: at, commit_id: commit_id)
           when "void"
             coordinator.void_bid(unit_id: request["unit_id"], command: request["command"].merge("operator_id" => principal), effective_at: at, commit_id: commit_id)
+          when "reserve"
+            coordinator.change_reserve(unit_id: request["unit_id"], command: request["command"].merge("operator_id" => principal), effective_at: at, commit_id: commit_id)
           when "close"
             coordinator.close(group_id: request["group_id"], unit_id: request["unit_id"], command: request["command"], effective_at: at, commit_id: commit_id)
           end
@@ -167,7 +179,9 @@ module RBBBExamples
           "effective_at" => RBBB::Timestamp.dump(at), "commit_id" => result.rejection_reason ? nil : commit_id,
           "receipt_retained" => true, "replayed" => false}
         db.execute("UPDATE auctions SET state = ?, retired = ?, last_time = ?, sequence = ? WHERE tenant = ? AND auction = ?",
-          [JSON.generate(result.state), JSON.generate(result.retired_group_ids), RBBB::Timestamp.dump(at), sequence + 1, tenant_id, auction_id])
+          [result.rejection_reason ? state_json : JSON.generate(result.state),
+            result.rejection_reason ? retired_json : JSON.generate(result.retired_group_ids),
+            RBBB::Timestamp.dump(at), sequence + 1, tenant_id, auction_id])
         unless result.records.empty?
           db.execute("INSERT INTO commits VALUES (?, ?, ?, ?, ?)", [tenant_id, auction_id, sequence + 1, commit_id, JSON.generate(result.records)])
           result.records.each_with_index do |record, index|

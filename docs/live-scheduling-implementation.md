@@ -82,10 +82,21 @@ Tests cover retained replay, denied disclosure, changed-intent refusal and atomi
 rollback of state, receipts, history and outbox. This is not void race/process-kill
 certification or a public admission API.
 
+Operator `change_reserve` also uses this boundary with current `reserve`
+permission, server-assigned identity/time, principal-bound replay and the
+baseline engine's reserve rules. It advances the unit, not scheduling revision,
+and does not change closing sets or extend deadlines. Tests cover revoked/wrong
+principal replay, changed intent, spoofed fields, atomic rollback/retry,
+independent-process reserve/bid ordering and SIGKILL before/after commit.
+Rejected commands retain receipts and decision time/order but preserve the
+stored domain snapshot byte-for-byte (including timestamp representation).
+Single-unit baseline closing-time writes are deliberately not exposed: live
+schedule changes must use the complete affected-set scheduling edit API.
+
 **Still required before advertising support:**
 
-- live inventory registration and the remaining operator unit mutations
-  must use the same durable ordering boundary, with registration fault tests;
+- live inventory registration must use the same durable ordering boundary,
+  with registration fault tests and complete mutation-entry-point inventory;
 - void/edit and void/close independent-process races and void crash recovery
   must extend the new transaction/replay/rollback coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to

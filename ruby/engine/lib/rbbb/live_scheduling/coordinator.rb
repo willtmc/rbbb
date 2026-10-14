@@ -132,6 +132,16 @@ module RBBB
       end
 
       def void_bid(unit_id:, command:, effective_at:, commit_id:)
+        return reject("invalid_request") unless command["type"] == "void_bid"
+        operator_unit_change(unit_id: unit_id, command: command, effective_at: effective_at, commit_id: commit_id)
+      end
+
+      def change_reserve(unit_id:, command:, effective_at:, commit_id:)
+        return reject("invalid_request") unless command["type"] == "change_reserve"
+        operator_unit_change(unit_id: unit_id, command: command, effective_at: effective_at, commit_id: commit_id)
+      end
+
+      def operator_unit_change(unit_id:, command:, effective_at:, commit_id:)
         return reject("invalid_request") unless snapshot["units"].key?(unit_id)
         set = snapshot["closing_sets"].find { |item| item["member_unit_ids"].include?(unit_id) }
         at = LiveScheduling.time(effective_at)
@@ -148,6 +158,8 @@ module RBBB
       rescue ArgumentError, RangeError
         reject("invalid_request")
       end
+
+      private :operator_unit_change
 
       def close(group_id: nil, unit_id: nil, command:, effective_at:, commit_id:)
         set = snapshot["closing_sets"].find { |item| group_id ? item["group_id"] == group_id : item["group_id"].nil? && item["member_unit_ids"] == [unit_id] }
