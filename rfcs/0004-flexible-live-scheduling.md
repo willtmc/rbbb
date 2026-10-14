@@ -17,6 +17,12 @@ certification of code. No implementation may advertise the capability until it
 passes the acceptance gates under Compatibility. Acceptance does not authorize
 a package release or live bidding.
 
+Maintainer addendum (Will McLemore, 2026-10-14): accepted the
+[live unit registration contract](proposals/flexible-live-scheduling/registration-contract.md),
+including standalone-first creation, trusted registration permission, private
+creation/public scheduling records and version-0/null-unit-clock replay.
+Registration schemas and contract checks are not host implementation certification.
+
 This decision amends [RFC 0003](0003-shared-closing-clock.md): its clock now
 follows the narrowed proxy-adjustment rule in section 6.
 

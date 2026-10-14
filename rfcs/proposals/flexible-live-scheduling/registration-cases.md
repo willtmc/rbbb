@@ -1,7 +1,9 @@
 # Synthetic registration acceptance cases
 
 Status: **draft review cases; not executable conformance fixtures or passed tests**.
-These cases depend on acceptance of [registration-contract.md](registration-contract.md).
+These cases follow [registration-contract.md](registration-contract.md), accepted
+2026-10-14. Separate executable contract/schema tests do not execute these host
+registration scenarios.
 All identifiers, bidders, configurations and times below are invented.
 
 ## Shared fixture and exact oracle
@@ -57,12 +59,12 @@ case resets the fixture unless explicitly describing continuation.
 | REG-15 | Fail/SIGKILL immediately before commit; retry in a new process. | No registration/configuration/topology/receipt/domain/outbox survives rollback; retry creates exactly one complete success. |
 | REG-16 | SIGKILL after commit before response; retry in a new process. | Entire success survives; original receipt replay; no second creation, revision or outbox identity. |
 | REG-17 | SIGKILL after publishing the full batch but before outbox acknowledgment; restart delivery. | Same commit/index identities redelivered; consumer applies once; registration mutation is not rerun. |
-| REG-18 | Replay exact full batch into matching before-state; then test missing creation, missing delta, reversed order, changed empty state/configuration, occupied ID or revision gap. | Full valid replay matches exact success oracle including registry. Every invalid/partial batch rejects atomically with unchanged projection/cursor. |
+| REG-18 | Replay exact full batch into matching before-state; then test missing creation, missing delta, reversed order, changed empty state/configuration, occupied ID or revision gap. | Full valid replay matches exact success oracle including registry, version 0 and `last_effective_at: null` (not commit time). Every invalid/partial batch rejects atomically with unchanged projection/cursor. |
 | REG-19 | Deliver public projection to authorized reader; attempt private projection without audit authority. | Public record contains no reserve, configuration, positions, operator/reason or privileged digest. Private access denied; unpublished inventory is filtered under host policy; gaps require consistent resync. |
 | REG-20 | Safe-integer revision ceiling; exact byte/depth limits and plus-one; encoded batch limit and plus-one under immutable smaller profile. | Ceiling retains `version_exhausted`; admission overflow has no receipt; ordered batch overflow retains `resource_limit_exceeded`. Exact valid boundaries succeed; no splitting/partial registration. |
 | REG-21 | Seal and archive, restore complete registry/state/receipts/outbox, retry accepted and rejected registrations. | Original receipts and redelivery identities survive; sealed restoration rejects new mutation IDs. Missing registry/deduplication history never permits resumed mutation. |
 
-## Evidence needed after acceptance
+## Remaining execution evidence
 
 Turn these rows into executable fixtures with complete before/after state,
 configuration registry, record and receipt assertions. Concurrency cases require

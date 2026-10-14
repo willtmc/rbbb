@@ -99,8 +99,11 @@ schedule changes must use the complete affected-set scheduling edit API.
   with registration fault tests and complete mutation-entry-point inventory.
   The [registration addendum](../rfcs/proposals/flexible-live-scheduling/registration-contract.md)
   and [21 synthetic review cases](../rfcs/proposals/flexible-live-scheduling/registration-cases.md)
-  propose its missing creation/replay contract; neither is accepted, implemented
-  or passed conformance evidence. Contract acceptance comes before implementation;
+  record the creation/replay contract accepted by Will on 2026-10-14, including
+  preservation of both version 0 and null unit last-command time during replay.
+  Closed intent/creation schemas and executable contract/privacy/empty-state
+  checks exist, but registration is not implemented and its 21 execution gates
+  have not passed;
 - void/edit and void/close independent-process races and void crash recovery
   must extend the new transaction/replay/rollback coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to

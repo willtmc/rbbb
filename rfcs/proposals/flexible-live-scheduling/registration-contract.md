@@ -1,7 +1,11 @@
-# Live unit registration — proposed RFC 0004 addendum
+# Live unit registration — accepted RFC 0004 addendum
 
-Status: **draft for maintainer review; not accepted or implemented**.
-This adds a proposed creation envelope and replay mapping to the accepted
+Status: **accepted by Will McLemore, 2026-10-14; not implemented or certified**.
+Maintainer accepted the standalone-first design, trusted `register` permission,
+creation/delta records, version-0 exception and `unit_id_conflict`, with the
+explicit null-clock replay clarification below. Acceptance does not authorize
+release, capability advertising or live bidding.
+This adds a creation envelope and replay mapping to the accepted
 [service contract](service-contract.md). It does not change the accepted
 RFC 0001 command/event union, advertise a capability, or certify a host.
 Synthetic acceptance cases are in [registration-cases.md](registration-cases.md).
@@ -14,9 +18,9 @@ for group attachment. Service-contract §§1–6 already require auction-scoped
 ordering, atomic receipts/events/outbox, authenticated replay, scheduling revision
 advancement for registered membership, and complete-commit projection.
 
-The draft below supplies missing registration-specific fields, records and replay
-rules. Those choices need acceptance before implementation. They are not evidence
-that the accepted contract already defines a `register_unit` command.
+The addendum below supplies missing registration-specific fields, records and replay
+rules. These registration-specific choices were accepted on 2026-10-14. They extend
+the coordinator contract, not the baseline RFC 0001 command union.
 
 ## Submitted intent
 
@@ -53,7 +57,7 @@ retained-receipt resolution, sealed/capability and permission checks, apply:
 1. Operation resource bounds (one affected unit and one resulting closing set;
    request/depth and encoded-batch bounds remain the accepted profile).
 2. Exact `expected_schedule_revision` match, otherwise `stale_revision`.
-3. A never-registered `unit_id`, otherwise proposed `unit_id_conflict`.
+3. A never-registered `unit_id`, otherwise `unit_id_conflict`.
    A different command ID cannot reset or replace an existing unit, including a
    terminal unit or an unpublished/catalog-removed unit. No identity reuse.
 4. A valid configuration whose deadline is strictly after both its opening and
@@ -63,11 +67,11 @@ retained-receipt resolution, sealed/capability and permission checks, apply:
 
 Invalid configuration shapes/semantics are pre-admission failures. Rejections
 inside the ordered decision retain receipts without changing domain state.
-`unit_id_conflict` is a proposed finite registration rejection reason, not an
-addition to the current accepted rejection schema. It carries no configuration,
+`unit_id_conflict` is the accepted finite registration rejection reason in the
+existing closed `closing_change_rejected` envelope. It carries no configuration,
 identity diagnostics or private fields.
 
-The proposed successful state consists of:
+The successful state consists of:
 
 - configuration installed durably under the new immutable unit identity;
 - the baseline `Engine.initial_state` / `State.empty(configuration)`, version 0,
@@ -86,7 +90,7 @@ the new unit's baseline last-command time remains null until its first command.
 A successful commit atomically stores configuration, state/topology, receipt,
 private sequence/time, and the following domain/outbox records in fixed order:
 
-0. Proposed `bidding_unit_registered`, privileged: capability, type, visibility,
+0. `bidding_unit_registered`, privileged: capability, type, visibility,
    command/commit/auction/unit IDs, effective time, trusted operator ID, reason,
    complete configuration and baseline empty state.
 1. `closing_configuration_changed`, public: the existing closed scheduling
@@ -106,7 +110,10 @@ configuration, exact empty state, version 0, matching schedule, next scheduling
 revision and absence of the unit in the before-state. Install configuration and
 empty state before applying the scheduling delta. Registration is the explicit
 exception to the ordinary existing-unit 'advance once' replay rule; the created
-unit stays at version 0. Reject a missing, reordered, conflicting or partial
+unit stays at version 0 **and `last_effective_at: null`**. Neither ordinary
+scheduling-delta version advancement nor its commit-time assignment applies to
+the newly created unit. The auction decision clock still advances normally.
+Reject a missing, reordered, conflicting or partial
 creation batch without mutation. Audit replay does not need live register
 permission; it needs separately authenticated privileged replay authority.
 
@@ -116,13 +123,15 @@ a consistently authorized public snapshot. Baseline-only consumers reject the
 unsupported coordinator capability. Stable outbox redelivery must not recreate
 the unit or repeat admission. Reopening a host loads the durable configuration
 registry; caller bootstrap configuration is not permission to erase new units.
-Changing a previously registered configuration is outside this draft.
+Changing a previously registered configuration is outside this addendum.
 
-## Review and execution gate
+## Execution gate
 
-Maintainer acceptance must settle the creation name/fields, `register` permission,
-version-0 replay exception, new rejection reason, two-record ordering and
-standalone-first boundary. Then add closed schemas and executable conformance
-fixtures before coordinator/host implementation. Existing schema unions remain
-unchanged until that acceptance. The cases below are review specifications, not
-executed conformance results. This draft cannot satisfy task #23987 or issue #45.
+The accepted registration envelope and creation record have separate closed
+schemas in [registration.schema.json](registration.schema.json); baseline command
+and scheduling command/event unions remain unchanged; the existing rejection
+reason enum additionally accepts `unit_id_conflict`. Contract tests validate their
+shapes and exact synthetic empty-state oracle, not registration execution.
+The 21 cases still require executable coordinator/host conformance, race, crash,
+projection and recovery evidence before capability certification. Acceptance and
+schema tests cannot satisfy issue #45 or the complete coordinator task.

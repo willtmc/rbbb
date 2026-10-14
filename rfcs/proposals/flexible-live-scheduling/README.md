@@ -4,15 +4,18 @@ Status: **accepted contract (RFC 0004, 2026-09-24); not implemented**. These doc
 [the live-scheduling RFC](../../0004-flexible-live-scheduling.md). They do not add an
 endpoint, engine command, stable capability, or production-readiness claim.
 
-## Draft addenda (not accepted)
+## Registration addendum (accepted 2026-10-14; not implemented)
 
-- [Live unit registration contract](registration-contract.md): proposed creation
-  envelope, version-0 replay mapping and durable configuration registry.
+- [Live unit registration contract](registration-contract.md): accepted creation
+  envelope, version-0/null-clock replay mapping and durable configuration registry.
+- [Closed registration schemas](registration.schema.json): submitted intent and
+  privileged creation record; existing rejection enum adds `unit_id_conflict`.
 - [Synthetic registration acceptance cases](registration-cases.md): 21 review
-  cases; not executable fixtures or evidence of passed registration gates.
+  cases; not evidence of passed registration execution gates.
 
-These drafts are separate from the accepted RFC 0004 artifacts below. They must
-be accepted and mapped to closed schemas/executable cases before implementation.
+`ruby/engine/test/registration_contract_test.rb` executes shape, privacy and
+baseline empty-state oracle checks. Registration coordinator/host execution,
+semantic admission, replay, race/crash and recovery fixtures remain required.
 
 ## Artifacts
 

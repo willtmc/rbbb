@@ -170,6 +170,10 @@ entire batch, including per-unit records.
 Replay applies baseline unit events first. For each unit in the scheduling
 delta's version vector, assign its declared version, the closing time from its
 resulting closing set, and the commit's effective time as `last_effective_at`.
+The accepted [registration addendum](registration-contract.md) is the explicit
+creation exception: install the empty unit at version 0 with
+`last_effective_at: null`; its scheduling delta must not assign commit time or
+advance the new unit. The auction's decision clock still advances.
 Preserve all other unit fields. A unit already advanced by baseline events must
 have the same declared version; every other affected unit must advance exactly
 once. Replace affected closing sets and retire the named groups; preserve all
