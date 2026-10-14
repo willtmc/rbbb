@@ -4,6 +4,16 @@ Status: **accepted contract (RFC 0004, 2026-09-24); not implemented**. These doc
 [the live-scheduling RFC](../../0004-flexible-live-scheduling.md). They do not add an
 endpoint, engine command, stable capability, or production-readiness claim.
 
+## Draft addenda (not accepted)
+
+- [Live unit registration contract](registration-contract.md): proposed creation
+  envelope, version-0 replay mapping and durable configuration registry.
+- [Synthetic registration acceptance cases](registration-cases.md): 21 review
+  cases; not executable fixtures or evidence of passed registration gates.
+
+These drafts are separate from the accepted RFC 0004 artifacts below. They must
+be accepted and mapped to closed schemas/executable cases before implementation.
+
 ## Artifacts
 
 - [`minute-batch-examples.json`](minute-batch-examples.json): proposed initial

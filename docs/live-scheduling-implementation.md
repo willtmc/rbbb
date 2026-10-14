@@ -96,7 +96,11 @@ schedule changes must use the complete affected-set scheduling edit API.
 **Still required before advertising support:**
 
 - live inventory registration must use the same durable ordering boundary,
-  with registration fault tests and complete mutation-entry-point inventory;
+  with registration fault tests and complete mutation-entry-point inventory.
+  The [registration addendum](../rfcs/proposals/flexible-live-scheduling/registration-contract.md)
+  and [21 synthetic review cases](../rfcs/proposals/flexible-live-scheduling/registration-cases.md)
+  propose its missing creation/replay contract; neither is accepted, implemented
+  or passed conformance evidence. Contract acceptance comes before implementation;
 - void/edit and void/close independent-process races and void crash recovery
   must extend the new transaction/replay/rollback coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to
