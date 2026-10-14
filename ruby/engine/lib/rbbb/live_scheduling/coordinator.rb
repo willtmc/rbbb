@@ -5,7 +5,7 @@ module RBBB
     # Pure auction-scoped decision maker. The host must serialize ALL mutation
     # entry points and atomically commit this result with receipt/outbox records.
     class Coordinator
-      Result = Struct.new(:state, :records, :rejection_reason, :retired_group_ids, keyword_init: true)
+      Result = Struct.new(:state, :records, :rejection_reason, :retired_group_ids, :configurations, keyword_init: true)
       attr_reader :auction_id, :configurations, :policy, :profile, :snapshot
 
       def initialize(auction_id:, configurations:, snapshot:, policy:, profile: PROFILE, retired_group_ids: [])
@@ -28,6 +28,35 @@ module RBBB
         snapshot.fetch("units").each_value { |unit| State.from_h(unit) }
         @snapshot["closing_sets"] = LiveScheduling.sort_sets(snapshot.fetch("closing_sets").map { |set| Intent.normalize_set(set) })
         validate_snapshot!
+      end
+
+      def register_unit(intent:, principal_id:, permissions:, effective_at:, commit_id:)
+        intent = Intent.normalize_registration(intent)
+        Intent.identifier(principal_id)
+        Intent.identifier(commit_id)
+        return reject("invalid_request") unless intent["auction_id"] == auction_id
+        return reject("not_authorized") unless permissions.include?("register")
+        return reject("resource_limit_exceeded") if profile["affected_units"] < 1 || profile["closing_sets"] < 1
+        return reject("stale_revision") unless intent["expected_schedule_revision"] == snapshot["schedule_revision"]
+        id = intent["unit_id"]
+        return reject("unit_id_conflict") if configurations.key?(id) || snapshot["units"].key?(id)
+        config = intent["configuration"]
+        at = LiveScheduling.time(effective_at)
+        return reject("invalid_schedule") unless LiveScheduling.time(config["closes_at"]) > at
+        return reject("version_exhausted") if snapshot["schedule_revision"] >= MAX_SAFE_INTEGER
+        state = LiveScheduling.copy(snapshot)
+        empty = State.empty(Configuration.from_h(config)).to_h
+        state["units"][id] = empty
+        state["schedule_revision"] += 1
+        set = {"group_id" => nil, "member_unit_ids" => [id], "closes_at" => config["closes_at"], "extension" => config["extension"]}
+        state["closing_sets"] = LiveScheduling.sort_sets(state["closing_sets"] + [set])
+        creation = {"capability" => CAPABILITY, "type" => "bidding_unit_registered", "visibility" => "privileged",
+          "command_id" => intent["command_id"], "commit_id" => commit_id, "auction_id" => auction_id,
+          "unit_id" => id, "effective_at" => LiveScheduling.dump_time(at), "operator_id" => principal_id,
+          "reason" => intent["reason"], "configuration" => LiveScheduling.copy(config), "state" => empty}
+        decision = result(state, [creation, change_record(intent["command_id"], commit_id, at, state, [id], [set], [])], commit_id: commit_id)
+        decision.configurations = configurations.merge(id => LiveScheduling.copy(config)) unless decision.rejection_reason
+        decision
       end
 
       def edit(intent:, principal_id:, permissions:, effective_at:, commit_id:)

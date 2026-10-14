@@ -25,6 +25,34 @@ module RBBB
         raise Invalid, e.message
       end
 
+      def parse_registration(raw, profile: PROFILE)
+        raise Invalid, "request size exceeded" unless raw.is_a?(String) && raw.bytesize <= profile.fetch("request_bytes")
+        raise Invalid, "invalid UTF-8" unless raw.dup.force_encoding(Encoding::UTF_8).valid_encoding?
+        normalize_registration(JSON.parse(raw, object_class: UniqueObject, allow_duplicate_key: false, max_nesting: profile.fetch("depth")))
+      rescue JSON::ParserError, JSON::NestingError, EncodingError => e
+        raise Invalid, e.message
+      end
+
+      def normalize_registration(value)
+        object(value, %w[type command_id auction_id unit_id expected_schedule_revision configuration reason])
+        raise Invalid, "unsupported registration" unless value["type"] == "register_unit"
+        %w[command_id auction_id unit_id].each { |key| identifier(value[key]) }
+        revision(value["expected_schedule_revision"])
+        reason = value["reason"]
+        raise Invalid, "invalid reason" unless reason.is_a?(String) && reason.valid_encoding? && reason.length.between?(1, 2048) && reason.match?(/\S/)
+        config = value["configuration"]
+        object(config, %w[currency opening_minor_units reserve_minor_units increments opens_at closes_at extension])
+        array(config["increments"], minimum: 1).each { |tier| object(tier, %w[from_minor_units amount_minor_units]) }
+        object(config["extension"], %w[trigger_window_seconds duration_seconds]) unless config["extension"].nil?
+        Configuration.from_h(config)
+        canonical(value) # Reject invalid text and unsupported/unsafe JSON values.
+        normalized = LiveScheduling.copy(value)
+        %w[opens_at closes_at].each { |key| normalized["configuration"][key] = LiveScheduling.dump_time(config[key]) }
+        normalized
+      rescue TypeError, NoMethodError, ArgumentError, InvalidConfiguration => e
+        raise Invalid, e.message
+      end
+
       def normalize(value)
         object(value, KEYS)
         raise Invalid, "unsupported submission" unless value["capability"] == CAPABILITY && %w[revise_closing_schedule reconfigure_closing_groups].include?(value["type"])

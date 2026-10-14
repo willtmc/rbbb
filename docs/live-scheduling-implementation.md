@@ -48,6 +48,25 @@ transaction, then acknowledges delivery separately. A crash can redeliver the
 same batch; the consumer must deduplicate. Delivery never reruns a command.
 No test sends messages or contacts a customer.
 
+## Registration runtime slice (not host-integrated)
+
+`Intent.parse_registration` validates the accepted closed registration envelope,
+including nested configuration shape/semantics, duplicate keys and request/depth
+bounds. `Coordinator.register_unit` returns a detached standalone creation with
+version 0, null unit clock, one revision advance and the privileged/public record
+pair. On success, `Result#configurations` contains the proposed updated registry;
+a host must commit it atomically with state, receipt and outbox. It is not an
+in-place registry mutation. Rejections return no proposed registry.
+
+Run `cd ruby/engine && bundle exec ruby -Itest test/live_registration_test.rb`.
+The tests exercise creation, schema/privacy, closed admission, identity conflict,
+permission/stale/time/version/batch rejection and detached state preservation.
+These are pure runtime tests, **not** full REG01–21 execution or certification.
+The SQLite host has no registration entry point and the projector does not replay
+creation yet. Durable registry reopening, authenticated receipts, atomic creation
+replay, race/crash/recovery and authorized projection remain pending. Do not call
+this coordinator slice through a live endpoint or advertise the capability.
+
 ## Evidence and remaining certification gates
 
 Run `cd ruby/engine && bundle exec rake` (tests plus installed-package smoke).
