@@ -65,14 +65,21 @@ and FLS-20's boundary rejection, raw-body and fully encoded domain/outbox byte
 limits, no-change and revision exhaustion. `live_scheduling_host_test.rb`
 uses two independent processes/database sessions for edit/edit, bid/edit and
 close/edit races, and tests identity/permission replay, clock rollback, sealing,
-no partial rejection effects and outbox retry.
+no partial rejection effects and outbox retry. Additional independent-process
+`SIGKILL` tests interrupt an edit immediately before SQL commit, immediately
+after durable commit, and after outbox delivery but before acknowledgment.
+Reopening verifies rollback or complete retained receipts/events/outbox as
+appropriate, plus stable whole-batch redelivery. A quiescent sealed-database
+copy/restore test preserves accepted and rejected receipts, authorization,
+command identity, pending delivery and the sealed mutation boundary. These are
+SQLite reference-host tests, not deployment/load certification.
 
 **Still required before advertising support:**
 
 - live inventory registration and every operator unit mutation (including voids)
   must use the same durable ordering boundary, with registration fault tests;
-- process-kill crash certification (not just raised fault hooks), complete
-  seal/archive/restore receipts and outbox-recovery certification;
+- extend the reference-host edit crash and sealed-copy recovery evidence to
+  every remaining mutation entry point and deployment archive/restore workflow;
 - a deployment's authenticated admission layer, public/private projection
   manifests and authorized consumer resynchronization must be certified;
 - finalize `specification/` integration and migration contract before capability

@@ -136,6 +136,113 @@ class LiveSchedulingHostTest < Minitest::Test
     %w[unit-a unit-b].each { |id| assert_equal "closed", @host.snapshot["units"][id]["status"] }
   end
 
+  def test_process_kill_before_commit_rolls_back_state_receipt_and_outbox
+    before = @host.snapshot
+    kill_at(:before_commit) { |host| edit(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal before, reopened.snapshot
+    assert_equal 0, reopened.receipt_count
+    assert_empty reopened.records
+    assert_equal 0, reopened.deliver_pending { flunk "uncommitted delivery" }
+    assert_nil edit(reopened)["rejection_reason"]
+    assert_equal 1, reopened.receipt_count
+  end
+
+  def test_process_kill_after_commit_preserves_complete_sealed_receipt_and_outbox
+    kill_at(:after_commit) { |host| edit(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal 8, reopened.snapshot["schedule_revision"]
+    assert_equal 1, reopened.receipt_count
+    assert_equal 3, reopened.records.size
+    reopened.seal!
+    @args[:clock] = -> { raise "replay must not allocate time" }
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args)
+    response = edit(restored)
+    assert response["replayed"]
+    assert_nil response["rejection_reason"]
+    assert_equal restored.records, response["records"]
+    assert_equal 1, restored.deliver_pending { |batch| assert_equal response["records"], batch.map { |entry| entry["record"] } }
+    assert_equal 0, restored.deliver_pending { flunk "duplicate delivery" }
+  end
+
+  def test_process_kill_before_outbox_ack_redelivers_identical_batch
+    edit
+    before = @host.snapshot
+    delivered_path = File.join(@dir, "delivered.json")
+    kill_at(:before_delivery_ack) do |host|
+      host.deliver_pending { |batch| File.write(delivered_path, JSON.generate(batch)) }
+    end
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    delivered = JSON.parse(File.read(delivered_path))
+    assert_equal 1, reopened.deliver_pending { |batch| assert_equal delivered, batch }
+    assert_equal 0, reopened.deliver_pending { flunk "already acknowledged" }
+    assert_equal before, reopened.snapshot
+    assert_equal 1, reopened.receipt_count
+  end
+
+  def test_sealed_database_archive_restore_preserves_receipts_and_pending_delivery
+    accepted = edit
+    rejected_intent = @intent.merge("command_id" => "retained-rejection", "expected_schedule_revision" => 6)
+    rejected = edit(@host, rejected_intent)
+    assert_equal "stale_revision", rejected["rejection_reason"]
+    @host.seal!
+    archived_state = @host.snapshot
+    archive_path = File.join(@dir, "sealed-archive.sqlite3")
+    # No connections remain open: copy the complete sealed embedded database,
+    # not a snapshot-only export that would lose receipt/outbox identity.
+    FileUtils.cp(@args[:path], archive_path)
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive_path,
+      clock: -> { raise "restored receipt replay must not consult clock" }))
+    assert_equal accepted.merge("replayed" => true), edit(restored)
+    assert_equal rejected.merge("replayed" => true), edit(restored, rejected_intent)
+    assert_equal "not_authorized", edit(restored, @intent, "another-operator")["rejection_reason"]
+    assert_equal "not_authorized", edit(restored, @intent, "operator-demo", [])["rejection_reason"]
+    changed = @intent.merge("reason" => "Different synthetic intent")
+    assert_equal "command_id_reused", edit(restored, changed)["rejection_reason"]
+    assert_equal 1, restored.deliver_pending { |batch| assert_equal accepted["records"], batch.map { |entry| entry["record"] } }
+    assert_equal 0, restored.deliver_pending { flunk "restored acknowledgment lost" }
+    assert_equal archived_state, restored.snapshot
+    assert_equal 2, restored.receipt_count
+    # Restoring a sealed archive must not reopen mutation.
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive_path))
+    assert_equal "auction_sealed", edit(restored, @intent.merge("command_id" => "new-after-restore"))["rejection_reason"]
+    assert_equal archived_state, restored.snapshot
+    assert_equal accepted["records"], restored.records
+    # A restored copy's delivery acknowledgment cannot change the archive source.
+    assert_equal 1, @host.deliver_pending { |batch| assert_equal accepted["records"], batch.map { |entry| entry["record"] } }
+  end
+
+  # Signal readiness only at the selected persistence boundary, then let the
+  # parent SIGKILL the process: no Ruby exception/ensure rollback can run.
+  def kill_at(hook)
+    ready_read, ready_write = IO.pipe
+    pid = fork do
+      ready_read.close
+      host = RBBBExamples::LiveSchedulingHost.new(**@args)
+      host.define_singleton_method(hook) do |*_args|
+        ready_write.write("ready")
+        ready_write.flush
+        sleep
+      end
+      yield host
+      exit! 1
+    end
+    ready_write.close
+    assert IO.select([ready_read], nil, nil, 10), "child never reached #{hook}"
+    assert_equal "ready", ready_read.read(5), "child exited before #{hook}"
+    Process.kill("KILL", pid)
+    Process.wait(pid)
+    assert_equal Signal.list.fetch("KILL"), $?.termsig
+    pid = nil
+  ensure
+    if pid
+      Process.kill("KILL", pid) rescue Errno::ESRCH
+      Process.wait(pid) rescue Errno::ECHILD
+    end
+    ready_read&.close unless ready_read&.closed?
+    ready_write&.close unless ready_write&.closed?
+  end
+
   def race
     go_read, go_write = IO.pipe
     children = 2.times.map do |index|
