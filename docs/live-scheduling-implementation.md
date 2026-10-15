@@ -190,6 +190,31 @@ This is not identity-provider authentication, a command admission adapter,
 authorized commit manifests, persistent consumer recovery or deployment
 certification. Those gates remain open; no capability or live-use change.
 
+### Trusted command admission example
+
+`examples/live_scheduling_admission.rb` wraps the six existing mutation entry
+points with server-owned `authenticate`, `authorize` and `permissions` callbacks.
+Construct it with the host and those callbacks, then call e.g.
+`adapter.bid(credential: token, unit_id: id, command: command)` instead of passing
+request-derived principal IDs or permission arrays to the host. `edit` requires
+`schedule`; registration, bid, void, reserve and close require their respective
+existing grants. `shorten` remains a separate host-enforced grant.
+
+Every call, including a receipt retry, resolves identity and current grants again.
+Only literal `true` authorizes access; client authority keywords are refused.
+Callbacks must authorize the full auction/action scope before granting access;
+the host continues to enforce closed intent, unit versions and ordered semantics.
+This adapter is trusted in-process glue, not an identity provider, unit-scoped
+policy engine, transport parser, public endpoint or deployment certification.
+
+Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_admission_test.rb`.
+Expected: four tests exercise all six dispatches, strict denial, revoked retries
+and spoofed authority against a recording host. These are adapter unit tests,
+not end-to-end authenticated deployment tests. Keep direct host references private
+to the embedding service; exposing them would bypass this boundary. Commit-stream
+manifests and persistent resynchronization/cursor recovery remain unimplemented;
+the reader checkpoint must not be used as a contiguous stream cursor.
+
 **Still required before advertising support:**
 
 - complete the registration REG01–21 execution matrix and mutation-entry-point
