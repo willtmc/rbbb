@@ -1,6 +1,6 @@
 # Authorized consumer recovery — proposed adapter contract
 
-Status: **ACCEPTED CONTRACT / NOT IMPLEMENTED**. Will McLemore accepted
+Status: **ACCEPTED CONTRACT / REFERENCE SNAPSHOT INSTALLATION STAGED; NOT CERTIFIED**. Will McLemore accepted
 snapshot-replacement-first and the host-owned authorization-context generation/
 invalidation requirements on 2026-10-15, recorded in RFC 0004. This embedding
 contract refines service-contract §6; it changes no existing event schema,
@@ -76,7 +76,12 @@ installation and must never replay the auction mutation.
 
 ## Proposed executable acceptance cases
 
-These are review cases, **not passing test claims**:
+These are acceptance requirements, not a claim all deployment gates pass.
+`ruby/engine/test/live_scheduling_consumer_test.rb` exercises the reference-reader
+installation subset (denial/invalidation, policy replacement, digest/scope
+isolation, whole-install crash/retry and rejected-decision checkpoints). Deployment
+identity/policy provisioning, archive/epoch continuity and incremental streams
+remain outside this reference implementation:
 
 1. Invalid identity or non-true grant yields no payload and no consumer write.
 2. Revocation between retries denies refetch and invalidates serving old state.

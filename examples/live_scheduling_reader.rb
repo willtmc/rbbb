@@ -11,8 +11,9 @@ module RBBBExamples
   class LiveSchedulingReader
     class NotAuthorized < StandardError; end
 
-    def initialize(host:, authenticate:, authorize:, visible:)
+    def initialize(host:, authenticate:, authorize:, visible:, authorization_context: nil)
       @host, @authenticate, @authorize, @visible = host, authenticate, authorize, visible
+      @authorization_context = authorization_context
     end
 
     def checkpoint(credential:, visibility:)
@@ -39,6 +40,11 @@ module RBBBExamples
         payload = {"tenant_id" => checkpoint.fetch("tenant_id"),
           "auction_id" => checkpoint.fetch("auction_id"), "visibility" => visibility,
           "decision_sequence" => checkpoint.fetch("decision_sequence"), "snapshot" => projected}
+        if @authorization_context
+          context = @authorization_context.call(**scope)
+          raise NotAuthorized, "not authorized" unless context.is_a?(String) && !context.empty?
+          payload["authorization_context"] = context
+        end
         # Hash ONLY this authorized payload, never privileged state for a public
         # response. Reauthorize every refetch; no shared cross-principal cache.
         {"payload" => payload, "sha256" => Digest::SHA256.hexdigest(JSON.generate(payload))}

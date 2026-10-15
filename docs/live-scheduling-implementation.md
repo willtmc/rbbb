@@ -217,9 +217,44 @@ the reader checkpoint must not be used as a contiguous stream cursor.
 
 The [accepted consumer recovery contract](../rfcs/proposals/flexible-live-scheduling/consumer-recovery-contract.md)
 requires snapshot-replacement-first recovery and authorization-context invalidation,
-with ten review cases. Will accepted it on 2026-10-15; implementation and executable
-recovery cases remain pending. Incremental stream cursor/envelope rules remain
+with ten review cases. Will accepted it on 2026-10-15. The reference snapshot
+consumer now provides a bounded installation implementation; the full deployment
+recovery gates remain open. Incremental stream cursor/envelope rules remain
 deferred pending a separate explicit contract.
+
+### Atomic authorized snapshot consumer
+
+Start with `examples/live_scheduling_consumer.rb`. Supply a reader with the
+additional `authorization_context:` callback: it must return an opaque nonempty
+server-owned identity bound to principal, visibility and catalog/policy generation.
+Change it whenever that authorization context changes; do not use a privileged
+state/ACL digest as a public generation. Configure the consumer with its own local
+SQLite path, tenant, auction and visibility, and a trusted fetch callback:
+
+```ruby
+fetch = ->(**args) { reader.checkpoint(**args) }
+consumer = RBBBExamples::LiveSchedulingConsumer.new(path: "consumer.sqlite3",
+  tenant_id: "tenant-demo", auction_id: "auction-demo", visibility: "public", fetch: fetch)
+result = consumer.read(credential: token)
+```
+
+Expected: each read reauthenticates/refetches, validates scope and the delivered
+payload digest, then atomically installs the entire payload/checkpoint/digest.
+An identical retry is a no-op; conflicting content for the same scoped checkpoint
+fails closed. Changed policy context replaces the whole view. Denial clears the
+stored installation and raises; unavailable/malformed fetches raise without
+returning cached content. There is deliberately no offline read API. Keep this
+file and direct SQLite access private to the embedding service; raw local storage
+access bypasses serving authorization, and prior disclosures cannot be erased.
+
+Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_consumer_test.rb`.
+Seven tests use the real reader/host and synthetic local SQLite state: strict
+denial/revocation, catalog generation changes, scope/private digest isolation,
+conflicting retries, rejected-decision gaps, detached reopen and real process kill
+before/after install commit. No external messages or authoritative auction writes
+occur during consumer installation. These are reference-adapter tests, not an
+identity provider, signed manifest protocol, complete archive validator, real
+deployment authentication/retention certification or incremental replay engine.
 
 **Still required before advertising support:**
 
