@@ -164,6 +164,32 @@ all evidence (including the decision count). Do not repair a failed archive by
 resetting counters, deleting more history or re-seeding the auction: recover a
 complete trusted copy. Deployment manifest/recovery certification remains open.
 
+### Trusted snapshot reader (reference integration only)
+
+`examples/live_scheduling_reader.rb` wraps the privileged host with server-owned
+`authenticate`, `authorize`, and per-unit `visible` callbacks. A transport calls
+`reader.checkpoint(credential: token, visibility: "public")` after installing
+those callbacks; tokens/roles must not be treated as permissions themselves.
+Every refetch authenticates again. Authorization and catalog checks run within
+the same host transaction as the snapshot and decision sequence. Only literal
+`true` grants access. Callback errors propagate without disclosing a snapshot.
+
+Public output contains only visible units' baseline `public_view` plus scheduling
+revision, not private state or full topology. It is a refetch-only view, not input
+to the privileged projector. Privileged reads require access to every unit and
+return a detached complete snapshot. Each response hashes only its own authorized
+payload; a public response never includes a privileged digest. Decision sequence
+is a snapshot checkpoint (including rejected decisions), not a contiguous event
+stream cursor. Applications must install snapshots atomically and must not reuse
+these responses across principals or use them to infer missing commit history.
+
+Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_reader_test.rb`.
+Expected: four tests covering denial/revocation, strict grants, catalog filtering,
+separate digests, detached private reads and post-commit revision/checkpoints.
+This is not identity-provider authentication, a command admission adapter,
+authorized commit manifests, persistent consumer recovery or deployment
+certification. Those gates remain open; no capability or live-use change.
+
 **Still required before advertising support:**
 
 - complete the registration REG01–21 execution matrix and mutation-entry-point

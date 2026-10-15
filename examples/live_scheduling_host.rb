@@ -117,6 +117,18 @@ module RBBBExamples
       snapshot.fetch("units").transform_values { |unit| RBBB::State.from_h(unit).public_view }
     end
 
+    # Privileged in-process integration seam. The block must project/authorize
+    # inside this transaction; do not expose this raw checkpoint to transports.
+    def read_checkpoint
+      transaction do |db|
+        stored = row(db)
+        validate_retained_history!(db, stored)
+        yield RBBB::LiveScheduling.copy({"tenant_id" => tenant_id,
+          "auction_id" => auction_id, "decision_sequence" => stored[5],
+          "snapshot" => JSON.parse(stored[1])})
+      end
+    end
+
     def records
       transaction { |db| db.execute("SELECT records FROM commits WHERE tenant = ? AND auction = ? ORDER BY sequence", [tenant_id, auction_id]).flat_map { |entry| JSON.parse(entry[0]) } }
     end
