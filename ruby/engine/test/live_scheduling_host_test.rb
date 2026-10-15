@@ -133,6 +133,78 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_equal 0, @host.snapshot["units"]["unit-new"]["version"]
   end
 
+  # REG-10/21: both rejected and accepted receipts survive sealing and copying;
+  # replay is not a new decision and must not allocate an ordered timestamp.
+  def test_registration_rejected_receipt_replays_after_seal_and_archive_restore
+    rejected_intent = registration("retained-conflict", "unit-a")
+    rejected = register(@host, rejected_intent)
+    assert_equal "unit_id_conflict", rejected["rejection_reason"]
+    accepted = register
+    @host.seal!
+    before, configs, records = @host.snapshot, @host.configurations, @host.records
+    replay_args = @args.merge(clock: -> { raise "retained replay allocated time" })
+    assert_equal rejected.merge("replayed" => true), register(RBBBExamples::LiveSchedulingHost.new(**replay_args), rejected_intent)
+    archived = File.join(@dir, "retained-rejection.sqlite3")
+    FileUtils.cp(@args[:path], archived)
+    restored = RBBBExamples::LiveSchedulingHost.new(**replay_args.merge(path: archived))
+    assert_equal rejected.merge("replayed" => true), register(restored, rejected_intent)
+    assert_equal accepted.merge("replayed" => true), register(restored)
+    assert_equal before, restored.snapshot
+    assert_equal configs, restored.configurations
+    assert_equal records, restored.records
+    assert_equal 2, restored.receipt_count
+    assert_equal 1, restored.deliver_pending { |batch| assert_equal accepted["records"], batch.map { |item| item["record"] } }
+    assert_equal 0, restored.deliver_pending { flunk "duplicate acknowledged creation" }
+    writable_clock = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archived))
+    sealed = register(writable_clock, registration("sealed-fresh", "unit-other").merge("expected_schedule_revision" => 8))
+    assert_equal "auction_sealed", sealed["rejection_reason"]
+    assert_equal before, writable_clock.snapshot
+    assert_equal configs, writable_clock.configurations
+    assert_equal records, writable_clock.records
+    assert_equal 3, writable_clock.receipt_count
+  end
+
+  # REG-12: the stale race loser cannot create the same identity with a fresh
+  # key and current revision, nor replace the original retained rejection.
+  def test_registration_race_fresh_key_conflict_preserves_winner_and_loser_receipts
+    results = race { |host, index| register(host, registration("fresh-conflict-race-#{index}")) }
+    loser_index = results.index { |result| result["rejection_reason"] == "stale_revision" }
+    refute_nil loser_index
+    before, configs, records = @host.snapshot, @host.configurations, @host.records
+    intent = registration("fresh-conflict").merge("expected_schedule_revision" => 8)
+    rejected = register(@host, intent)
+    assert_equal "unit_id_conflict", rejected["rejection_reason"]
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args.merge(clock: -> { raise "replay allocated time" }))
+    assert_equal rejected.merge("replayed" => true), register(reopened, intent)
+    assert_equal results[loser_index].merge("replayed" => true), register(reopened, registration("fresh-conflict-race-#{loser_index}"))
+    assert_equal before, reopened.snapshot
+    assert_equal configs, reopened.configurations
+    assert_equal records, reopened.records
+    assert_equal 3, reopened.receipt_count
+    assert_equal 1, reopened.deliver_pending { |batch| assert_equal records, batch.map { |item| item["record"] } }
+  end
+
+  # REG-18: inconsistent replay inputs must reject without mutating either
+  # registry. Persistent consumer cursors remain a separate adapter obligation.
+  def test_registration_projector_rejects_occupied_identity_and_revision_gap
+    before, configs = @host.snapshot, @host.configurations
+    response = register
+    occupied = copy(before)
+    occupied["units"]["unit-new"] = copy(@host.snapshot["units"]["unit-new"])
+    occupied_configs = configs.merge("unit-new" => copy(@host.configurations["unit-new"]))
+    gap = copy(before)
+    gap["schedule_revision"] -= 1
+    [[occupied, occupied_configs], [gap, configs]].each do |snapshot, configurations|
+      original_snapshot, original_configurations = copy(snapshot), copy(configurations)
+      assert_raises(RBBB::InvalidState) do
+        RBBB::LiveScheduling::Projector.apply_commit(snapshot: snapshot, configurations: configurations,
+          records: response["records"], policy: @args[:policy], auction_id: @args[:auction_id])
+      end
+      assert_equal original_snapshot, snapshot
+      assert_equal original_configurations, configurations
+    end
+  end
+
   def test_registration_projector_requires_exact_whole_creation_and_returns_both_registries
     before, configs = @host.snapshot, @host.configurations
     response = register

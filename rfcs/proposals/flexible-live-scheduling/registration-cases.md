@@ -91,18 +91,18 @@ certified deployment or authenticated network adapter.
 | REG-07 | host `conflict_stale`: stale + duplicate + elapsed; retained rejection after revision advances | None for reference-host precedence |
 | REG-08 | host `conflict_stale` and `transport_failures`: equal/earlier ordered deadline; invalid baseline pre-admission | None for those boundaries |
 | REG-09 | host `transport_failures`: forbidden fields, duplicate keys, invalid UTF-8; all database rows unchanged, including clock/sequence | None for tested admission shapes |
-| REG-10 | host `outbox_crash_and_sealed_restore`: sealed new ID, accepted replay without allocating clock | Explicit same-host retained rejection replay after seal |
+| REG-10 | host `outbox_crash_and_sealed_restore` and `rejected_receipt_replays_after_seal_and_archive_restore`: sealed new ID, accepted/rejected replay without allocating clock | None for reference-host retained replay |
 | REG-11 | host `then_attachment`: failed attachment preserves standalone commit; successful attachment preserves bids and advances versions/revision once | Deployment visibility/admission withheld until promised attachment |
-| REG-12 | host `independent_registration_race`: independent processes, one winner and retained stale loser | Fresh-key revision-8 conflict after the race |
+| REG-12 | host `independent_registration_race` and `race_fresh_key_conflict`: independent processes, one winner, retained stale loser and fresh-key current-revision conflict; both rejections replay after reopen | Deployment database certification |
 | REG-13 | host `registration_edit_race`, `registration_existing_bid_race`: independent processes; full journal replay equals durable registries | Repeat/certify under deployment database |
 | REG-14 | host `registration_new_unit_bid_race`, `reopen_preserves_registry`: unknown-before-create rejection or accepted after-create; retained retry and later bid after reopen | Deployment authenticated bid admission |
 | REG-15 | host `transaction_failure_and_process_kill`: real SIGKILL before commit and complete rollback | None for reference-host crash boundary |
 | REG-16 | same test: real SIGKILL after commit; registry and original receipt survive | None for reference-host crash boundary |
 | REG-17 | host `outbox_crash_and_sealed_restore`: real SIGKILL before acknowledgment; stable full-batch redelivery | Authorized consumer apply-once projection/cursor |
-| REG-18 | host `projector_requires_exact_whole_creation`: exact full registry/state; missing/reordered/changed fields refuse without input mutation | Explicit occupied-ID/revision-gap and persistent cursor assertions |
+| REG-18 | host `projector_requires_exact_whole_creation` and `projector_rejects_occupied_identity_and_revision_gap`: exact full registry/state; missing/reordered/changed fields and occupied-ID/revision-gap refuse without input mutation | Persistent consumer cursor assertions |
 | REG-19 | pure `creation_is_version_zero`: public record omits private fields | Trusted reader/audit authority, catalog filtering, digests and consistent resync **not implemented/certified** |
 | REG-20 | pure `exact_resource_boundaries`: request bytes/depth and exact encoded batch/plus-one; `ordered_rejections` checks ceiling | Retained host receipts/clock/sequence at all boundary profiles |
-| REG-21 | host `outbox_crash_and_sealed_restore`: quiescent sealed copy, accepted receipt, registry, outbox identities and new-ID rejection | Rejected receipt restore, fail-closed missing history/registry, deployment archive manifest/recovery certification |
+| REG-21 | host `outbox_crash_and_sealed_restore` and `rejected_receipt_replays_after_seal_and_archive_restore`: quiescent sealed copy, accepted/rejected receipts without new clock allocation, registry, outbox identities and new-ID rejection | Fail-closed missing history/registry, deployment archive manifest/recovery certification |
 
 Additional host `registration_close_race` checks real independent-process
 registration/close ordering and full commit replay. Exact replay checks exposed
