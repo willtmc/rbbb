@@ -117,8 +117,11 @@ principal-bound receipt index and outbox. The host assigns operator identity and
 time and requires a current `void` permission, including receipt replay. Voids
 use the existing engine semantics without extending a linked group's deadline.
 Tests cover retained replay, denied disclosure, changed-intent refusal and atomic
-rollback of state, receipts, history and outbox. This is not void race/process-kill
-certification or a public admission API.
+rollback of state, receipts, history and outbox. A real independent-process SIGKILL
+immediately before and after void commit verifies rollback versus retained state,
+sealed receipt replay without clock allocation, unchanged scheduling and exactly
+one acknowledged pending void batch after reopen. This is reference-host crash
+evidence, not void race certification, deployment certification or a public admission API.
 
 Operator `change_reserve` also uses this boundary with current `reserve`
 permission, server-assigned identity/time, principal-bound replay and the
@@ -169,8 +172,8 @@ complete trusted copy. Deployment manifest/recovery certification remains open.
   Closed intent/creation schemas and executable contract/privacy/empty-state
   checks and bounded runtime/host/replay tests exist, but the full 21 execution
   gates have not passed;
-- void/edit and void/close independent-process races and void crash recovery
-  must extend the new transaction/replay/rollback coverage;
+- void/edit and void/close independent-process races must extend the existing
+  transaction/replay/rollback and before/after-commit void crash coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to
   every remaining mutation entry point and deployment archive/restore workflow;
 - a deployment's authenticated admission layer, public/private projection

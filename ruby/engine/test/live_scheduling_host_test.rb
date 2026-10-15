@@ -594,6 +594,46 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_nil @host.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"])["rejection_reason"]
   end
 
+  def test_void_process_kill_before_and_after_commit_preserves_exact_replay_and_delivery
+    bid = {"type" => "place_bid", "command_id" => "crash-void-target", "bid_id" => "crash-void-bid", "maximum_minor_units" => 5000}
+    assert_nil @host.bid(unit_id: "unit-c", command: bid, principal_id: "bidder-new")["rejection_reason"]
+    # Acknowledge the prerequisite bid so delivery assertions isolate the void.
+    assert_equal 1, @host.deliver_pending { |_batch| }
+    before = @host.snapshot
+    history = @host.records
+    count = @host.receipt_count
+    command = {"type" => "void_bid", "command_id" => "crash-void-command", "bid_id" => "crash-void-bid",
+      "reason" => "Synthetic correction", "notification_policy" => "affected"}
+    execute = ->(host) { host.void_bid(unit_id: "unit-c", command: command, principal_id: "operator-demo", permissions: ["void"]) }
+
+    kill_at(:before_commit) { |host| execute.call(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal before, reopened.snapshot
+    assert_equal history, reopened.records
+    assert_equal count, reopened.receipt_count
+    assert_equal 0, reopened.deliver_pending { flunk "uncommitted void delivery" }
+
+    kill_at(:after_commit) { |host| execute.call(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal count + 1, reopened.receipt_count
+    assert_equal ["crash-void-bid"], reopened.snapshot["units"]["unit-c"]["voided_bid_ids"]
+    assert_equal before["closing_sets"], reopened.snapshot["closing_sets"]
+    assert_equal before["schedule_revision"], reopened.snapshot["schedule_revision"]
+    committed = reopened.snapshot
+    void_records = reopened.records.drop(history.size)
+    refute_empty void_records
+    reopened.seal!
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(clock: -> { raise "retained void must not allocate time" }))
+    response = execute.call(restored)
+    assert response["replayed"]
+    assert_nil response["rejection_reason"]
+    assert_equal void_records, response["records"]
+    assert_equal committed, restored.snapshot
+    assert_equal count + 1, restored.receipt_count
+    assert_equal 1, restored.deliver_pending { |batch| assert_equal void_records, batch.map { |entry| entry["record"] } }
+    assert_equal 0, restored.deliver_pending { flunk "duplicate void delivery" }
+  end
+
   def reserve_command(id = "reserve-command", amount = 100)
     {"type" => "change_reserve", "command_id" => id, "reserve_minor_units" => amount,
       "reason" => "Synthetic reserve correction", "notification_policy" => "affected"}
