@@ -23,6 +23,13 @@ including standalone-first creation, trusted registration permission, private
 creation/public scheduling records and version-0/null-unit-clock replay.
 Registration schemas and contract checks are not host implementation certification.
 
+Maintainer addendum (Will McLemore, 2026-10-15): accepted the
+[authorized consumer recovery contract](proposals/flexible-live-scheduling/consumer-recovery-contract.md):
+snapshot-replacement-first, atomic payload/checkpoint/digest installation and
+host-owned authorization-context generation/invalidation. Incremental stream
+manifests/cursors remain deferred pending their own explicit contract.
+Acceptance is not implementation, deployment certification or live-use permission.
+
 This decision amends [RFC 0003](0003-shared-closing-clock.md): its clock now
 follows the narrowed proxy-adjustment rule in section 6.
 

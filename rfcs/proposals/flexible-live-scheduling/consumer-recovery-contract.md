@@ -1,10 +1,11 @@
 # Authorized consumer recovery — proposed adapter contract
 
-Status: **DRAFT / NOT ACCEPTED / NOT IMPLEMENTED**. This document proposes
-embedding protocol details under service-contract §6. It changes no accepted
-schema, event semantics, capability claim or live-use permission. Synthetic
-scenarios only. Maintainer acceptance is required before implementing new wire
-fields or persistent cursor semantics.
+Status: **ACCEPTED CONTRACT / NOT IMPLEMENTED**. Will McLemore accepted
+snapshot-replacement-first and the host-owned authorization-context generation/
+invalidation requirements on 2026-10-15, recorded in RFC 0004. This embedding
+contract refines service-contract §6; it changes no existing event schema,
+capability claim or live-use permission. Synthetic scenarios only. Incremental
+wire fields and stream cursor semantics remain deferred, not accepted.
 
 ## Existing requirements, not new decisions
 
@@ -92,10 +93,10 @@ These are review cases, **not passing test claims**:
    delivery and never mutates the authoritative auction.
 10. Recovery tests use synthetic local state and no external messages.
 
-## Maintainer decision requested
+## Maintainer decision
 
-Accept snapshot-replacement-first as the next bounded implementation and the
-host-owned authorization generation/invalidation requirements above, or revise
-them first. Keep incremental envelope/cursor design deferred until its visibility
-and continuity rules are explicitly accepted. No implementation is authorized
-merely by adding this draft.
+Will McLemore accepted snapshot-replacement-first and the host-owned authorization
+generation/invalidation requirements on 2026-10-15. Incremental envelope/cursor
+design stays deferred until its visibility and continuity rules are explicitly
+accepted. The next implementation must execute the review cases above; this
+acceptance alone claims no passing recovery tests or deployment certification.

@@ -215,10 +215,11 @@ to the embedding service; exposing them would bypass this boundary. Commit-strea
 manifests and persistent resynchronization/cursor recovery remain unimplemented;
 the reader checkpoint must not be used as a contiguous stream cursor.
 
-The [consumer recovery draft](../rfcs/proposals/flexible-live-scheduling/consumer-recovery-contract.md)
-proposes snapshot-replacement-first recovery and authorization-context invalidation,
-with ten review cases. It is not accepted or implemented; incremental stream
-cursor/envelope rules remain deferred pending a separate explicit contract.
+The [accepted consumer recovery contract](../rfcs/proposals/flexible-live-scheduling/consumer-recovery-contract.md)
+requires snapshot-replacement-first recovery and authorization-context invalidation,
+with ten review cases. Will accepted it on 2026-10-15; implementation and executable
+recovery cases remain pending. Incremental stream cursor/envelope rules remain
+deferred pending a separate explicit contract.
 
 **Still required before advertising support:**
 
