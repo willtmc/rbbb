@@ -26,6 +26,147 @@ class LiveSchedulingHostTest < Minitest::Test
 
   def copy(value) = RBBB::LiveScheduling.copy(value)
 
+  def registration(id = "register-command", unit = "unit-new")
+    {"type" => "register_unit", "command_id" => id, "auction_id" => "auction-demo",
+      "unit_id" => unit, "expected_schedule_revision" => 7,
+      "configuration" => copy(@args[:configurations]["unit-c"]).merge("reserve_minor_units" => nil), "reason" => "Synthetic registration"}
+  end
+
+  def register(host = @host, intent = registration, principal = "operator-demo", permissions = ["register"])
+    host.register_unit(intent: intent, principal_id: principal, permissions: permissions)
+  end
+
+  def test_registration_reopen_preserves_registry_receipt_and_new_unit_bid
+    response = register
+    assert_nil response["rejection_reason"]
+    before = @host.snapshot
+    assert_equal 0, before["units"]["unit-new"]["version"]
+    assert_nil before["units"]["unit-new"]["last_effective_at"]
+    assert_equal 8, before["schedule_revision"]
+    assert_equal 2, response["records"].size
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal response.merge("replayed" => true), register(reopened)
+    assert_equal @host.configurations, reopened.configurations
+    assert_equal RBBB::LiveScheduling::Intent.normalize_registration(registration)["configuration"], reopened.configurations["unit-new"]
+    denied = register(reopened, registration, "other-operator")
+    assert_equal "not_authorized", denied["rejection_reason"]
+    assert_empty denied["records"]
+    assert_equal "not_authorized", register(reopened, registration, "operator-demo", [])["rejection_reason"]
+    assert_equal "command_id_reused", register(reopened, registration.merge("reason" => "Changed"))["rejection_reason"]
+    assert_equal before, reopened.snapshot
+    assert_nil reopened.bid(unit_id: "unit-new", command: {"type" => "place_bid", "command_id" => "new-unit-bid", "maximum_minor_units" => 5000}, principal_id: "bidder-new")["rejection_reason"]
+    assert_equal 1, reopened.snapshot["units"]["unit-new"]["version"]
+    assert RBBBExamples::LiveSchedulingHost.new(**@args).configurations.key?("unit-new")
+    changed = @args.merge(configurations: copy(@args[:configurations]))
+    changed[:configurations]["unit-c"]["reserve_minor_units"] = 123
+    assert_raises(ArgumentError) { RBBBExamples::LiveSchedulingHost.new(**changed) }
+  end
+
+  def test_registration_rejection_and_transport_failure_preserve_domain_registry
+    before, configs = @host.snapshot, @host.configurations
+    denied = register(@host, registration, "operator-demo", [])
+    assert_equal "not_authorized", denied["rejection_reason"]
+    assert_equal denied.merge("replayed" => true), register
+    assert_equal before, @host.snapshot
+    assert_equal configs, @host.configurations
+    assert_empty @host.records
+    assert_equal 0, @host.deliver_pending { flunk "rejected registration delivery" }
+    assert_raises(ArgumentError) { register(@host, registration("invalid").merge("operator_id" => "spoof")) }
+    assert_equal 1, @host.receipt_count
+  end
+
+  def test_registration_transaction_failure_and_process_kill_recovery
+    before, configs = @host.snapshot, @host.configurations
+    failing = Class.new(RBBBExamples::LiveSchedulingHost) do
+      private
+      def before_commit(_db) = raise("synthetic registration failure")
+    end.new(**@args)
+    assert_raises(RuntimeError) { register(failing) }
+    kill_at(:before_commit) { |host| register(host) }
+    assert_equal before, @host.snapshot
+    assert_equal configs, @host.configurations
+    assert_equal 0, @host.receipt_count
+    assert_empty @host.records
+    assert_equal 0, @host.deliver_pending { flunk "uncommitted registration delivery" }
+    kill_at(:after_commit) { |host| register(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    response = register(reopened)
+    assert response["replayed"]
+    assert_equal 1, reopened.receipt_count
+    assert_equal 0, reopened.snapshot["units"]["unit-new"]["version"]
+    assert_nil reopened.snapshot["units"]["unit-new"]["last_effective_at"]
+    assert reopened.configurations.key?("unit-new")
+    assert_equal 1, reopened.deliver_pending { |batch| assert_equal response["records"], batch.map { |item| item["record"] } }
+  end
+
+  def test_registration_outbox_crash_and_sealed_restore_preserve_creation_identity
+    response = register
+    delivered_path = File.join(@dir, "registration-delivered.json")
+    kill_at(:before_delivery_ack) do |host|
+      host.deliver_pending { |batch| File.write(delivered_path, JSON.generate(batch)) }
+    end
+    @host.seal!
+    archived = File.join(@dir, "registration-archive.sqlite3")
+    FileUtils.cp(@args[:path], archived)
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archived,
+      clock: -> { raise "restored replay must not allocate time" }))
+    assert_equal response.merge("replayed" => true), register(restored)
+    assert_equal @host.snapshot, restored.snapshot
+    assert_equal @host.configurations, restored.configurations
+    delivered = JSON.parse(File.read(delivered_path))
+    assert_equal 1, restored.deliver_pending { |batch| assert_equal delivered, batch }
+    assert_equal 0, restored.deliver_pending { flunk "duplicate acknowledged batch" }
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archived))
+    assert_equal "auction_sealed", register(restored, registration("sealed-new", "unit-other").merge("expected_schedule_revision" => 8))["rejection_reason"]
+    assert_equal @host.snapshot, restored.snapshot
+    assert_equal @host.configurations, restored.configurations
+    assert_equal 1, @host.deliver_pending { |batch| assert_equal delivered, batch }
+  end
+
+  def test_independent_registration_race_has_one_complete_winner
+    results = race { |host, index| register(host, registration("racing-register-#{index}")) }
+    assert_equal [nil, "stale_revision"], results.map { |r| r["rejection_reason"] }.sort_by(&:to_s)
+    assert_equal 8, @host.snapshot["schedule_revision"]
+    assert_equal 2, @host.receipt_count
+    assert_equal 2, @host.records.size
+    assert_equal 4, @host.configurations.size
+    assert_equal 0, @host.snapshot["units"]["unit-new"]["version"]
+  end
+
+  def test_registration_projector_requires_exact_whole_creation_and_returns_both_registries
+    before, configs = @host.snapshot, @host.configurations
+    response = register
+    records = response["records"]
+    replay = ->(batch) { RBBB::LiveScheduling::Projector.apply_commit(snapshot: before,
+      configurations: configs, records: batch, policy: @args[:policy], auction_id: @args[:auction_id]) }
+    result = replay.call(records)
+    assert_equal @host.snapshot, result["snapshot"]
+    assert_equal @host.configurations, result["configurations"]
+    assert_nil result["snapshot"]["units"]["unit-new"]["last_effective_at"]
+    assert_equal 0, result["snapshot"]["units"]["unit-new"]["version"]
+    assert_equal 3, configs.size
+    refute before["units"].key?("unit-new")
+    bad_batches = [records.reverse, [records[0]], [records[1]]]
+    %w[state configuration operator_id reason unit_id auction_id commit_id effective_at visibility].each do |key|
+      changed = copy(records)
+      changed[0][key] = key == "state" ? changed[0][key].merge("version" => 1) : ""
+      bad_batches << changed
+    end
+    changed = copy(records)
+    changed[0]["state"]["last_effective_at"] = changed[0]["effective_at"]
+    bad_batches << changed
+    changed = copy(records)
+    changed[1]["unit_versions"][0]["version"] = 1
+    bad_batches << changed
+    changed = copy(records)
+    changed[0]["unknown"] = "extra"
+    bad_batches << changed
+    bad_batches.each { |batch| assert_raises(RBBB::InvalidState) { replay.call(batch) } }
+    assert_raises(RBBB::InvalidState) { RBBB::LiveScheduling::Projector.apply(snapshot: before, configurations: configs, records: records) }
+    assert_equal 3, configs.size
+    refute before["units"].key?("unit-new")
+  end
+
   def test_operator_void_is_durable_authorized_and_does_not_extend_the_group
     bid = {"type" => "place_bid", "command_id" => "void-target", "bid_id" => "bid-target", "maximum_minor_units" => 5000}
     assert_nil @host.bid(unit_id: "unit-c", command: bid, principal_id: "bidder-new")["rejection_reason"]

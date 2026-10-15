@@ -31,7 +31,7 @@ module RBBBExamples
         db.execute("CREATE TABLE IF NOT EXISTS outbox (commit_id TEXT NOT NULL, record_index INTEGER NOT NULL, record TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (commit_id, record_index))")
         existing = row(db)
         if existing
-          raise ArgumentError, "stored configuration differs" unless existing[0] == @configuration
+          validate_stored_configuration!(existing[0])
         else
           last = snapshot.fetch("units").values.filter_map { |unit| unit["last_effective_at"] }.max_by { |at| RBBB::Timestamp.parse(at) }
           db.execute("INSERT INTO auctions (tenant, auction, configuration, state, retired, last_time) VALUES (?, ?, ?, ?, ?, ?)",
@@ -48,6 +48,18 @@ module RBBBExamples
       end
       raise ArgumentError, "wrong auction" unless normalized["auction_id"] == auction_id
       submit({"kind" => "edit", "intent" => normalized}, principal_id, permissions)
+    end
+
+    def register_unit(intent:, principal_id:, permissions:)
+      raw = intent.is_a?(String) ? intent : JSON.generate(intent)
+      normalized = RBBB::LiveScheduling::Intent.parse_registration(raw, profile: @profile)
+      raise ArgumentError, "wrong auction" unless normalized["auction_id"] == auction_id
+      submit({"kind" => "register", "intent" => normalized}, principal_id, permissions)
+    end
+
+    # Privileged registry read for durable replay/integration, not public output.
+    def configurations
+      transaction { |db| RBBB::LiveScheduling.copy(JSON.parse(row(db)[0]).fetch("configurations")) }
     end
 
     def bid(unit_id:, command:, principal_id:)
@@ -133,17 +145,17 @@ module RBBBExamples
     def submit(request, principal, permissions)
       RBBB::LiveScheduling::Intent.identifier(principal)
       fingerprint = RBBB::LiveScheduling::Intent.fingerprint(principal, request)
-      command_id = request.fetch(request["kind"] == "edit" ? "intent" : "command").fetch("command_id")
+      command_id = request.fetch(%w[edit register].include?(request["kind"]) ? "intent" : "command").fetch("command_id")
       response = transaction do |db|
         saved = db.get_first_row("SELECT principal, fingerprint, response FROM receipts WHERE tenant = ? AND auction = ? AND command = ?", [tenant_id, auction_id, command_id])
-        required = {"edit" => "schedule", "bid" => "bid", "void" => "void", "reserve" => "reserve", "close" => "close"}.fetch(request["kind"])
+        required = {"edit" => "schedule", "register" => "register", "bid" => "bid", "void" => "void", "reserve" => "reserve", "close" => "close"}.fetch(request["kind"])
         if saved
           next rejection("not_authorized") unless saved[0] == principal && permissions.include?(required)
           next rejection("command_id_reused").merge("receipt_retained" => true) unless saved[1] == fingerprint
           next JSON.parse(saved[2]).merge("replayed" => true)
         end
         config, state_json, retired_json, sealed, last_time, sequence = row(db)
-        raise ArgumentError, "stored configuration differs" unless config == @configuration
+        validate_stored_configuration!(config)
         document = JSON.parse(config)
         state = JSON.parse(state_json)
         observed = RBBB::Timestamp.parse(@clock.call)
@@ -159,6 +171,8 @@ module RBBBExamples
           coordinator.send(:reject, "not_authorized")
         else
           case request["kind"]
+          when "register"
+            coordinator.register_unit(intent: request["intent"], principal_id: principal, permissions: permissions, effective_at: at, commit_id: commit_id)
           when "edit"
             coordinator.edit(intent: request["intent"], principal_id: principal, permissions: permissions, effective_at: at, commit_id: commit_id)
           when "bid"
@@ -171,15 +185,16 @@ module RBBBExamples
             coordinator.close(group_id: request["group_id"], unit_id: request["unit_id"], command: request["command"], effective_at: at, commit_id: commit_id)
           end
         end
-        rejection_document = if request['kind'] == 'edit' && result.rejection_reason
+        rejection_document = if %w[edit register].include?(request['kind']) && result.rejection_reason
           {"capability" => RBBB::LiveScheduling::CAPABILITY, "type" => "closing_change_rejected",
             "command_id" => command_id, "reason" => result.rejection_reason}
         end
         response = {"rejection" => rejection_document, "rejection_reason" => result.rejection_reason, "records" => result.records,
           "effective_at" => RBBB::Timestamp.dump(at), "commit_id" => result.rejection_reason ? nil : commit_id,
           "receipt_retained" => true, "replayed" => false}
-        db.execute("UPDATE auctions SET state = ?, retired = ?, last_time = ?, sequence = ? WHERE tenant = ? AND auction = ?",
-          [result.rejection_reason ? state_json : JSON.generate(result.state),
+        document["configurations"] = result.configurations if result.configurations && !result.rejection_reason
+        db.execute("UPDATE auctions SET configuration = ?, state = ?, retired = ?, last_time = ?, sequence = ? WHERE tenant = ? AND auction = ?",
+          [JSON.generate(document), result.rejection_reason ? state_json : JSON.generate(result.state),
             result.rejection_reason ? retired_json : JSON.generate(result.retired_group_ids),
             RBBB::Timestamp.dump(at), sequence + 1, tenant_id, auction_id])
         unless result.records.empty?
@@ -194,6 +209,13 @@ module RBBBExamples
       end
       after_commit(response)
       response
+    end
+
+    def validate_stored_configuration!(encoded)
+      stored, bootstrap = JSON.parse(encoded), JSON.parse(@configuration)
+      same_policy = %w[policy profile].all? { |key| stored[key] == bootstrap[key] }
+      same_seed = bootstrap.fetch("configurations").all? { |id, config| stored.fetch("configurations")[id] == config }
+      raise ArgumentError, "stored configuration differs" unless same_policy && same_seed
     end
 
     def rejection(reason)

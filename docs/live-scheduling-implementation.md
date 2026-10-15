@@ -48,7 +48,7 @@ transaction, then acknowledges delivery separately. A crash can redeliver the
 same batch; the consumer must deduplicate. Delivery never reruns a command.
 No test sends messages or contacts a customer.
 
-## Registration runtime slice (not host-integrated)
+## Registration reference-host slice (not certified)
 
 `Intent.parse_registration` validates the accepted closed registration envelope,
 including nested configuration shape/semantics, duplicate keys and request/depth
@@ -62,10 +62,29 @@ Run `cd ruby/engine && bundle exec ruby -Itest test/live_registration_test.rb`.
 The tests exercise creation, schema/privacy, closed admission, identity conflict,
 permission/stale/time/version/batch rejection and detached state preservation.
 These are pure runtime tests, **not** full REG01–21 execution or certification.
-The SQLite host has no registration entry point and the projector does not replay
-creation yet. Durable registry reopening, authenticated receipts, atomic creation
-replay, race/crash/recovery and authorized projection remain pending. Do not call
-this coordinator slice through a live endpoint or advertise the capability.
+The SQLite host now exposes `register_unit(intent:, principal_id:, permissions:)`
+inside its existing transaction/receipt/outbox boundary. Successful creation also
+persists `Result#configurations` in that transaction. Reopening validates bootstrap
+policy/profile and seed configurations against the stored registry, retaining all
+subsequently created units; bootstrap input cannot erase them. `configurations`
+is a privileged detached registry read, not a public API.
+
+For whole-commit replay use `Projector.apply_commit(snapshot:, configurations:,
+records:, policy:, auction_id:, profile:)`; atomically install BOTH returned
+`"snapshot"` and `"configurations"`. Creation is rederived from the accepted pure
+contract and must exactly match the complete ordered two-record batch, including
+empty private state, version 0 and null unit clock. The legacy state-only `apply`
+refuses creation rather than silently losing its configuration registry. Caller
+inputs are never mutated. Replay authority is a trusted host responsibility, not
+live register permission or an untrusted body field.
+
+`live_scheduling_host_test.rb` covers reopen/new-unit bidding, retained receipt
+identity/permission checks, conflicting intent and bootstrap changes, rejection
+preservation, rollback, independent-process registration race, SIGKILL before and
+after commit, outbox-ack crash/redelivery, sealed database copy/restore, and
+partial/reordered/conflicting creation replay. This is bounded reference-host
+evidence, **not** complete REG01–21 or authenticated deployment certification.
+Do not expose this through a live endpoint or advertise the capability.
 
 ## Evidence and remaining certification gates
 
@@ -114,15 +133,15 @@ schedule changes must use the complete affected-set scheduling edit API.
 
 **Still required before advertising support:**
 
-- live inventory registration must use the same durable ordering boundary,
-  with registration fault tests and complete mutation-entry-point inventory.
+- complete the registration REG01–21 execution matrix and mutation-entry-point
+  inventory beyond the implemented reference-host ordering/recovery slice.
   The [registration addendum](../rfcs/proposals/flexible-live-scheduling/registration-contract.md)
   and [21 synthetic review cases](../rfcs/proposals/flexible-live-scheduling/registration-cases.md)
   record the creation/replay contract accepted by Will on 2026-10-14, including
   preservation of both version 0 and null unit last-command time during replay.
   Closed intent/creation schemas and executable contract/privacy/empty-state
-  checks exist, but registration is not implemented and its 21 execution gates
-  have not passed;
+  checks and bounded runtime/host/replay tests exist, but the full 21 execution
+  gates have not passed;
 - void/edit and void/close independent-process races and void crash recovery
   must extend the new transaction/replay/rollback coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to

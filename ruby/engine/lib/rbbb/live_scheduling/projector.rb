@@ -7,7 +7,33 @@ module RBBB
     module Projector
       module_function
 
+      # Returns both detached registries. Callers must install them atomically.
+      # Recompute creation from the accepted pure contract rather than trusting
+      # submitted private state, version vectors or a partial public delta.
+      def apply_commit(snapshot:, configurations:, records:, policy:, auction_id:, profile: PROFILE)
+        unless records.any? { |record| record["type"] == "bidding_unit_registered" }
+          return {"snapshot" => apply(snapshot: snapshot, configurations: configurations, records: records),
+            "configurations" => LiveScheduling.copy(configurations)}
+        end
+        raise InvalidState, "incomplete registration commit" unless records.size == 2 && records[0]["type"] == "bidding_unit_registered" && records[1]["type"] == "closing_configuration_changed"
+        creation = records[0]
+        raise InvalidState, "wrong auction" unless creation.fetch("auction_id") == auction_id
+        intent = {"type" => "register_unit", "command_id" => creation.fetch("command_id"),
+          "auction_id" => auction_id, "unit_id" => creation.fetch("unit_id"),
+          "expected_schedule_revision" => snapshot.fetch("schedule_revision"),
+          "configuration" => creation.fetch("configuration"), "reason" => creation.fetch("reason")}
+        coordinator = Coordinator.new(auction_id: auction_id, configurations: configurations,
+          snapshot: snapshot, policy: policy, profile: profile)
+        decision = coordinator.register_unit(intent: intent, principal_id: creation.fetch("operator_id"),
+          permissions: ["register"], effective_at: creation.fetch("effective_at"), commit_id: creation.fetch("commit_id"))
+        raise InvalidState, "incoherent registration commit" if decision.rejection_reason || decision.records != records
+        {"snapshot" => decision.state, "configurations" => decision.configurations}
+      rescue KeyError, TypeError, ArgumentError => e
+        raise InvalidState, "incoherent registration commit: #{e.message}"
+      end
+
       def apply(snapshot:, configurations:, records:)
+        raise InvalidState, "registration requires apply_commit and atomic registry installation" if records.any? { |record| record["type"] == "bidding_unit_registered" }
         state = LiveScheduling.copy(snapshot)
         baseline, deltas = records.partition { |record| record.key?("unit_id") }
         changes = deltas.select { |record| record["type"] == "closing_configuration_changed" }
