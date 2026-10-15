@@ -806,6 +806,43 @@ class LiveSchedulingHostTest < Minitest::Test
     %w[unit-a unit-b].each { |id| assert_equal "closed", @host.snapshot["units"][id]["status"] }
   end
 
+  def test_independent_process_void_edit_race_preserves_order_and_exact_replay
+    bid = {"type" => "place_bid", "command_id" => "void-edit-target", "bid_id" => "void-edit-bid", "maximum_minor_units" => 5000}
+    assert_nil @host.bid(unit_id: "unit-a", command: bid, principal_id: "bidder-new")["rejection_reason"]
+    before, configs = @host.snapshot, @host.configurations
+    @host.deliver_pending { |_batch| }
+    command = {"type" => "void_bid", "command_id" => "void-edit-command", "bid_id" => "void-edit-bid", "reason" => "Synthetic correction", "notification_policy" => "affected"}
+    results = race do |host, index|
+      index.zero? ? host.void_bid(unit_id: "unit-a", command: command, principal_id: "operator-demo", permissions: ["void"]) : edit(host, @intent.merge("expected_schedule_revision" => before["schedule_revision"]))
+    end
+    assert_nil results[0]["rejection_reason"]
+    assert_includes [nil, "stale_revision"], results[1]["rejection_reason"]
+    assert_equal ["void-edit-bid"], @host.snapshot["units"]["unit-a"]["voided_bid_ids"]
+    assert_equal before["schedule_revision"] + (results[1]["rejection_reason"] ? 0 : 1), @host.snapshot["schedule_revision"]
+    assert_equal 3, @host.receipt_count
+    assert_equal results[0].merge("replayed" => true), @host.void_bid(unit_id: "unit-a", command: command, principal_id: "operator-demo", permissions: ["void"])
+    assert_registration_journal_replays(before, configs)
+  end
+
+  def test_independent_process_void_close_race_cannot_reopen_elapsed_unit
+    bid = {"type" => "place_bid", "command_id" => "void-close-target", "bid_id" => "void-close-bid", "maximum_minor_units" => 5000}
+    assert_nil @host.bid(unit_id: "unit-a", command: bid, principal_id: "bidder-new")["rejection_reason"]
+    before, configs = @host.snapshot, @host.configurations
+    @host.deliver_pending { |_batch| }
+    @at = "2031-04-17T15:00:00Z"
+    command = {"type" => "void_bid", "command_id" => "void-close-command", "bid_id" => "void-close-bid", "reason" => "Synthetic correction", "notification_policy" => "affected"}
+    results = race do |host, index|
+      index.zero? ? host.void_bid(unit_id: "unit-a", command: command, principal_id: "operator-demo", permissions: ["void"]) : host.close(group_id: "group-left", command_id: "void-racing-close", principal_id: "operator-demo", permissions: ["close"])
+    end
+    refute_nil results[0]["rejection_reason"]
+    assert_nil results[1]["rejection_reason"]
+    %w[unit-a unit-b].each { |id| assert_equal "closed", @host.snapshot["units"][id]["status"] }
+    assert_empty @host.snapshot["units"]["unit-a"]["voided_bid_ids"]
+    assert_equal 3, @host.receipt_count
+    assert_equal results[0].merge("replayed" => true), @host.void_bid(unit_id: "unit-a", command: command, principal_id: "operator-demo", permissions: ["void"])
+    assert_registration_journal_replays(before, configs)
+  end
+
   def test_reserve_process_kill_before_and_after_commit
     before = @host.snapshot
     kill_at(:before_commit) { |host| reserve(host) }

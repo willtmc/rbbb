@@ -121,7 +121,10 @@ rollback of state, receipts, history and outbox. A real independent-process SIGK
 immediately before and after void commit verifies rollback versus retained state,
 sealed receipt replay without clock allocation, unchanged scheduling and exactly
 one acknowledged pending void batch after reopen. This is reference-host crash
-evidence, not void race certification, deployment certification or a public admission API.
+evidence, not deployment certification or a public admission API. Independent-process
+void/edit and void/close tests additionally verify retained accepted/rejected receipts,
+closed-unit preservation and exact journal replay. The edit may reject as stale when
+void changes its expected unit version; void does not change scheduling revision.
 
 Operator `change_reserve` also uses this boundary with current `reserve`
 permission, server-assigned identity/time, principal-bound replay and the
@@ -172,8 +175,8 @@ complete trusted copy. Deployment manifest/recovery certification remains open.
   Closed intent/creation schemas and executable contract/privacy/empty-state
   checks and bounded runtime/host/replay tests exist, but the full 21 execution
   gates have not passed;
-- void/edit and void/close independent-process races must extend the existing
-  transaction/replay/rollback and before/after-commit void crash coverage;
+- deployment-specific void concurrency certification remains beyond the reference-host
+  void/edit and void/close races, transaction/replay/rollback and commit crash coverage;
 - extend the reference-host edit crash and sealed-copy recovery evidence to
   every remaining mutation entry point and deployment archive/restore workflow;
 - a deployment's authenticated admission layer, public/private projection
