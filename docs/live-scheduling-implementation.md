@@ -140,6 +140,24 @@ and close races in independent processes. Committed batches replay to the exact
 durable registry/state. Accepted operations now preserve closing sets outside
 the scheduling delta exactly, rather than silently reformatting timestamps.
 
+REG-20 host tests now exercise exact request byte/depth admission, plus-one
+admission refusal without any durable bookkeeping, exact encoded-batch admission,
+retained batch-overflow and revision-ceiling rejections, and reopened replay
+without a new clock allocation or sequence increment. REG-21 corruption tests
+remove newly registered configuration, accepted/rejected receipts, commit history
+or outbox rows from synthetic archives. Reopening and submitting through an
+already-open host both refuse these incomplete stores before receipt disclosure
+or time allocation. This includes loss of a rejected receipt in an unsealed store.
+
+`LiveSchedulingHost` cross-checks registry/unit identities, decision count versus
+receipt count, and journal batches against their retained responses and complete
+outbox rows on reopen and every submission. This deliberately simple reference
+check scans retained history; it is not a scalable deployment storage design, an
+authenticated archive manifest, or protection against a coordinated rewrite of
+all evidence (including the decision count). Do not repair a failed archive by
+resetting counters, deleting more history or re-seeding the auction: recover a
+complete trusted copy. Deployment manifest/recovery certification remains open.
+
 **Still required before advertising support:**
 
 - complete the registration REG01–21 execution matrix and mutation-entry-point

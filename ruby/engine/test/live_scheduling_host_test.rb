@@ -184,6 +184,118 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_equal 1, reopened.deliver_pending { |batch| assert_equal records, batch.map { |item| item["record"] } }
   end
 
+  def database_rows(path = @args[:path])
+    db = SQLite3::Database.new(path)
+    %w[auctions receipts commits outbox].to_h { |table| [table, db.execute("SELECT * FROM #{table} ORDER BY rowid")] }
+  ensure
+    db&.close
+  end
+
+  def test_registration_host_exact_admission_boundaries_have_no_overflow_receipt
+    raw = JSON.generate(registration)
+    profile = RBBB::LiveScheduling::PROFILE.merge("request_bytes" => raw.bytesize, "depth" => 4)
+    args = @args.merge(path: File.join(@dir, "admission.sqlite3"), profile: profile)
+    host = RBBBExamples::LiveSchedulingHost.new(**args)
+    before = database_rows(args[:path])
+    assert_raises(ArgumentError) { register(host, raw + " ") }
+    assert_equal before, database_rows(args[:path])
+    assert_nil register(host, raw)["rejection_reason"]
+    assert_equal 1, host.receipt_count
+    shallow_args = @args.merge(path: File.join(@dir, "depth.sqlite3"), profile: profile.merge("depth" => 3))
+    shallow = RBBBExamples::LiveSchedulingHost.new(**shallow_args)
+    before = database_rows(shallow_args[:path])
+    assert_raises(ArgumentError) { register(shallow, raw) }
+    assert_equal before, database_rows(shallow_args[:path])
+  end
+
+  def test_registration_host_batch_boundary_and_ceiling_rejections_are_retained
+    fixed = Class.new(RBBBExamples::LiveSchedulingHost) do
+      private
+      def next_commit_id = "synthetic-fixed-commit"
+    end
+    oracle = fixed.new(**@args).register_unit(intent: registration, principal_id: "operator-demo", permissions: ["register"])
+    size = RBBB::LiveScheduling.encoded_batch_size(oracle["records"], oracle["commit_id"])
+    [size, size - 1].each do |limit|
+      args = @args.merge(path: File.join(@dir, "batch-#{limit}.sqlite3"),
+        profile: RBBB::LiveScheduling::PROFILE.merge("batch_bytes" => limit))
+      host = fixed.new(**args)
+      before, configs = host.snapshot, host.configurations
+      response = register(host)
+      if limit == size
+        assert_nil response["rejection_reason"]
+        assert_equal oracle["records"], response["records"]
+      else
+        assert_equal "resource_limit_exceeded", response["rejection_reason"]
+        assert_equal before, host.snapshot
+        assert_equal configs, host.configurations
+        assert_empty host.records
+        assert_equal 0, host.deliver_pending { flunk "overflow published" }
+      end
+      assert_equal 1, host.receipt_count
+      stored = database_rows(args[:path])
+      reopened = fixed.new(**args.merge(clock: -> { raise "boundary replay allocated time" }))
+      assert_equal response.merge("replayed" => true), register(reopened)
+      assert_equal stored, database_rows(args[:path])
+      row = stored["auctions"].first
+      assert_equal @at, row[6]
+      assert_equal 1, row[7]
+    end
+    state = copy(@args[:snapshot]).merge("schedule_revision" => RBBB::MAX_SAFE_INTEGER)
+    args = @args.merge(path: File.join(@dir, "ceiling.sqlite3"), snapshot: state)
+    host = fixed.new(**args)
+    before = host.snapshot
+    intent = registration.merge("expected_schedule_revision" => RBBB::MAX_SAFE_INTEGER)
+    response = register(host, intent)
+    assert_equal "version_exhausted", response["rejection_reason"]
+    assert_equal before, host.snapshot
+    assert_equal @args[:configurations], host.configurations
+    assert_empty host.records
+    assert_equal 1, host.receipt_count
+    stored = database_rows(args[:path])
+    reopened = fixed.new(**args.merge(clock: -> { raise "ceiling replay allocated time" }))
+    assert_equal response.merge("replayed" => true), register(reopened, intent)
+    assert_equal stored, database_rows(args[:path])
+  end
+
+  def test_registration_incomplete_archives_refuse_reopen_and_existing_host_mutation
+    register
+    register(@host, registration("retained-conflict", "unit-a").merge("expected_schedule_revision" => 8))
+    @host.seal!
+    corruptions = {
+      "registry" => lambda { |db|
+        encoded = db.get_first_value("SELECT configuration FROM auctions")
+        document = JSON.parse(encoded)
+        document["configurations"].delete("unit-new")
+        db.execute("UPDATE auctions SET configuration = ?", [JSON.generate(document)])
+      },
+      "accepted-receipt" => ->(db) { db.execute("DELETE FROM receipts WHERE command = 'register-command'") },
+      "rejected-receipt" => ->(db) { db.execute("DELETE FROM receipts WHERE command = 'retained-conflict'") },
+      "unsealed-rejected-receipt" => lambda { |db|
+        db.execute("UPDATE auctions SET sealed = 0")
+        db.execute("DELETE FROM receipts WHERE command = 'retained-conflict'")
+      },
+      "commits" => ->(db) { db.execute("DELETE FROM commits") },
+      "outbox" => ->(db) { db.execute("DELETE FROM outbox WHERE record_index = 0") }
+    }
+    corruptions.each do |name, corrupt|
+      path = File.join(@dir, "incomplete-#{name}.sqlite3")
+      FileUtils.cp(@args[:path], path)
+      args = @args.merge(path: path, clock: -> { raise "incomplete archive allocated time" })
+      existing = RBBBExamples::LiveSchedulingHost.new(**args)
+      db = SQLite3::Database.new(path)
+      begin
+        corrupt.call(db)
+      ensure
+        db.close
+      end
+      before = database_rows(path)
+      assert_raises(RBBB::InvalidState, name) { RBBBExamples::LiveSchedulingHost.new(**args) }
+      assert_raises(RBBB::InvalidState, name) { register(existing) }
+      assert_raises(RBBB::InvalidState, name) { register(existing, registration("new-after-loss", "unit-other")) }
+      assert_equal before, database_rows(path), name
+    end
+  end
+
   # REG-18: inconsistent replay inputs must reject without mutating either
   # registry. Persistent consumer cursors remain a separate adapter obligation.
   def test_registration_projector_rejects_occupied_identity_and_revision_gap

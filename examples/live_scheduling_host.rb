@@ -32,6 +32,7 @@ module RBBBExamples
         existing = row(db)
         if existing
           validate_stored_configuration!(existing[0])
+          validate_retained_history!(db, existing)
         else
           last = snapshot.fetch("units").values.filter_map { |unit| unit["last_effective_at"] }.max_by { |at| RBBB::Timestamp.parse(at) }
           db.execute("INSERT INTO auctions (tenant, auction, configuration, state, retired, last_time) VALUES (?, ?, ?, ?, ?, ?)",
@@ -147,6 +148,7 @@ module RBBBExamples
       fingerprint = RBBB::LiveScheduling::Intent.fingerprint(principal, request)
       command_id = request.fetch(%w[edit register].include?(request["kind"]) ? "intent" : "command").fetch("command_id")
       response = transaction do |db|
+        validate_retained_history!(db, row(db))
         saved = db.get_first_row("SELECT principal, fingerprint, response FROM receipts WHERE tenant = ? AND auction = ? AND command = ?", [tenant_id, auction_id, command_id])
         required = {"edit" => "schedule", "register" => "register", "bid" => "bid", "void" => "void", "reserve" => "reserve", "close" => "close"}.fetch(request["kind"])
         if saved
@@ -216,6 +218,34 @@ module RBBBExamples
       same_policy = %w[policy profile].all? { |key| stored[key] == bootstrap[key] }
       same_seed = bootstrap.fetch("configurations").all? { |id, config| stored.fetch("configurations")[id] == config }
       raise ArgumentError, "stored configuration differs" unless same_policy && same_seed
+    end
+
+    # A partial archive must not silently turn retained command IDs into fresh
+    # decisions. This reference-host consistency check detects missing registry,
+    # receipts, commits or outbox rows; it is not an authenticated archive manifest
+    # and cannot detect a coordinated rewrite of all copies of the evidence.
+    def validate_retained_history!(db, stored)
+      config, state, _retired, _sealed, _last_time, sequence = stored
+      registry = JSON.parse(config).fetch("configurations")
+      units = JSON.parse(state).fetch("units")
+      valid = registry.keys.sort == units.keys.sort
+      receipts = db.execute("SELECT response FROM receipts WHERE tenant = ? AND auction = ?", [tenant_id, auction_id])
+      valid &&= receipts.size == sequence
+      accepted = receipts.map { |entry| JSON.parse(entry[0]) }.reject { |response| response["rejection_reason"] }
+      commits = db.execute("SELECT commit_id, records FROM commits WHERE tenant = ? AND auction = ?", [tenant_id, auction_id])
+      # Successful no-event operations can have a receipt without a journal batch.
+      journaled = accepted.reject { |response| response.fetch("records").empty? }
+      valid &&= commits.size == journaled.size
+      valid &&= commits.all? do |commit_id, encoded|
+        matching = journaled.select { |response| response["commit_id"] == commit_id }
+        records = JSON.parse(encoded)
+        outbox = db.execute("SELECT record_index, record FROM outbox WHERE commit_id = ? ORDER BY record_index", [commit_id])
+        matching.size == 1 && matching.first.fetch("records") == records &&
+          outbox == records.each_with_index.map { |record, index| [index, JSON.generate(record)] }
+      end
+      raise RBBB::InvalidState, "incomplete retained registry or history" unless valid
+    rescue JSON::ParserError, KeyError, TypeError
+      raise RBBB::InvalidState, "invalid retained registry or history"
     end
 
     def rejection(reason)
