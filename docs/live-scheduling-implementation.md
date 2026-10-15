@@ -131,6 +131,15 @@ stored domain snapshot byte-for-byte (including timestamp representation).
 Single-unit baseline closing-time writes are deliberately not exposed: live
 schedule changes must use the complete affected-set scheduling edit API.
 
+The [registration execution map](../rfcs/proposals/flexible-live-scheduling/registration-cases.md#execution-map-reference-host-not-certification)
+links each REG01–21 obligation to named runtime/host checks and explicit gaps.
+Additional host tests cover exact existing-state preservation, retained late
+replay without clock allocation, closed admission with full database-row
+comparison, standalone-then-attach, and registration/edit, existing/new-unit bid
+and close races in independent processes. Committed batches replay to the exact
+durable registry/state. Accepted operations now preserve closing sets outside
+the scheduling delta exactly, rather than silently reformatting timestamps.
+
 **Still required before advertising support:**
 
 - complete the registration REG01–21 execution matrix and mutation-entry-point

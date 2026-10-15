@@ -23,6 +23,7 @@ module RBBB
           raise InvalidConfiguration, "invalid resource bound" unless @profile[key].is_a?(Integer) && @profile[key].between?(1, PROFILE[key])
         end
         @snapshot = LiveScheduling.copy(snapshot)
+        @original_closing_sets = LiveScheduling.copy(snapshot.fetch("closing_sets"))
         @retired_group_ids = retired_group_ids.dup
         configurations.each_value { |config| Configuration.from_h(config) }
         snapshot.fetch("units").each_value { |unit| State.from_h(unit) }
@@ -286,8 +287,13 @@ module RBBB
 
       def result(state, records, retired = @retired_group_ids, commit_id:)
         return reject("resource_limit_exceeded") if LiveScheduling.encoded_batch_size(records, commit_id) > profile["batch_bytes"]
-        # Preserve the engine's canonical timestamp rendering in observable state.
-        state["closing_sets"] = wire_sets(state["closing_sets"])
+        # Only the scheduling delta's affected sets change in whole-commit
+        # replay. Preserve all other sets exactly, including timestamp spelling.
+        changed_ids = records.select { |record| record["type"] == "closing_configuration_changed" }
+          .flat_map { |record| record.fetch("unit_versions").map { |unit| unit.fetch("unit_id") } }
+        untouched = @original_closing_sets.select { |set| (set["member_unit_ids"] & changed_ids).empty? }
+        affected = state["closing_sets"].reject { |set| (set["member_unit_ids"] & changed_ids).empty? }
+        state["closing_sets"] = LiveScheduling.sort_sets(LiveScheduling.copy(untouched) + wire_sets(affected))
         Result.new(state: state, records: records, rejection_reason: nil, retired_group_ids: retired.uniq.sort)
       end
     end

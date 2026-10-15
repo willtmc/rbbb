@@ -1,9 +1,9 @@
 # Synthetic registration acceptance cases
 
-Status: **draft review cases; not executable conformance fixtures or passed tests**.
+Status: **accepted-contract review cases with partial executable reference-host evidence; not deployment certification**.
 These cases follow [registration-contract.md](registration-contract.md), accepted
-2026-10-14. Separate executable contract/schema tests do not execute these host
-registration scenarios.
+2026-10-14. The execution map below distinguishes runtime/host checks from missing
+trusted-adapter and deployment evidence. Schema checks alone do not execute them.
 All identifiers, bidders, configurations and times below are invented.
 
 ## Shared fixture and exact oracle
@@ -64,11 +64,53 @@ case resets the fixture unless explicitly describing continuation.
 | REG-20 | Safe-integer revision ceiling; exact byte/depth limits and plus-one; encoded batch limit and plus-one under immutable smaller profile. | Ceiling retains `version_exhausted`; admission overflow has no receipt; ordered batch overflow retains `resource_limit_exceeded`. Exact valid boundaries succeed; no splitting/partial registration. |
 | REG-21 | Seal and archive, restore complete registry/state/receipts/outbox, retry accepted and rejected registrations. | Original receipts and redelivery identities survive; sealed restoration rejects new mutation IDs. Missing registry/deduplication history never permits resumed mutation. |
 
-## Remaining execution evidence
+## Execution map (reference host, not certification)
 
-Turn these rows into executable fixtures with complete before/after state,
-configuration registry, record and receipt assertions. Concurrency cases require
-independent database sessions/processes, crash cases real process termination,
-and admission/publication cases a trusted host adapter rather than submitted
-permission booleans. Compare public and privileged projections independently.
-Passing document checks or existing FLS tests is not registration execution.
+Run from `ruby/engine`:
+
+```sh
+bundle exec ruby -Itest test/live_registration_test.rb
+bundle exec ruby -Itest test/live_scheduling_host_test.rb
+bundle exec rake
+```
+
+These tests use invented fixtures from the accepted FLS vectors (different dates
+and unit names from the illustrative shared fixture above). `host` below means
+`test/live_scheduling_host_test.rb`; `pure` means `test/live_registration_test.rb`.
+Test-method substrings identify the executable checks. No row is a claim of a
+certified deployment or authenticated network adapter.
+
+| Case | Executable evidence | Remaining obligation |
+| --- | --- | --- |
+| REG-01 | host `exact_creation_oracle`: complete empty state, existing bids/configuration/topology, record types, outbox and receipt | None for reference-host creation; not a portable serialized fixture |
+| REG-02 | host `future_opening_rejects_early_bid`; pure `future_opening` | Deployment visibility/admission policy |
+| REG-03 | host `late_retry`: reopened host clock raises if called; exact retained response and unchanged domain/history/count | None for embedded replay |
+| REG-04 | host `late_retry`: changed unit/reserve/reason refuse and original receipt survives | None for embedded replay |
+| REG-05 | host `reopen_preserves_registry`: wrong principal and revoked permission deny original records | Authenticated adapter and exact private-response non-disclosure checks |
+| REG-06 | host `conflict_stale` and `cannot_reuse_a_closed_unit_identity` | Catalog-removed identity under deployment catalog policy |
+| REG-07 | host `conflict_stale`: stale + duplicate + elapsed; retained rejection after revision advances | None for reference-host precedence |
+| REG-08 | host `conflict_stale` and `transport_failures`: equal/earlier ordered deadline; invalid baseline pre-admission | None for those boundaries |
+| REG-09 | host `transport_failures`: forbidden fields, duplicate keys, invalid UTF-8; all database rows unchanged, including clock/sequence | None for tested admission shapes |
+| REG-10 | host `outbox_crash_and_sealed_restore`: sealed new ID, accepted replay without allocating clock | Explicit same-host retained rejection replay after seal |
+| REG-11 | host `then_attachment`: failed attachment preserves standalone commit; successful attachment preserves bids and advances versions/revision once | Deployment visibility/admission withheld until promised attachment |
+| REG-12 | host `independent_registration_race`: independent processes, one winner and retained stale loser | Fresh-key revision-8 conflict after the race |
+| REG-13 | host `registration_edit_race`, `registration_existing_bid_race`: independent processes; full journal replay equals durable registries | Repeat/certify under deployment database |
+| REG-14 | host `registration_new_unit_bid_race`, `reopen_preserves_registry`: unknown-before-create rejection or accepted after-create; retained retry and later bid after reopen | Deployment authenticated bid admission |
+| REG-15 | host `transaction_failure_and_process_kill`: real SIGKILL before commit and complete rollback | None for reference-host crash boundary |
+| REG-16 | same test: real SIGKILL after commit; registry and original receipt survive | None for reference-host crash boundary |
+| REG-17 | host `outbox_crash_and_sealed_restore`: real SIGKILL before acknowledgment; stable full-batch redelivery | Authorized consumer apply-once projection/cursor |
+| REG-18 | host `projector_requires_exact_whole_creation`: exact full registry/state; missing/reordered/changed fields refuse without input mutation | Explicit occupied-ID/revision-gap and persistent cursor assertions |
+| REG-19 | pure `creation_is_version_zero`: public record omits private fields | Trusted reader/audit authority, catalog filtering, digests and consistent resync **not implemented/certified** |
+| REG-20 | pure `exact_resource_boundaries`: request bytes/depth and exact encoded batch/plus-one; `ordered_rejections` checks ceiling | Retained host receipts/clock/sequence at all boundary profiles |
+| REG-21 | host `outbox_crash_and_sealed_restore`: quiescent sealed copy, accepted receipt, registry, outbox identities and new-ID rejection | Rejected receipt restore, fail-closed missing history/registry, deployment archive manifest/recovery certification |
+
+Additional host `registration_close_race` checks real independent-process
+registration/close ordering and full commit replay. Exact replay checks exposed
+unrelated closing sets being reformatted by accepted operations; the coordinator
+now preserves every set outside the scheduling delta's affected units exactly.
+Creation and baseline-only bids therefore cannot silently rewrite old topology.
+
+Open obligations above must become executable checks against the appropriate
+trusted host adapter. Do not replace them with caller-supplied permission flags
+and call that authentication. Passing the reference suite is not completion of
+REG01–21, issue #45, or capability certification.

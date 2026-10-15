@@ -1,6 +1,6 @@
 # Live unit registration — accepted RFC 0004 addendum
 
-Status: **accepted by Will McLemore, 2026-10-14; not implemented or certified**.
+Status: **accepted by Will McLemore, 2026-10-14; reference implementation staged, not certified**.
 Maintainer accepted the standalone-first design, trusted `register` permission,
 creation/delta records, version-0 exception and `unit_id_conflict`, with the
 explicit null-clock replay clarification below. Acceptance does not authorize

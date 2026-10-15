@@ -167,6 +167,209 @@ class LiveSchedulingHostTest < Minitest::Test
     refute before["units"].key?("unit-new")
   end
 
+  # REG-01: compare the entire baseline state and pre-existing aggregate,
+  # not just the new unit's version and a receipt count.
+  def test_registration_exact_creation_oracle_preserves_existing_bids
+    before, configs = @host.snapshot, @host.configurations
+    intent = registration
+    response = register(@host, intent)
+    configuration = RBBB::LiveScheduling::Intent.normalize_registration(intent)["configuration"]
+    empty = RBBB::Engine.new(RBBB::Configuration.from_h(configuration)).initial_state.to_h
+    expected = copy(before)
+    expected["schedule_revision"] += 1
+    expected["units"]["unit-new"] = empty
+    expected["closing_sets"] << {"group_id" => nil, "member_unit_ids" => ["unit-new"],
+      "closes_at" => configuration["closes_at"], "extension" => configuration["extension"]}
+    assert_equal expected, @host.snapshot
+    assert_equal configs.merge("unit-new" => configuration), @host.configurations
+    assert_equal %w[bidding_unit_registered closing_configuration_changed], response["records"].map { |r| r["type"] }
+    assert_equal empty, response["records"][0]["state"]
+    assert_equal configuration, response["records"][0]["configuration"]
+    assert_equal 1, @host.receipt_count
+    assert_equal response["records"], @host.records
+    assert_equal 1, @host.deliver_pending { |batch| assert_equal response["records"], batch.map { |r| r["record"] } }
+  end
+
+  # REG-03/04: replay cannot consult a new clock or overwrite the receipt.
+  def test_registration_late_retry_and_changed_intents_do_not_allocate_decisions
+    response = register
+    before, configs, records = @host.snapshot, @host.configurations, @host.records
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args.merge(clock: -> { raise "replay allocated time" }))
+    assert_equal response.merge("replayed" => true), register(reopened)
+    [registration.merge("unit_id" => "unit-other"), registration.merge("reason" => "Different"),
+      registration.merge("configuration" => registration["configuration"].merge("reserve_minor_units" => 6000))].each do |changed|
+      assert_equal "command_id_reused", register(reopened, changed)["rejection_reason"]
+    end
+    assert_equal response.merge("replayed" => true), register(reopened)
+    assert_equal before, reopened.snapshot
+    assert_equal configs, reopened.configurations
+    assert_equal records, reopened.records
+    assert_equal 1, reopened.receipt_count
+  end
+
+  # REG-06/07/08: precedence and retained rejections leave all domain data intact.
+  def test_registration_conflict_stale_and_elapsed_deadline_retention
+    before, configs = @host.snapshot, @host.configurations
+    conflict = registration("occupied", "unit-a")
+    assert_equal "unit_id_conflict", register(@host, conflict)["rejection_reason"]
+    stale = registration("stale", "unit-a").merge("expected_schedule_revision" => 6)
+    stale["configuration"]["closes_at"] = @at
+    rejected = register(@host, stale)
+    assert_equal "stale_revision", rejected["rejection_reason"]
+    [@at, "2031-04-17T11:59:59Z"].each_with_index do |deadline, index|
+      elapsed = registration("elapsed-#{index}")
+      elapsed["configuration"]["closes_at"] = deadline
+      assert_equal "invalid_schedule", register(@host, elapsed)["rejection_reason"]
+    end
+    assert_equal before, @host.snapshot
+    assert_equal configs, @host.configurations
+    assert_empty @host.records
+    assert_equal 0, @host.deliver_pending { flunk "rejection published" }
+    assert_nil register(@host, registration("advance"))["rejection_reason"]
+    assert_equal rejected.merge("replayed" => true), register(@host, stale)
+    assert_equal 5, @host.receipt_count
+  end
+
+  # REG-09: compare the entire durable database rows, including sequence/clock.
+  def test_registration_transport_failures_do_not_touch_durable_bookkeeping
+    database_rows = lambda do
+      db = SQLite3::Database.new(@args[:path])
+      begin
+        %w[auctions receipts commits outbox].to_h { |table| [table, db.execute("SELECT * FROM #{table}")] }
+      ensure
+        db.close
+      end
+    end
+    before = database_rows.call
+    bad = %w[operator_id effective_at state version group_id unknown].map { |key| registration.merge(key => "spoof") }
+    bad << JSON.generate(registration).sub('{', '{"unit_id":"duplicate",')
+    bad << JSON.generate(registration).sub("Synthetic", "\xFF".b).force_encoding(Encoding::UTF_8)
+    invalid = registration
+    invalid["configuration"]["closes_at"] = invalid["configuration"]["opens_at"]
+    bad << invalid
+    bad.each do |intent|
+      assert_raises(ArgumentError) { register(@host, intent) }
+      assert_equal before, database_rows.call
+    end
+  end
+
+  # REG-11: standalone creation is a separate commit from guarded attachment.
+  def test_registration_then_attachment_preserves_bids_and_failed_attachment
+    assert_nil register["rejection_reason"]
+    standalone, configs = @host.snapshot, @host.configurations
+    attach = copy(@intent)
+    attach["expected_schedule_revision"] = 8
+    attach["expected_units"] << {"unit_id" => "unit-new", "version" => 0}
+    attach["resulting_closing_sets"][0]["member_unit_ids"] << "unit-new"
+    stale = attach.merge("command_id" => "stale-attach", "expected_schedule_revision" => 7)
+    assert_equal "stale_revision", edit(@host, stale)["rejection_reason"]
+    assert_equal standalone, @host.snapshot
+    response = edit(@host, attach)
+    assert_nil response["rejection_reason"]
+    assert_equal 9, @host.snapshot["schedule_revision"]
+    assert_equal configs, @host.configurations
+    standalone["units"].each do |id, unit|
+      assert_equal unit["positions"], @host.snapshot["units"][id]["positions"]
+      assert_equal unit["authorization_history"], @host.snapshot["units"][id]["authorization_history"]
+      assert_equal unit["version"] + 1, @host.snapshot["units"][id]["version"]
+    end
+    assert_equal 1, @host.snapshot["closing_sets"].size
+  end
+
+  # REG-13: independent connections share the revision boundary.
+  def test_independent_registration_edit_race_has_one_revision_winner
+    before, configs = @host.snapshot, @host.configurations
+    results = race { |host, index| index.zero? ? register(host) : edit(host) }
+    assert_equal [nil, "stale_revision"], results.map { |r| r["rejection_reason"] }.sort_by(&:to_s)
+    assert_equal 8, @host.snapshot["schedule_revision"]
+    assert_equal 2, @host.receipt_count
+    assert_registration_journal_replays(before, configs)
+  end
+
+  def test_independent_registration_existing_bid_race_preserves_both_commits
+    before, configs = @host.snapshot, @host.configurations
+    results = race do |host, index|
+      index.zero? ? register(host) : host.bid(unit_id: "unit-a",
+        command: {"type" => "place_bid", "command_id" => "registration-racing-bid", "maximum_minor_units" => 5000}, principal_id: "bidder-new")
+    end
+    results.each { |response| assert_nil response["rejection_reason"] }
+    assert_equal 8, @host.snapshot["schedule_revision"]
+    assert_equal 2, @host.snapshot["units"]["unit-a"]["version"]
+    assert_equal "bidder-new", @host.snapshot["units"]["unit-a"]["leader_id"]
+    assert_equal 0, @host.snapshot["units"]["unit-new"]["version"]
+    assert_equal 2, @host.receipt_count
+    assert_registration_journal_replays(before, configs)
+  end
+
+  # REG-14: unknown-before-create may reject; after-create must preserve its bid.
+  def test_independent_registration_new_unit_bid_race_is_serializable
+    before, configs = @host.snapshot, @host.configurations
+    command = {"type" => "place_bid", "command_id" => "new-racing-bid", "maximum_minor_units" => 5000}
+    results = race do |host, index|
+      index.zero? ? register(host) : host.bid(unit_id: "unit-new", command: command, principal_id: "bidder-new")
+    end
+    assert_nil results[0]["rejection_reason"]
+    assert_includes [nil, "invalid_request"], results[1]["rejection_reason"]
+    assert_equal results[1]["rejection_reason"] ? 0 : 1, @host.snapshot["units"]["unit-new"]["version"]
+    assert_equal 2, @host.receipt_count
+    assert_registration_journal_replays(before, configs)
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    assert_equal results[1].merge("replayed" => true), reopened.bid(unit_id: "unit-new", command: command, principal_id: "bidder-new")
+    assert_nil reopened.bid(unit_id: "unit-new", command: command.merge("command_id" => "new-after-reopen"), principal_id: "bidder-other")["rejection_reason"]
+    assert_equal results[1]["rejection_reason"] ? 1 : 2, reopened.snapshot["units"]["unit-new"]["version"]
+  end
+
+  def test_registration_future_opening_rejects_early_bid_without_erasing_inventory
+    intent = registration
+    intent["configuration"]["opens_at"] = "2031-04-17T12:10:00Z"
+    assert_nil register(@host, intent)["rejection_reason"]
+    before, configs = @host.snapshot, @host.configurations
+    response = @host.bid(unit_id: "unit-new", command: {"type" => "place_bid",
+      "command_id" => "early-bid", "maximum_minor_units" => 5000}, principal_id: "bidder-new")
+    assert_equal "bidding_not_open", response["rejection_reason"]
+    assert_equal before, @host.snapshot
+    assert_equal configs, @host.configurations
+  end
+
+  def test_registration_cannot_reuse_a_closed_unit_identity
+    @at = "2031-04-17T15:00:00Z"
+    assert_nil @host.close(unit_id: "unit-c", command_id: "close-existing", principal_id: "operator-demo", permissions: ["close"])["rejection_reason"]
+    before, configs = @host.snapshot, @host.configurations
+    intent = registration("reuse-terminal", "unit-c").merge("expected_schedule_revision" => before["schedule_revision"])
+    intent["configuration"]["closes_at"] = "2031-04-17T16:00:00Z"
+    response = register(@host, intent)
+    assert_equal "unit_id_conflict", response["rejection_reason"]
+    assert_equal response.merge("replayed" => true), register(@host, intent)
+    assert_equal before, @host.snapshot
+    assert_equal configs, @host.configurations
+  end
+
+  def test_independent_registration_close_race_preserves_closed_existing_units
+    @at = "2031-04-17T15:00:00Z"
+    before, configs = @host.snapshot, @host.configurations
+    intent = registration
+    intent["configuration"]["closes_at"] = "2031-04-17T16:00:00Z"
+    results = race do |host, index|
+      index.zero? ? register(host, intent) : host.close(group_id: "group-left", command_id: "registration-racing-close", principal_id: "operator-demo", permissions: ["close"])
+    end
+    assert_nil results[1]["rejection_reason"]
+    assert_includes [nil, "stale_revision"], results[0]["rejection_reason"]
+    %w[unit-a unit-b].each { |id| assert_equal "closed", @host.snapshot["units"][id]["status"] }
+    assert_equal 2, @host.receipt_count
+    assert_registration_journal_replays(before, configs)
+  end
+
+  def assert_registration_journal_replays(before, configs)
+    projection = {"snapshot" => before, "configurations" => configs}
+    @host.deliver_pending do |batch|
+      records = batch.map { |item| item.fetch("record") }
+      projection = RBBB::LiveScheduling::Projector.apply_commit(snapshot: projection["snapshot"],
+        configurations: projection["configurations"], records: records, policy: @args[:policy], auction_id: @args[:auction_id])
+    end
+    assert_equal @host.snapshot, projection["snapshot"]
+    assert_equal @host.configurations, projection["configurations"]
+  end
+
   def test_operator_void_is_durable_authorized_and_does_not_extend_the_group
     bid = {"type" => "place_bid", "command_id" => "void-target", "bid_id" => "bid-target", "maximum_minor_units" => 5000}
     assert_nil @host.bid(unit_id: "unit-c", command: bid, principal_id: "bidder-new")["rejection_reason"]

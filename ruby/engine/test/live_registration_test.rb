@@ -80,6 +80,25 @@ class LiveRegistrationTest < Minitest::Test
     assert_empty bounded.configurations
   end
 
+  def test_registration_exact_resource_boundaries_and_plus_one
+    raw = JSON.generate(@intent)
+    profile = RBBB::LiveScheduling::PROFILE.merge("request_bytes" => raw.bytesize, "depth" => 4)
+    assert_equal @intent, RBBB::LiveScheduling::Intent.parse_registration(raw, profile: profile)
+    assert_raises(RBBB::LiveScheduling::Intent::Invalid) { RBBB::LiveScheduling::Intent.parse_registration(raw + " ", profile: profile) }
+    assert_raises(RBBB::LiveScheduling::Intent::Invalid) { RBBB::LiveScheduling::Intent.parse_registration(raw, profile: profile.merge("depth" => 3)) }
+    original = register
+    size = RBBB::LiveScheduling.encoded_batch_size(original.records, "commit-one")
+    exact = coordinator(@snapshot, {}, profile: RBBB::LiveScheduling::PROFILE.merge("batch_bytes" => size))
+    assert_nil register(target: exact).rejection_reason
+    assert_equal original.records, register(target: exact).records
+    bounded = coordinator(@snapshot, {}, profile: RBBB::LiveScheduling::PROFILE.merge("batch_bytes" => size - 1))
+    rejected = register(target: bounded)
+    assert_equal "resource_limit_exceeded", rejected.rejection_reason
+    assert_equal @snapshot, rejected.state
+    assert_empty rejected.records
+    assert_nil rejected.configurations
+  end
+
   def test_closed_admission_semantics_and_duplicate_keys
     raw = JSON.generate(@intent)
     normalized = RBBB::LiveScheduling::Intent.parse_registration(raw)
