@@ -210,7 +210,21 @@ policy engine, transport parser, public endpoint or deployment certification.
 Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_admission_test.rb`.
 Expected: four tests exercise all six dispatches, strict denial, revoked retries
 and spoofed authority against a recording host. These are adapter unit tests,
-not end-to-end authenticated deployment tests. Keep direct host references private
+not end-to-end authenticated deployment tests.
+
+For real SQLite-host integration evidence, run
+`cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_admission_integration_test.rb`.
+Expected: eight tests / 117 assertions. All six mutation entrypoints commit and
+replay retained receipts through the adapter. Revoked grants/action authorization,
+spoofed authority and wrong-principal receipt retries leave every stored row
+(state, registry, time/sequence, receipts, commits and outbox) unchanged. A schedule
+grant alone cannot shorten deadlines: the host retains `shortening_not_allowed`,
+even if permission is later granted; a fresh command with explicit `shorten`
+permission succeeds. This distinguishes pre-host denial (no bookkeeping) from a
+retained domain rejection. These synthetic in-process callbacks still do not
+certify an identity provider, deployment policy consistency or live transport.
+
+Keep direct host references private
 to the embedding service; exposing them would bypass this boundary. Commit-stream
 manifests and persistent resynchronization/cursor recovery remain unimplemented;
 the reader checkpoint must not be used as a contiguous stream cursor.
