@@ -960,6 +960,54 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_equal 1, @host.deliver_pending { |batch| assert_equal accepted["records"], batch.map { |entry| entry["record"] } }
   end
 
+  [:bid, :close].each do |operation|
+    define_method("test_#{operation}_process_kill_and_sealed_restore_preserve_whole_commit") do
+      @at = "2031-04-17T15:00:00Z" if operation == :close
+      execute = lambda do |host|
+        if operation == :bid
+          host.bid(unit_id: "unit-c", command: {"type" => "place_bid", "command_id" => "recovery-bid",
+            "bid_id" => "recovery-bid-id", "maximum_minor_units" => 5000}, principal_id: "bidder-new")
+        else
+          host.close(group_id: "group-left", command_id: "recovery-close",
+            principal_id: "operator-demo", permissions: ["close"])
+        end
+      end
+      before, configurations = @host.snapshot, @host.configurations
+      kill_at(:before_commit) { |host| execute.call(host) }
+      reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+      assert_equal before, reopened.snapshot
+      assert_equal configurations, reopened.configurations
+      assert_equal 0, reopened.receipt_count
+      assert_empty reopened.records
+      assert_equal 0, reopened.deliver_pending { flunk "uncommitted #{operation} delivery" }
+
+      kill_at(:after_commit) { |host| execute.call(host) }
+      reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+      committed, records = reopened.snapshot, reopened.records
+      refute_equal before, committed
+      refute_empty records
+      assert_equal 1, reopened.receipt_count
+      reopened.seal!
+      archive = File.join(@dir, "#{operation}-archive.sqlite3")
+      FileUtils.cp(@args[:path], archive)
+      restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive,
+        clock: -> { raise "retained #{operation} must not allocate time" }))
+      response = execute.call(restored)
+      assert response["replayed"]
+      assert_nil response["rejection_reason"]
+      assert_equal records, response["records"]
+      assert_equal committed, restored.snapshot
+      assert_equal configurations, restored.configurations
+      assert_equal 1, restored.receipt_count
+      assert_equal 1, restored.deliver_pending { |batch| assert_equal records, batch.map { |entry| entry["record"] } }
+      restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive))
+      assert_equal 0, restored.deliver_pending { flunk "acknowledged #{operation} redelivered" }
+      assert_equal committed, restored.snapshot
+      assert_equal records, restored.records
+      assert_equal 1, reopened.deliver_pending { |batch| assert_equal records, batch.map { |entry| entry["record"] } }
+    end
+  end
+
   # Signal readiness only at the selected persistence boundary, then let the
   # parent SIGKILL the process: no Ruby exception/ensure rollback can run.
   def kill_at(hook)

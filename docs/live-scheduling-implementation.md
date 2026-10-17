@@ -283,8 +283,17 @@ deployment authentication/retention certification or incremental replay engine.
   gates have not passed;
 - deployment-specific void concurrency certification remains beyond the reference-host
   void/edit and void/close races, transaction/replay/rollback and commit crash coverage;
-- extend the reference-host edit crash and sealed-copy recovery evidence to
-  every remaining mutation entry point and deployment archive/restore workflow;
+- extend sealed-copy recovery evidence to reserve and void and certify the
+  deployment archive/restore workflow. Direct independent-process before/after
+  commit SIGKILL tests now cover all six mutation entry points: edit, bid, close,
+  register_unit, change_reserve and void_bid. Bid and linked-group close also
+  have sealed-copy replay, unchanged configuration, whole-record pending outbox,
+  durable acknowledgment and source/archive isolation checks in
+  `test_bid_process_kill_and_sealed_restore_preserve_whole_commit` and
+  `test_close_process_kill_and_sealed_restore_preserve_whole_commit`.
+  This is synthetic SQLite reference-host evidence, not deployment certification.
+  Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_host_test.rb`
+  (49 tests), or `bundle exec rake` for all checks and installed-package smoke;
 - a deployment's authenticated admission layer, public/private projection
   manifests and authorized consumer resynchronization must be certified;
 - finalize `specification/` integration and migration contract before capability
