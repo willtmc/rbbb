@@ -21,6 +21,10 @@ EXPECTED_FILES = %w[
   lib/rbbb/event.rb
   lib/rbbb/increment_schedule.rb
   lib/rbbb/initial_closing_schedule.rb
+  lib/rbbb/live_scheduling.rb
+  lib/rbbb/live_scheduling/coordinator.rb
+  lib/rbbb/live_scheduling/intent.rb
+  lib/rbbb/live_scheduling/projector.rb
   lib/rbbb/money.rb
   lib/rbbb/shared_closing_clock.rb
   lib/rbbb/state.rb
@@ -124,6 +128,22 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
       maximum_minor_units: 6_000, effective_at: "2026-09-01T12:59:00Z")
     extended = clock.after_decision(unit_id: "a", decision: late, expected_revision: 0)
     abort "installed group clock did not extend" unless RBBB::Timestamp.dump(extended.deadline_for("c")) == "2026-09-01T13:02:00Z"
+
+    require "rbbb/live_scheduling"
+    config = {"currency" => "USD", "opening_minor_units" => 1000,
+      "increments" => [{"from_minor_units" => 0, "amount_minor_units" => 100}],
+      "opens_at" => "2026-09-01T12:00:00Z", "closes_at" => "2026-09-01T13:00:00Z"}
+    closing_set = {"group_id" => nil, "member_unit_ids" => ["a"], "closes_at" => config["closes_at"], "extension" => nil}
+    coordinator = RBBB::LiveScheduling::Coordinator.new(auction_id: "evaluation-auction", configurations: {"a" => config},
+      snapshot: {"schedule_revision" => 0, "closing_sets" => [closing_set], "units" => {"a" => state.to_h}},
+      policy: {"minimum_shortening_lead_seconds" => 180})
+    intent = {"capability" => RBBB::LiveScheduling::CAPABILITY, "type" => "revise_closing_schedule",
+      "command_id" => "evaluation-edit", "auction_id" => "evaluation-auction", "expected_schedule_revision" => 0,
+      "expected_units" => [{"unit_id" => "a", "version" => state.version}], "reason" => "Synthetic package check",
+      "allow_shortening" => false, "resulting_closing_sets" => [closing_set.merge("closes_at" => "2026-09-01T13:10:00Z")], "retired_group_ids" => []}
+    result = coordinator.edit(intent: intent, principal_id: "evaluation-operator", permissions: ["schedule"],
+      effective_at: "2026-09-01T12:40:00Z", commit_id: "evaluation-commit")
+    abort "installed live coordinator failed" unless result.rejection_reason.nil? && result.state["schedule_revision"] == 1
 
     puts JSON.generate(
       version: RBBB::VERSION,

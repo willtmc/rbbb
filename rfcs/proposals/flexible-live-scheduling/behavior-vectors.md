@@ -44,7 +44,18 @@ native exact event bodies under `{unit_id, event}`. A complete public scheduling
 delta coordinates peer updates without inventing bids. Audit and notification
 records are separate projections and do not advance unit versions twice.
 
-## What currently executes
+## Coordinator implementation execution
+
+`test/live_scheduling_coordinator_test.rb` now executes all 29 vectors / 47
+steps against the optional coordinator and SQLite transaction adapter, comparing
+actual state, records and receipts. `live_scheduling_limits_test.rb` executes
+FLS-19/20 resource boundaries; `live_scheduling_host_test.rb` covers independent
+process races and receipt/outbox guards. See the
+[implementation guide](../../../docs/live-scheduling-implementation.md) for
+remaining certification gates. Fixture labels remain unchanged as provenance;
+passing these tests is not a production/capability certification.
+
+## Original fixture-integrity checks
 
 `test/flexible_scheduling_vectors_test.rb` checks:
 
@@ -62,8 +73,8 @@ records are separate projections and do not advance unit versions twice.
 Run with `cd ruby/engine && bundle exec rake`.
 
 **These are fixture-integrity and baseline checks, not coordinator conformance.**
-There is no scheduling coordinator or database fault harness in this change.
-An implementation adapter must receive only inputs/trusted test dependencies,
+The original fixture-integrity checks do not invoke a coordinator; the separate
+implementation tests above now do. An implementation adapter must receive only inputs/trusted test dependencies,
 execute the operations, and compare its actual state/records/receipts to the
 expected block. It must never use the expected block to manufacture results.
 A missing adapter is an unimplemented capability, not a passing or skipped
