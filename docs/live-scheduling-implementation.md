@@ -283,8 +283,10 @@ deployment authentication/retention certification or incremental replay engine.
   gates have not passed;
 - deployment-specific void concurrency certification remains beyond the reference-host
   void/edit and void/close races, transaction/replay/rollback and commit crash coverage;
-- extend sealed-copy recovery evidence to reserve and void and certify the
-  deployment archive/restore workflow. Direct independent-process before/after
+- certify the deployment archive/restore workflow. Reserve and void now also
+  have sealed-copy retained replay without clock allocation, unchanged state and
+  configuration, whole pending outbox, durable acknowledgment, sealed fresh-ID
+  refusal and source/archive isolation in their existing process-kill tests. Direct independent-process before/after
   commit SIGKILL tests now cover all six mutation entry points: edit, bid, close,
   register_unit, change_reserve and void_bid. Bid and linked-group close also
   have sealed-copy replay, unchanged configuration, whole-record pending outbox,

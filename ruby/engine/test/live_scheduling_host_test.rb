@@ -622,8 +622,12 @@ class LiveSchedulingHostTest < Minitest::Test
     committed = reopened.snapshot
     void_records = reopened.records.drop(history.size)
     refute_empty void_records
+    configurations = reopened.configurations
     reopened.seal!
-    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(clock: -> { raise "retained void must not allocate time" }))
+    archive = File.join(@dir, "void-archive.sqlite3")
+    FileUtils.cp(@args[:path], archive)
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive,
+      clock: -> { raise "retained void must not allocate time" }))
     response = execute.call(restored)
     assert response["replayed"]
     assert_nil response["rejection_reason"]
@@ -631,7 +635,17 @@ class LiveSchedulingHostTest < Minitest::Test
     assert_equal committed, restored.snapshot
     assert_equal count + 1, restored.receipt_count
     assert_equal 1, restored.deliver_pending { |batch| assert_equal void_records, batch.map { |entry| entry["record"] } }
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive))
     assert_equal 0, restored.deliver_pending { flunk "duplicate void delivery" }
+    assert_equal configurations, restored.configurations
+    assert_equal committed, restored.snapshot
+    assert_equal history + void_records, restored.records
+    fresh = command.merge("command_id" => "sealed-fresh-void")
+    assert_equal "auction_sealed", restored.void_bid(unit_id: "unit-c", command: fresh,
+      principal_id: "operator-demo", permissions: ["void"])["rejection_reason"]
+    assert_equal committed, restored.snapshot
+    assert_equal count + 1, reopened.receipt_count
+    assert_equal 1, reopened.deliver_pending { |batch| assert_equal void_records, batch.map { |entry| entry["record"] } }
   end
 
   def reserve_command(id = "reserve-command", amount = 100)
@@ -854,11 +868,29 @@ class LiveSchedulingHostTest < Minitest::Test
     reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
     assert_equal 100, reopened.snapshot["units"]["unit-c"]["reserve_minor_units"]
     assert_equal 1, reopened.receipt_count
-    response = reserve(reopened)
+    committed, configurations, records = reopened.snapshot, reopened.configurations, reopened.records
+    reopened.seal!
+    archive = File.join(@dir, "reserve-archive.sqlite3")
+    FileUtils.cp(@args[:path], archive)
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive,
+      clock: -> { raise "retained reserve must not allocate time" }))
+    response = reserve(restored)
     assert response["replayed"]
     assert_nil response["rejection_reason"]
-    assert_equal reopened.records, response["records"]
-    assert_equal 1, reopened.deliver_pending { |batch| assert_equal response["records"], batch.map { |item| item["record"] } }
+    assert_equal records, response["records"]
+    assert_equal committed, restored.snapshot
+    assert_equal configurations, restored.configurations
+    assert_equal 1, restored.receipt_count
+    assert_equal 1, restored.deliver_pending { |batch| assert_equal records, batch.map { |item| item["record"] } }
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive))
+    assert_equal 0, restored.deliver_pending { flunk "duplicate reserve delivery" }
+    assert_equal committed, restored.snapshot
+    assert_equal configurations, restored.configurations
+    assert_equal records, restored.records
+    assert_equal "auction_sealed", reserve(restored, reserve_command("sealed-fresh-reserve"))["rejection_reason"]
+    assert_equal committed, restored.snapshot
+    assert_equal 1, reopened.receipt_count
+    assert_equal 1, reopened.deliver_pending { |batch| assert_equal records, batch.map { |item| item["record"] } }
   end
 
   def test_independent_process_reserve_bid_race_respects_durable_order
