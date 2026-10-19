@@ -134,6 +134,19 @@ principal replay, changed intent, spoofed fields, atomic rollback/retry,
 independent-process reserve/bid ordering and SIGKILL before/after commit.
 Rejected commands retain receipts and decision time/order but preserve the
 stored domain snapshot byte-for-byte (including timestamp representation).
+The bid entrypoint also accepts baseline `reduce_maximum`. Direct synthetic host
+checks cover its private maximum audit, unchanged public price/deadline fields
+(with public unit version advancing), unchanged scheduling revision/topology and
+unaffected units, exact whole-journal replay, principal-bound retained retry,
+changed-intent refusal and fresh adapter grant revocation. Additional tests inject
+rollback and real SIGKILL before/after its commit, then verify sealed-copy replay
+without time allocation, unchanged registry and stable whole pending outbox with
+durable acknowledgment. This is operation-specific reference-host evidence, not
+new auction semantics or deployment certification.
+Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_host_test.rb --name /reduce_maximum/`
+(two tests), or run the entire host suite (51 tests). Expected: all pass; no
+external action occurs. Existing baseline reduction semantics remain authoritative.
+
 Single-unit baseline closing-time writes are deliberately not exposed: live
 schedule changes must use the complete affected-set scheduling edit API.
 
@@ -295,7 +308,7 @@ deployment authentication/retention certification or incremental replay engine.
   `test_close_process_kill_and_sealed_restore_preserve_whole_commit`.
   This is synthetic SQLite reference-host evidence, not deployment certification.
   Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_host_test.rb`
-  (49 tests), or `bundle exec rake` for all checks and installed-package smoke;
+  (51 tests), or `bundle exec rake` for all checks and installed-package smoke;
 - a deployment's authenticated admission layer, public/private projection
   manifests and authorized consumer resynchronization must be certified;
 - finalize `specification/` integration and migration contract before capability

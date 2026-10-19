@@ -3,6 +3,7 @@
 require_relative "test_helper"
 require "tmpdir"
 require_relative "../../../examples/live_scheduling_host"
+require_relative "../../../examples/live_scheduling_admission"
 
 class LiveSchedulingHostTest < Minitest::Test
   def setup
@@ -1038,6 +1039,94 @@ class LiveSchedulingHostTest < Minitest::Test
       assert_equal records, restored.records
       assert_equal 1, reopened.deliver_pending { |batch| assert_equal records, batch.map { |entry| entry["record"] } }
     end
+  end
+
+  def reduction_command
+    {"type" => "reduce_maximum", "command_id" => "reduce-demo", "maximum_minor_units" => 4000}
+  end
+
+  def seed_reduction
+    assert_nil @host.bid(unit_id: "unit-c", command: {"type" => "place_bid",
+      "command_id" => "reduce-seed", "maximum_minor_units" => 5000}, principal_id: "bidder-new")["rejection_reason"]
+  end
+
+  def reduce(host = @host, command = reduction_command, principal = "bidder-new")
+    host.bid(unit_id: "unit-c", command: command, principal_id: principal)
+  end
+
+  def test_reduce_maximum_is_private_durable_and_currently_authorized
+    initial, configs = @host.snapshot, @host.configurations
+    seed_reduction
+    before = @host.snapshot
+    public_before = @host.public_view
+    grants = ["bid"]
+    adapter = RBBBExamples::LiveSchedulingAdmission.new(host: @host,
+      authenticate: ->(credential) { credential }, authorize: ->(**) { true },
+      permissions: ->(**) { grants })
+    response = adapter.bid(credential: "bidder-new", unit_id: "unit-c", command: reduction_command)
+    assert_nil response["rejection_reason"]
+    after = @host.snapshot
+    # Public version advances, but no price, deadline or private maximum leaks.
+    public_before["unit-c"]["version"] += 1
+    assert_equal public_before, @host.public_view
+    assert_equal before["schedule_revision"], after["schedule_revision"]
+    assert_equal before["closing_sets"], after["closing_sets"]
+    (before["units"].keys - ["unit-c"]).each { |id| assert_equal before["units"][id], after["units"][id] }
+    assert_equal before["units"]["unit-c"]["version"] + 1, after["units"]["unit-c"]["version"]
+    assert_equal ["maximum_reduced"], response["records"].map { |record| record.fetch("event").fetch("type") }
+    audit = response["records"].first.fetch("event")
+    assert_equal 5000, audit["old_maximum_minor_units"]
+    assert_equal 4000, audit["new_maximum_minor_units"]
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args.merge(clock: -> { raise "replay allocated time" }))
+    assert_equal response.merge("replayed" => true), reduce(reopened)
+    assert_equal "command_id_reused", reduce(reopened, reduction_command.merge("maximum_minor_units" => 3000))["rejection_reason"]
+    assert_equal "not_authorized", reduce(reopened, reduction_command, "another-bidder")["rejection_reason"]
+    rows = database_rows
+    grants.clear
+    assert_raises(RBBBExamples::LiveSchedulingAdmission::NotAuthorized) do
+      adapter.bid(credential: "bidder-new", unit_id: "unit-c", command: reduction_command)
+    end
+    assert_equal rows, database_rows
+    assert_equal after, reopened.snapshot
+    assert_registration_journal_replays(initial, configs)
+  end
+
+  def test_reduce_maximum_rollback_process_kill_and_sealed_restore
+    seed_reduction
+    before, configs, rows = @host.snapshot, @host.configurations, database_rows
+    failing = Class.new(RBBBExamples::LiveSchedulingHost) do
+      private
+      def before_commit(_db) = raise("synthetic reduction failure")
+    end.new(**@args)
+    assert_raises(RuntimeError) { reduce(failing) }
+    assert_equal rows, database_rows
+    kill_at(:before_commit) { |host| reduce(host) }
+    assert_equal rows, database_rows
+    kill_at(:after_commit) { |host| reduce(host) }
+    reopened = RBBBExamples::LiveSchedulingHost.new(**@args)
+    response = reduce(reopened)
+    assert response["replayed"]
+    assert_nil response["rejection_reason"]
+    committed = reopened.snapshot
+    refute_equal before, committed
+    assert_equal before["closing_sets"], committed["closing_sets"]
+    assert_equal before["schedule_revision"], committed["schedule_revision"]
+    assert_equal configs, reopened.configurations
+    assert_equal 2, reopened.receipt_count
+    reopened.seal!
+    archive = File.join(@dir, "reduction-archive.sqlite3")
+    FileUtils.cp(@args[:path], archive)
+    restored = RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive,
+      clock: -> { raise "sealed reduction replay allocated time" }))
+    assert_equal response, reduce(restored)
+    assert_equal committed, restored.snapshot
+    assert_equal configs, restored.configurations
+    assert_equal reopened.records, restored.records
+    batches = []
+    assert_equal 2, restored.deliver_pending { |batch| batches << batch }
+    assert_equal reopened.records, batches.flat_map { |batch| batch.map { |entry| entry.fetch("record") } }
+    assert_equal 0, RBBBExamples::LiveSchedulingHost.new(**@args.merge(path: archive)).deliver_pending { flunk "redelivered acknowledged reduction" }
+    assert_equal 2, reopened.deliver_pending { |_| }
   end
 
   # Signal readiness only at the selected persistence boundary, then let the
