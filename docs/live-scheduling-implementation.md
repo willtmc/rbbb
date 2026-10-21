@@ -4,6 +4,9 @@ This implements the accepted [RFC 0004](../rfcs/0004-flexible-live-scheduling.md
 operator-edit, bid/linked-extension and group-close decisions. It is **not** a
 production-ready host and does not advertise `flexible_live_scheduling_draft_1`.
 The published RFC 0001 engine and capability metadata remain unchanged.
+See the language-neutral [record/envelope and migration mapping](../specification/flexible-live-scheduling.md)
+for the accepted contract boundary; this mapping is not independent implementation
+or deployment certification.
 
 ## Code and entry points
 
@@ -199,9 +202,11 @@ these responses across principals or use them to infer missing commit history.
 Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_reader_test.rb`.
 Expected: four tests covering denial/revocation, strict grants, catalog filtering,
 separate digests, detached private reads and post-commit revision/checkpoints.
-This is not identity-provider authentication, a command admission adapter,
-authorized commit manifests, persistent consumer recovery or deployment
-certification. Those gates remain open; no capability or live-use change.
+These reader tests alone do not establish identity-provider authentication,
+command admission, authorized commit manifests or persistent consumer recovery.
+The admission adapter and atomic snapshot consumer below provide separate
+reference integration evidence; deployment certification remains open.
+No capability or live-use change.
 
 ### Trusted command admission example
 
@@ -238,8 +243,9 @@ retained domain rejection. These synthetic in-process callbacks still do not
 certify an identity provider, deployment policy consistency or live transport.
 
 Keep direct host references private
-to the embedding service; exposing them would bypass this boundary. Commit-stream
-manifests and persistent resynchronization/cursor recovery remain unimplemented;
+to the embedding service; exposing them would bypass this boundary. Persistent
+snapshot resynchronization is implemented by the consumer below. Incremental
+commit-stream manifests and cursor replay remain deferred and unimplemented;
 the reader checkpoint must not be used as a contiguous stream cursor.
 
 The [accepted consumer recovery contract](../rfcs/proposals/flexible-live-scheduling/consumer-recovery-contract.md)
@@ -309,10 +315,15 @@ deployment authentication/retention certification or incremental replay engine.
   This is synthetic SQLite reference-host evidence, not deployment certification.
   Run `cd ruby/engine && bundle exec ruby -Itest test/live_scheduling_host_test.rb`
   (51 tests), or `bundle exec rake` for all checks and installed-package smoke;
-- a deployment's authenticated admission layer, public/private projection
-  manifests and authorized consumer resynchronization must be certified;
-- finalize `specification/` integration and migration contract before capability
-  advertisement. The accepted proposal schemas remain the current contract.
+- a deployment's authenticated admission layer, public/private projection and
+  accepted snapshot-first consumer resynchronization must be certified.
+  Incremental stream manifests/cursors remain deferred, not required by the
+  accepted snapshot-first path;
+- the language-neutral [specification mapping](../specification/flexible-live-scheduling.md)
+  now integrates accepted records, registration replay, snapshot recovery and
+  migration requirements. The accepted RFC-path schemas remain the current
+  contract. Portable mapping is not proof of independent cross-implementation
+  execution; final acceptance review remains required before advertisement.
 
 These explicit gaps mean this change is an implementation slice, not closure of
 issue #45, not a release, and not permission for shadow/pilot/live bidding.
