@@ -1,0 +1,127 @@
+{
+  "name": "A private leader increase preserves competitive extension across three members",
+  "rfcs": [
+    "0001",
+    "0004"
+  ],
+  "configuration": {
+    "currency": "USD",
+    "opening_minor_units": 10000,
+    "reserve_minor_units": null,
+    "increments": [
+      {
+        "from_minor_units": 0,
+        "amount_minor_units": 1000
+      }
+    ],
+    "opens_at": "2034-02-10T12:00:00Z",
+    "closes_at": "2034-02-10T13:00:00Z"
+  },
+  "member_unit_ids": [
+    "unit-amber",
+    "unit-blue",
+    "unit-coral"
+  ],
+  "extension": {
+    "trigger_window_seconds": 300,
+    "duration_seconds": 300
+  },
+  "steps": [
+    {
+      "unit_id": "unit-blue",
+      "effective_at": "2034-02-10T12:10:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-1",
+        "bidder_id": "bidder-a",
+        "maximum_minor_units": 30000
+      },
+      "standing_minor_units": 10000,
+      "shared_closes_at": "2034-02-10T13:00:00Z"
+    },
+    {
+      "unit_id": "unit-blue",
+      "effective_at": "2034-02-10T12:11:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-2",
+        "bidder_id": "bidder-b",
+        "maximum_minor_units": 30000
+      },
+      "standing_minor_units": 30000,
+      "shared_closes_at": "2034-02-10T13:00:00Z"
+    },
+    {
+      "unit_id": "unit-amber",
+      "effective_at": "2034-02-10T12:12:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-3",
+        "bidder_id": "bidder-a",
+        "maximum_minor_units": 10000
+      },
+      "standing_minor_units": 10000,
+      "shared_closes_at": "2034-02-10T13:00:00Z"
+    },
+    {
+      "unit_id": "unit-coral",
+      "effective_at": "2034-02-10T12:13:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-4",
+        "bidder_id": "bidder-a",
+        "maximum_minor_units": 10000
+      },
+      "standing_minor_units": 10000,
+      "shared_closes_at": "2034-02-10T13:00:00Z"
+    },
+    {
+      "unit_id": "unit-blue",
+      "effective_at": "2034-02-10T12:58:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-5",
+        "bidder_id": "bidder-a",
+        "maximum_minor_units": 34000
+      },
+      "standing_minor_units": 30000,
+      "shared_closes_at": "2034-02-10T13:00:00Z"
+    },
+    {
+      "unit_id": "unit-blue",
+      "effective_at": "2034-02-10T12:59:30Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-6",
+        "bidder_id": "bidder-b",
+        "maximum_minor_units": 31000
+      },
+      "standing_minor_units": 32000,
+      "shared_closes_at": "2034-02-10T13:04:30Z"
+    },
+    {
+      "unit_id": "unit-amber",
+      "effective_at": "2034-02-10T13:03:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-7",
+        "bidder_id": "bidder-b",
+        "maximum_minor_units": 11000
+      },
+      "standing_minor_units": 11000,
+      "shared_closes_at": "2034-02-10T13:08:00Z"
+    },
+    {
+      "unit_id": "unit-coral",
+      "effective_at": "2034-02-10T13:07:00Z",
+      "command": {
+        "type": "place_bid",
+        "command_id": "command-8",
+        "bidder_id": "bidder-b",
+        "maximum_minor_units": 11000
+      },
+      "standing_minor_units": 11000,
+      "shared_closes_at": "2034-02-10T13:12:00Z"
+    }
+  ]
+}

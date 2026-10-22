@@ -261,7 +261,8 @@ module RBBB
         [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
       end
       leader_id = ranked.fetch(0).first
-      standing = standing_amount(ranked, state.reserve_minor_units)
+      standing = standing_after_bid(ranked, state.reserve_minor_units, bidder_id,
+        state.leader_id, state.standing_minor_units)
       standing = [standing, state.standing_minor_units || 0].max
       reserve_status = reserve_status_for(ranked.fetch(0).last, state.reserve_minor_units)
       next_required = next_required_for(standing)
@@ -350,6 +351,12 @@ module RBBB
         "executed_minor_units" => existing.executed_minor_units
       }
 
+      leader_id = positions.min_by do |id, position|
+        [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
+      end.first
+      leader_changed = leader_id != state.leader_id
+      closes_at = extended_closing_time(state, effective_at, leader_changed)
+
       event = Event.new(
         type: "maximum_reduced",
         visibility: :privileged,
@@ -360,13 +367,13 @@ module RBBB
           "old_maximum_minor_units" => existing.maximum_minor_units,
           "new_maximum_minor_units" => maximum,
           "executed_floor_minor_units" => existing.executed_minor_units,
-          "leader_id" => state.leader_id,
+          "leader_id" => leader_id,
           "standing_minor_units" => state.standing_minor_units,
           "next_required_minor_units" => state.next_required_minor_units,
           "reserve_status" => state.reserve_status,
           "reserve_minor_units" => state.reserve_minor_units,
           "effective_at" => Timestamp.dump(effective_at),
-          "closes_at" => Timestamp.dump(state.closes_at),
+          "closes_at" => Timestamp.dump(closes_at),
           "positions" => positions,
           "authorization_history" => authorization_history,
           "reserve_history" => state.reserve_history,
@@ -374,7 +381,26 @@ module RBBB
         }
       )
 
-      Decision.accepted([event])
+      events = [event]
+      if leader_changed
+        public_data = {
+          "command_id" => command.fetch("command_id"),
+          "aggregate_version" => aggregate_version,
+          "standing_minor_units" => state.standing_minor_units,
+          "next_required_minor_units" => state.next_required_minor_units,
+          "leader_changed" => true
+        }
+        public_data["reserve_status"] = state.reserve_status if state.reserve_status
+        events << Event.new(type: "standing_bid_changed", visibility: :public, data: public_data)
+      end
+      if closes_at != state.closes_at
+        events << Event.new(type: "closing_time_changed", visibility: :public, data: {
+          "command_id" => command.fetch("command_id"),
+          "aggregate_version" => aggregate_version,
+          "closes_at" => Timestamp.dump(closes_at)
+        })
+      end
+      Decision.accepted(events)
     end
 
     def build_reserve_change_decision(state, command, new_reserve, effective_at)
@@ -588,6 +614,7 @@ module RBBB
     def replay_authorizations(history, voided_bid_ids, reserve_history)
       positions = {}
       reserve_minor_units = configuration.reserve_minor_units
+      snapshot = empty_pricing_snapshot(reserve_minor_units)
       actions = [
         *history,
         *reserve_history.map { |entry| entry.merge("type" => "reserve_changed") }
@@ -596,6 +623,11 @@ module RBBB
       actions.each do |entry|
         if entry.fetch("type") == "reserve_changed"
           reserve_minor_units = entry.fetch("new_reserve_minor_units")
+          snapshot["reserve_status"] = if snapshot.fetch("leader_id")
+            reserve_status_for(positions.fetch(snapshot.fetch("leader_id")), reserve_minor_units)
+          else
+            empty_pricing_snapshot(reserve_minor_units).fetch("reserve_status")
+          end
           next
         end
 
@@ -610,7 +642,7 @@ module RBBB
             "priority" => entry.fetch("priority"),
             "executed_minor_units" => existing&.fetch("executed_minor_units") || 0
           }
-          snapshot = price_positions(positions, reserve_minor_units)
+          snapshot = price_positions(positions, reserve_minor_units, bidder_id, snapshot)
           apply_executions!(positions, snapshot)
         else
           existing = positions[bidder_id]
@@ -620,22 +652,22 @@ module RBBB
 
           existing["maximum_minor_units"] = maximum
           existing["priority"] = entry.fetch("priority")
+          snapshot["leader_id"] = positions.min_by do |id, position|
+            [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
+          end.first
         end
       end
 
-      if positions.empty?
-        return empty_pricing_snapshot(reserve_minor_units).merge("positions" => {})
-      end
-
-      price_positions(positions, reserve_minor_units).merge("positions" => positions)
+      snapshot.merge("positions" => positions)
     end
 
-    def price_positions(positions, reserve_minor_units)
+    def price_positions(positions, reserve_minor_units, bidder_id, previous)
       ranked = positions.sort_by do |id, position|
         [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
       end
       leader_id = ranked.fetch(0).first
-      standing = standing_amount(ranked, reserve_minor_units)
+      standing = standing_after_bid(ranked, reserve_minor_units, bidder_id,
+        previous.fetch("leader_id"), previous.fetch("standing_minor_units"))
       standing = [
         standing,
         positions.fetch(leader_id).fetch("executed_minor_units")
@@ -646,6 +678,17 @@ module RBBB
         "next_required_minor_units" => next_required_for(standing),
         "reserve_status" => reserve_status_for(ranked.fetch(0).last, reserve_minor_units)
       }
+    end
+
+    # Increasing future authority does not execute more competitive bidding.
+    # An unmet reserve can still consume that authority up to the reserve.
+    def standing_after_bid(ranked, reserve_minor_units, bidder_id, previous_leader, previous_standing)
+      return standing_amount(ranked, reserve_minor_units) unless bidder_id == previous_leader &&
+        ranked.first.first == previous_leader
+
+      reserve_pressure = reserve_minor_units ?
+        [ranked.first.last.fetch("maximum_minor_units"), reserve_minor_units].min : 0
+      [previous_standing, reserve_pressure].max
     end
 
     def empty_pricing_snapshot(reserve_minor_units)

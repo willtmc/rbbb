@@ -1,0 +1,98 @@
+{
+  "name": "clipped-leader-raise-preserves-late-extension",
+  "specification_version": "0.1.0-draft",
+  "rfcs": [
+    "0001"
+  ],
+  "configuration": {
+    "fixture": "usd-soft-close"
+  },
+  "starting_state": {
+    "events": []
+  },
+  "commands": [
+    {
+      "type": "place_bid",
+      "bidder_id": "bidder-a",
+      "maximum_minor_units": 13200,
+      "effective_at": "2026-09-01T12:10:00Z",
+      "command_id": "command-1"
+    },
+    {
+      "type": "place_bid",
+      "bidder_id": "bidder-b",
+      "maximum_minor_units": 12500,
+      "effective_at": "2026-09-01T12:11:00Z",
+      "command_id": "command-2"
+    },
+    {
+      "type": "place_bid",
+      "bidder_id": "bidder-a",
+      "maximum_minor_units": 18000,
+      "effective_at": "2026-09-01T12:58:00Z",
+      "command_id": "command-3"
+    },
+    {
+      "type": "place_bid",
+      "bidder_id": "bidder-c",
+      "maximum_minor_units": 14200,
+      "effective_at": "2026-09-01T12:59:30Z",
+      "command_id": "command-4"
+    },
+    {
+      "type": "place_bid",
+      "bidder_id": "bidder-c",
+      "maximum_minor_units": 20000,
+      "effective_at": "2026-09-01T13:01:00Z",
+      "command_id": "command-5"
+    },
+    {
+      "type": "close_bidding",
+      "command_id": "command-6",
+      "effective_at": "2026-09-01T13:10:00Z"
+    }
+  ],
+  "expected": {
+    "public_events": [
+      {
+        "type": "standing_bid_changed",
+        "standing_minor_units": 10000
+      },
+      {
+        "type": "standing_bid_changed",
+        "standing_minor_units": 13200
+      },
+      {
+        "type": "standing_bid_changed",
+        "standing_minor_units": 15200
+      },
+      {
+        "type": "closing_time_changed",
+        "closes_at": "2026-09-01T13:04:30Z"
+      },
+      {
+        "type": "standing_bid_changed",
+        "standing_minor_units": 19000
+      },
+      {
+        "type": "closing_time_changed",
+        "closes_at": "2026-09-01T13:06:00Z"
+      },
+      {
+        "type": "bidding_closed",
+        "result": "sold",
+        "winning_minor_units": 19000
+      }
+    ],
+    "rejections": [],
+    "final_state": {
+      "leader_id": "bidder-c",
+      "standing_minor_units": 19000,
+      "closes_at": "2026-09-01T13:06:00Z",
+      "status": "closed",
+      "result": "sold",
+      "winner_id": "bidder-c",
+      "winning_minor_units": 19000
+    }
+  }
+}

@@ -155,3 +155,15 @@ ordered invariants, including:
 
 The reference service must enforce these invariants transactionally rather
 than assuming shape validation is sufficient.
+
+## Leader maximum increases
+
+RFC 0001's competitive formula is a transition rule, not a requirement to
+reprice every state from its current maxima. An increase by the current leader
+preserves the standing competitive amount, next required amount and executed
+floor, including after a clipped or tied maximum. Unchanged reserve pressure
+may still advance the price up to the lesser of reserve and the new maximum;
+it must not complete a competitive increment at the same time. Subsequent
+challengers use the resulting displayed minimum normally. Void reconstruction
+applies these rules in authorization order; snapshot restore preserves the
+recorded state. Post-close bid correction remains unsupported.
