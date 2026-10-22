@@ -89,8 +89,25 @@ standing amount at opening unless reserve pressure requires more.
 
 A challenger's maximum must be at least the displayed next required amount.
 The current leader may increase their private maximum by any positive amount,
-even when the increase is smaller than a full increment, because doing so does
-not change the public result.
+even when the increase is smaller than a full increment. In ordinary competitive
+bidding this changes future private authority only: the standing amount, next
+required amount and executed floor MUST remain unchanged. In particular, a
+previously clipped increment MUST NOT be completed merely because the leader
+raises their maximum. A subsequent accepted challenger is priced normally.
+
+Clarification accepted by the maintainer on 2026-10-22: this leader exception
+applies before the competitive formula below. For example, with a $10 increment,
+a leader capped at $132 against a $125 runner-up remains at $132 after raising
+their maximum to $137; the next required amount remains $142, not $145.
+The rejected alternative was to reprice from current maxima on every increase.
+That would create a new public commitment from an edit to future authority.
+
+Confidential reserve pressure remains an explicit exception: a leading bidder's
+increase may advance the standing amount toward the unchanged reserve, capped
+by the new maximum. It MUST NOT also fill a competitive increment. Only an
+actual increase in standing amount raises the executed floor. Existing closing
+policies still apply: RFC 0001 qualifies public changes, while a linked closing
+set's RFC 0004 own-adjustment exclusion remains unchanged.
 
 Among real bidders, the greatest maximum leads. Equal maxima are ordered by the
 authoritative sequence in which those exact maxima were accepted; the earlier
@@ -131,8 +148,10 @@ Reserve pressure contributes:
 reserve amount applied = min(leader maximum, configured reserve)
 ```
 
-The public standing amount is the greatest amount required by opening,
-competition, and reserve pressure, capped at the leader's maximum.
+For a first bid or a challenger, the public standing amount is the greatest
+amount required by opening, competition, and reserve pressure, capped at the
+leader's maximum. A current leader's maximum increase follows the standing-price
+preservation rule above.
 
 A maximum equal to reserve meets reserve. A maximum below reserve may lead at
 its full maximum while the public status remains `reserve_not_met`. A maximum
@@ -164,6 +183,12 @@ When a sole bidder's proxy has executed up to reserve pressure the floor equals
 the confidential reserve, but that amount is already the bidder's public
 standing amount. The field never reveals another bidder's maximum, an
 unexecuted reserve, or any identity.
+
+A reduction that returns to a tied maximum uses the same exact-maximum priority
+rule: its newly accepted maximum follows the earlier equal maximum. This can
+change the leader at the unchanged standing amount; it must not discard the
+executed floor or create a new competitive price. That leader change is public
+and follows the existing extension policy.
 
 An accepted reduction is privately audited. When it changes no public result,
 it emits no public price event and does not trigger a closing extension.
@@ -218,7 +243,9 @@ notification policy.
 
 Voiding emits a new immutable audit event; it does not delete the original bid.
 The engine recomputes standing amount, leader, reserve status, and next required
-amount from remaining valid bids. It also recomputes each remaining bidder's
+amount from remaining valid bids in authoritative order, applying the same
+leader-increase exception as live bidding. It MUST NOT reconstruct price solely
+from final maxima or introduce a new price movement at the end of replay. It also recomputes each remaining bidder's
 executed amount from those bids. A voided competing bid cannot continue to bind
 another bidder's proxy-withdrawal floor.
 
@@ -290,6 +317,13 @@ close command is evaluated first and may extend closing; later bids are
 rejected.
 
 ## Amendments
+
+- 2026-10-22: maintainer-accepted clarification that a leader's maximum increase
+  preserves competitive standing price, next required amount and executed floor,
+  with only existing reserve pressure allowed to advance the price. Ordered void
+  reconstruction follows the same rule. Clarified exact-maximum tie priority when
+  reducing back to an executed floor. Covered by scenarios 031–036 and the
+  synthetic shared-closing-clock leader-maximum vector.
 
 - 2026-09-01: clarified that extensions never shorten closing, that bids
   before opening time are rejected, that authoritative time is monotone across

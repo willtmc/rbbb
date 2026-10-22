@@ -35,6 +35,12 @@ class TimedProxyConformanceTest < Minitest::Test
     028-bid-before-opening-time-rejected.yaml
     029-out-of-order-authoritative-time-rejected.yaml
     030-maximum-above-interoperable-bound-rejected.yaml
+    031-leader-clipped-raise-preserves-challenger-minimum.yaml
+    032-leader-fractional-raise-preserves-tied-price.yaml
+    033-leader-full-increment-raise-preserves-cent-challenger.yaml
+    034-clipped-leader-raise-preserves-late-extension.yaml
+    035-tied-leader-raise-preserves-late-extension.yaml
+    036-leader-raise-does-not-inflate-cancellation-floor.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

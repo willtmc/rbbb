@@ -40,7 +40,6 @@ class EngineDifferentialTest < Minitest::Test
     state = engine.initial_state
     time = BASE + 60
     bid_ids = []
-    reserve_changed = false
     accepted = 0
 
     COMMANDS_PER_RUN.times do |index|
@@ -53,7 +52,6 @@ class EngineDifferentialTest < Minitest::Test
 
       accepted += 1
       bid_ids << command[:bid_id] if command[:type] == "place_bid"
-      reserve_changed = true if command[:type] == "change_reserve"
       before = state
       state = engine.apply(state, decision.events)
 
@@ -65,7 +63,7 @@ class EngineDifferentialTest < Minitest::Test
       end
       assert_executed_amount_rules(state, label)
       assert_executed_amounts_monotone(before, state, label) unless command[:type] == "void_bid"
-      assert_fresh_pricing(configuration, state, label) if state.leader_id && !reserve_changed
+      assert_pricing_transition(configuration, before, state, command, label)
       assert_replay_agreement(engine, state, label) unless state.closed?
 
       break if state.closed?
@@ -182,9 +180,23 @@ class EngineDifferentialTest < Minitest::Test
     end
   end
 
-  # Without reserve changes the ratchet is never engaged, so the standing amount
-  # must equal the RFC formula computed from current positions alone.
-  def assert_fresh_pricing(configuration, state, label)
+  # Check the transition independently: hidden leader authority preserves the
+  # competitive price, whereas a challenger invokes the normal proxy formula.
+  def assert_pricing_transition(configuration, before, state, command, label)
+    return if command[:type] == "void_bid"
+    unless command[:type] == "place_bid"
+      assert_equal [before.standing_minor_units], [state.standing_minor_units],
+        "#{label}: a non-bid transition changed the standing price"
+      return
+    end
+    if command[:bidder_id] == before.leader_id
+      pressure = state.reserve_minor_units ?
+        [command[:maximum_minor_units], state.reserve_minor_units].min : 0
+      expected = [before.standing_minor_units, pressure].max
+      assert_equal expected, state.standing_minor_units,
+        "#{label}: leader maximum increase executed competitive bidding"
+      return
+    end
     ranked = state.positions.sort_by { |id, position| [-position.maximum_minor_units, position.priority, id] }
     leader_maximum = ranked.first.last.maximum_minor_units
     competitive = if ranked.length > 1
@@ -196,6 +208,7 @@ class EngineDifferentialTest < Minitest::Test
     pressure = state.reserve_minor_units ? [leader_maximum, state.reserve_minor_units].min : configuration.opening_minor_units
     expected = [leader_maximum, [configuration.opening_minor_units, competitive, pressure].max].min
 
+    expected = [expected, before.standing_minor_units || 0].max
     assert_equal expected, state.standing_minor_units, "#{label}: standing amount drifted from RFC formula"
   end
 

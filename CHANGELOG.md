@@ -7,6 +7,12 @@ versioned artifacts.
 
 ## Unreleased
 
+- Preserve competitive standing price when the leader raises a hidden maximum,
+  including ordered reconstruction after a void. Retain reserve pressure and
+  exact-maximum tie priority when reducing back to the executed floor. Add seven
+  synthetic regression scenarios, clarify RFC 0001, and retain the post-close
+  correction boundary. This source change is not a published package release.
+
 - Complete the optional RFC 0004 linked soft-close reference coordinator:
   live group/schedule edits, standalone registration, independent linked bidding
   and atomic closing, durable SQLite ordering/receipts/outbox, trusted admission,
