@@ -25,8 +25,10 @@ original bid, deterministically recomputes standing and executed amounts, and
 emits host-facing notification intent. Audited operator commands may also
 change closing time and reserve under the RFC's pre-bid and post-bid
 constraints without unwinding already executed amounts. Explicit ordered
-closing produces `sold`, `no_sale`, or `no_bid` terminal state. Persistence,
-networking, service-level idempotency, and authentication are not implemented.
+closing produces `sold`, `no_sale`, or `no_bid` terminal state. The baseline pure
+engine does not provide persistence, networking, service-level idempotency or
+authentication. Optional repository examples provide durable scheduling and
+trusted admission integration, described below.
 
 The pure engine records `operator_id`; it does not authenticate or authorize
 that identity. A host must authorize the operator before submitting any
@@ -161,6 +163,25 @@ per-unit state and atomically commit the entire group transition with events and
 receipts. `due?` only indicates that the common deadline has arrived; it does not
 close outcomes. Live regrouping and group transaction/recovery work are separate.
 See the [component contract](../../specification/shared-closing-clock.md).
+
+## Live scheduling coordinator (unreleased reference implementation)
+
+Explicitly require `rbbb/live_scheduling` from a reviewed source checkout for
+RFC 0004 linked-group edits, bidding/extension, atomic closing, registration,
+operator mutations and complete privileged replay. The SQLite reference host
+orders every mutation with durable receipts/events/outbox. Trusted admission,
+authorized snapshot reads and atomic snapshot replacement examples are included.
+Baseline engine behavior and published capability metadata remain unchanged.
+
+The accepted behavioral vectors, resource boundaries, independent-process races,
+crash/restore and snapshot recovery cases execute in the test suite. See the
+[implementation, acceptance and migration guide](../../docs/live-scheduling-implementation.md)
+for precise API and evidence. Deployment certification remains separate.
+
+The published `0.1.0.pre.3` package does not contain this coordinator. The source
+version constant has not been bumped or released: pin a reviewed source commit
+for evaluation, or use a separately approved future prerelease. No live bidding
+or capability-advertisement permission follows from passing the reference suite.
 
 ## Install the evaluation gem
 

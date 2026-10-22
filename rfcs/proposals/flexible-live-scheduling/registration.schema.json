@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/rfcs/proposals/flexible-live-scheduling/registration.schema.json",
+  "title": "Accepted optional registration contract; not implementation certification",
+  "x-rbbb-status": "accepted-contract",
+  "oneOf": [{"$ref": "#/$defs/intent"}, {"$ref": "#/$defs/creation"}],
+  "$defs": {
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "command_id", "auction_id", "unit_id", "expected_schedule_revision", "configuration", "reason"],
+      "properties": {
+        "type": {"const": "register_unit"},
+        "command_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "auction_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "unit_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "expected_schedule_revision": {"$ref": "contract.schema.json#/$defs/revision"},
+        "configuration": {"$ref": "../../../specification/configuration/timed-proxy.schema.json"},
+        "reason": {"$ref": "contract.schema.json#/$defs/reason"}
+      }
+    },
+    "creation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capability", "type", "visibility", "command_id", "commit_id", "auction_id", "unit_id", "effective_at", "operator_id", "reason", "configuration", "state"],
+      "properties": {
+        "capability": {"const": "flexible_live_scheduling_draft_1"},
+        "type": {"const": "bidding_unit_registered"},
+        "visibility": {"const": "privileged"},
+        "command_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "commit_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "auction_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "unit_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "effective_at": {"$ref": "contract.schema.json#/$defs/timestamp"},
+        "operator_id": {"$ref": "contract.schema.json#/$defs/identifier"},
+        "reason": {"$ref": "contract.schema.json#/$defs/reason"},
+        "configuration": {"$ref": "../../../specification/configuration/timed-proxy.schema.json"},
+        "state": {"$ref": "#/$defs/empty_state"}
+      }
+    },
+    "empty_state": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "status", "opens_at", "closes_at", "last_effective_at", "reserve_minor_units", "reserve_status", "leader_id", "standing_minor_units", "next_required_minor_units", "positions", "authorization_history", "reserve_history", "voided_bid_ids", "result", "winner_id", "winning_minor_units"],
+      "properties": {
+        "version": {"const": 0}, "status": {"const": "open"},
+        "opens_at": {"$ref": "contract.schema.json#/$defs/timestamp"},
+        "closes_at": {"$ref": "contract.schema.json#/$defs/timestamp"},
+        "last_effective_at": {"const": null},
+        "reserve_minor_units": {"$ref": "../../../specification/common/money.schema.json#/$defs/optionalMinorUnits"},
+        "reserve_status": {"enum": [null, "reserve_not_met", "reserve_met"]},
+        "leader_id": {"const": null}, "standing_minor_units": {"const": null},
+        "next_required_minor_units": {"$ref": "../../../specification/common/money.schema.json#/$defs/minorUnits"},
+        "positions": {"type": "object", "additionalProperties": false},
+        "authorization_history": {"type": "array", "maxItems": 0},
+        "reserve_history": {"type": "array", "maxItems": 0},
+        "voided_bid_ids": {"type": "array", "maxItems": 0},
+        "result": {"const": null}, "winner_id": {"const": null}, "winning_minor_units": {"const": null}
+      }
+    }
+  }
+}

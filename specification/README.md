@@ -22,6 +22,11 @@ silently choose one; open an issue and add a conformance case with the fix.
 See also the optional [initial closing schedule planner](initial-closing-schedule.md),
 governed by scoped RFC 0002. It does not change baseline bidding commands.
 
+The optional [flexible live scheduling coordinator](flexible-live-scheduling.md)
+maps accepted RFC 0004 records, registration and snapshot recovery to the baseline
+contract. It remains unreleased and uncertified; it does not extend the baseline
+command/event unions or advertise capability support.
+
 ## Stability markers
 
 Documents and schemas may carry one of these statuses:

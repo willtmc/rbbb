@@ -1,8 +1,22 @@
 # Proposed scheduling contracts
 
-Status: **accepted contract (RFC 0004, 2026-09-24); not implemented**. These documents accompany
+Status: **accepted contract (RFC 0004, 2026-09-24); reference implementation complete; deployment certification separate**. These documents accompany
 [the live-scheduling RFC](../../0004-flexible-live-scheduling.md). They do not add an
 endpoint, engine command, stable capability, or production-readiness claim.
+
+## Registration addendum (accepted 2026-10-14; implemented in reference host)
+
+- [Live unit registration contract](registration-contract.md): accepted creation
+  envelope, version-0/null-clock replay mapping and durable configuration registry.
+- [Closed registration schemas](registration.schema.json): submitted intent and
+  privileged creation record; existing rejection enum adds `unit_id_conflict`.
+- [Synthetic registration acceptance cases](registration-cases.md): 21 review
+  cases with a linked reference execution map and separate deployment obligations.
+
+`ruby/engine/test/registration_contract_test.rb` executes shape, privacy and
+baseline empty-state oracle checks. The [implementation guide](../../../docs/live-scheduling-implementation.md)
+indexes the separate coordinator/host, admission, replay, race/crash and recovery
+execution evidence.
 
 ## Artifacts
 
@@ -23,8 +37,8 @@ endpoint, engine command, stable capability, or production-readiness claim.
   expected states and records, covering the original 18 review cases plus FLS-21
   (outbid bidder takes the lead and extends the group) and FLS-22 (minimum
   shortening lead boundary). The FLS-19/20 planning and
-  proxy-adjustment examples are separate and still need coordinator vectors. Coordinator
-  execution remains unimplemented.
+  proxy-adjustment examples are separate. All 29 behavioral vectors execute
+  against the coordinator; resource tests execute FLS-19/20 boundaries.
 
 - [`contract.schema.json`](contract.schema.json): JSON Schema 2020-12 union of
   command, public-change, privileged audit, notification-intent, and rejection
@@ -67,7 +81,7 @@ bound; time reuses its explicit-offset, at-most-millisecond contract. Positive
 extension duration is enforced structurally. The proposed service profile sets a 4,096-unit ceiling, 4 MiB submission and
 16 MiB encoded-batch bounds, and a 16-level parsing bound. Schema checks enforce
 submitted membership/vector cardinality; actual parsing, discovered-set and
-batch-byte admission guards require the future service implementation. A
+batch-byte admission guards execute in the reference implementation. A
 promised atomic edit may not be split to fit them.
 
 ## Trust and publication boundary
@@ -109,8 +123,8 @@ instead of silently ignoring those keywords.
 
 These tests **do not run scheduling operations**. In particular, schema-valid
 `allow_shortening: false` is not proof that the requested deadline is safe;
-comparing that request to old state belongs to the future coordinator. The
-following remain semantic guards and behavioral conformance requirements:
+comparing that request to old state belongs to the coordinator. Separate runtime
+tests execute these semantic guards and behavioral conformance requirements:
 
 - complete affected-set discovery and unchanged membership for schedule-only edits;
 - matching revisions, no duplicated unit identities in version vectors, and no
@@ -124,8 +138,9 @@ following remain semantic guards and behavioral conformance requirements:
 The proposed `no_change` rejection avoids creating a new scheduling revision or
 notification intent for an edit with no scheduling effect. Retries of an already
 accepted command still return the original receipt. Rejection precedence and resource bounds are now specified in the proposed
-service contract. They still require implementation and behavioral verification.
+service contract and exercised by the reference implementation.
 
-The proposal stays outside `specification/` and the accepted executable
-`conformance/scenarios/` suite until those requirements are fulfilled. Existing
-package contents, RFC 0001 behavior, and baseline conformance claims are unchanged.
+The [language-neutral specification mapping](../../../specification/flexible-live-scheduling.md)
+integrates the accepted contract while retaining these schema IDs and paths.
+Baseline RFC 0001 behavior and capability claims remain unchanged; deployment
+certification and a separately approved package release remain future work.

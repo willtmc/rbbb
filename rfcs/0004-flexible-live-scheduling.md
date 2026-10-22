@@ -1,6 +1,6 @@
 # RFC 0004: Flexible live scheduling and closing groups
 
-- Status: accepted (contract); coordinator not implemented
+- Status: accepted (contract); reference implementation complete, unreleased; deployment certification separate
 - Author: RBBB contributors
 - Maintainer decision: Will McLemore, 2026-09-24
 - Created: 2026-09-05
@@ -16,6 +16,19 @@ contract, and initial resource profile. This is agreement on behavior, not
 certification of code. No implementation may advertise the capability until it
 passes the acceptance gates under Compatibility. Acceptance does not authorize
 a package release or live bidding.
+
+Maintainer addendum (Will McLemore, 2026-10-14): accepted the
+[live unit registration contract](proposals/flexible-live-scheduling/registration-contract.md),
+including standalone-first creation, trusted registration permission, private
+creation/public scheduling records and version-0/null-unit-clock replay.
+Registration schemas and contract checks are not host implementation certification.
+
+Maintainer addendum (Will McLemore, 2026-10-15): accepted the
+[authorized consumer recovery contract](proposals/flexible-live-scheduling/consumer-recovery-contract.md):
+snapshot-replacement-first, atomic payload/checkpoint/digest installation and
+host-owned authorization-context generation/invalidation. Incremental stream
+manifests/cursors remain deferred pending their own explicit contract.
+Acceptance is not implementation, deployment certification or live-use permission.
 
 This decision amends [RFC 0003](0003-shared-closing-clock.md): its clock now
 follows the narrowed proxy-adjustment rule in section 6.
@@ -58,9 +71,9 @@ which is a forced close in everything but name.
 
 [Machine-readable contracts](proposals/flexible-live-scheduling/README.md)
 now define reviewable command, public-change, audit, notification-intent, and
-rejection shapes. Their executable tests validate document structure and example
-consistency only; there is not yet a scheduling coordinator or behavioral
-conformance implementation.
+rejection shapes. Original fixture tests validate structure and consistency;
+separate [implementation tests](../docs/live-scheduling-implementation.md) now
+execute the coordinator. Remaining service gates still block capability claims.
 
 ## Policy question
 
@@ -336,8 +349,10 @@ They are intentionally outside the executable accepted conformance suite.
 They now have [29 machine-readable behavioral vectors covering 47 steps](proposals/flexible-live-scheduling/behavior-vectors.md),
 including complete seeded unit states, exact expected resulting states, and
 public/privileged record batches. Fixture checks replay the independent-unit
-seed/bid/close portions and validate the proposed shapes. They do not execute a
-coordinator. Passing current tests is not evidence of scheduling support.
+seed/bid/close portions and validate the proposed shapes. Separate coordinator
+and SQLite-host tests now execute all 29 vectors and compare exact results;
+see the [implementation evidence and remaining gates](../docs/live-scheduling-implementation.md).
+Passing those tests is not certification of a host's complete scheduling support.
 
 ## Privacy and security
 
@@ -375,10 +390,14 @@ receipt retention while mutable, complete-commit replay, and the initial
 4,096-unit / 4 MiB submission / 16 MiB batch / 16-level parsing profile. The
 profile limits are still unmeasured, not capacity claims.
 
-Still required before support can be claimed: implement the coordinator, execute
-every behavioral vector against it, and pass the service concurrency/failure
-gates. Fixture and independent-unit checks do not satisfy coordinator
-conformance.
+The optional reference coordinator executes every supplied behavioral vector,
+with 4,096-unit boundaries, all mutation entrypoints under durable ordering,
+separate-process races, process-kill/sealed-copy recovery, authorized admission,
+snapshot-first resynchronization and specification integration. The bounded
+reference implementation is complete; see the [acceptance evidence](../docs/live-scheduling-implementation.md#acceptance-evidence).
+Deployment identity/policy, database load and authenticated archive/restore
+certification remain separate prerequisites to a service advertising support.
+Fixture and independent-unit checks alone do not satisfy coordinator conformance.
 
 Immediate forced closing, post-close reopening, already-invoiced outcomes, and
 correction workflows remain separate scope. The host chooses the minimum

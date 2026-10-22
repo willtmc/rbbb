@@ -58,6 +58,12 @@ configuration, and state schemas are experimental rather than a stable
 compatibility promise. Anything marked `draft` may still change before the
 first stable release.
 
+The optional RFC 0004 linked soft-close reference implementation is also complete
+in source, including durable host and authorized snapshot-recovery examples.
+See its [integration and acceptance guide](docs/live-scheduling-implementation.md).
+It is unreleased and does not certify a live service; the published evaluation
+gem below predates this coordinator.
+
 See [ROADMAP.md](ROADMAP.md), [docs/architecture.md](docs/architecture.md), and
 [specification/README.md](specification/README.md) for the planned path.
 
