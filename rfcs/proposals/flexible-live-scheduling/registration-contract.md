@@ -1,6 +1,6 @@
 # Live unit registration — accepted RFC 0004 addendum
 
-Status: **accepted by Will McLemore, 2026-10-14; reference implementation staged, not certified**.
+Status: **accepted by Will McLemore, 2026-10-14; reference implementation complete; deployment certification separate**.
 Maintainer accepted the standalone-first design, trusted `register` permission,
 creation/delta records, version-0 exception and `unit_id_conflict`, with the
 explicit null-clock replay clarification below. Acceptance does not authorize
@@ -132,6 +132,8 @@ schemas in [registration.schema.json](registration.schema.json); baseline comman
 and scheduling command/event unions remain unchanged; the existing rejection
 reason enum additionally accepts `unit_id_conflict`. Contract tests validate their
 shapes and exact synthetic empty-state oracle, not registration execution.
-The 21 cases still require executable coordinator/host conformance, race, crash,
-projection and recovery evidence before capability certification. Acceptance and
-schema tests cannot satisfy issue #45 or the complete coordinator task.
+The [21-case execution map](registration-cases.md#execution-map-reference-host-not-certification)
+records coordinator/host, race, crash, projection and snapshot-recovery evidence.
+The bounded reference implementation is complete; deployment-specific identity,
+policy and recovery certification remain necessary before capability advertising.
+Acceptance and schema tests alone cannot establish implementation conformance.

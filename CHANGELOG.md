@@ -7,6 +7,16 @@ versioned artifacts.
 
 ## Unreleased
 
+- Complete the optional RFC 0004 linked soft-close reference coordinator:
+  live group/schedule edits, standalone registration, independent linked bidding
+  and atomic closing, durable SQLite ordering/receipts/outbox, trusted admission,
+  authorized snapshots and atomic snapshot-first recovery. Add full behavioral,
+  resource, process-race/crash/restore and installed-package coverage.
+  Baseline RFC 0001 semantics and published capabilities remain unchanged.
+  This is source-only evaluation work, not a package release or live deployment.
+- Reject wrong-route commands in pure scheduling entrypoints and refuse missing,
+  reordered or conflicting native records during complete-commit replay.
+
 - Add the fixed-membership shared closing-clock component. New qualifying bids
   extend all members; proxy adjustments do not. Atomic host integration remains
   separate, and baseline per-unit bidding semantics are unchanged.

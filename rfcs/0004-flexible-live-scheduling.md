@@ -1,6 +1,6 @@
 # RFC 0004: Flexible live scheduling and closing groups
 
-- Status: accepted (contract); unreleased coordinator slice implemented, service certification incomplete
+- Status: accepted (contract); reference implementation complete, unreleased; deployment certification separate
 - Author: RBBB contributors
 - Maintainer decision: Will McLemore, 2026-09-24
 - Created: 2026-09-05
@@ -390,11 +390,13 @@ receipt retention while mutable, complete-commit replay, and the initial
 4,096-unit / 4 MiB submission / 16 MiB batch / 16-level parsing profile. The
 profile limits are still unmeasured, not capacity claims.
 
-The optional coordinator slice now executes every supplied behavioral vector,
-with 4,096-unit boundary and separate-process race tests. Still required before
-support can be claimed: complete registration/void ordering, process-kill and
-archive/restore certification, authorized projection/resynchronization gates,
-and specification integration. See the implementation guide for exact evidence.
+The optional reference coordinator executes every supplied behavioral vector,
+with 4,096-unit boundaries, all mutation entrypoints under durable ordering,
+separate-process races, process-kill/sealed-copy recovery, authorized admission,
+snapshot-first resynchronization and specification integration. The bounded
+reference implementation is complete; see the [acceptance evidence](../docs/live-scheduling-implementation.md#acceptance-evidence).
+Deployment identity/policy, database load and authenticated archive/restore
+certification remain separate prerequisites to a service advertising support.
 Fixture and independent-unit checks alone do not satisfy coordinator conformance.
 
 Immediate forced closing, post-close reopening, already-invoiced outcomes, and

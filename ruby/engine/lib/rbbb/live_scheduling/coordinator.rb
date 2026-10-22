@@ -117,6 +117,7 @@ module RBBB
       end
 
       def bid(unit_id:, command:, effective_at:, commit_id:)
+        return reject("invalid_request") unless %w[place_bid reduce_maximum].include?(command["type"])
         return reject("invalid_request") unless snapshot["units"].key?(unit_id)
         set = snapshot["closing_sets"].find { |item| item["member_unit_ids"].include?(unit_id) }
         engine = unit_engine(unit_id, set, extension: nil)
@@ -192,6 +193,7 @@ module RBBB
       private :operator_unit_change
 
       def close(group_id: nil, unit_id: nil, command:, effective_at:, commit_id:)
+        return reject("invalid_request") unless command["type"] == "close_bidding" && (!!group_id != !!unit_id)
         set = snapshot["closing_sets"].find { |item| group_id ? item["group_id"] == group_id : item["group_id"].nil? && item["member_unit_ids"] == [unit_id] }
         return reject("invalid_request") unless set
         ids = set["member_unit_ids"].sort

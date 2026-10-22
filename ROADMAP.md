@@ -40,16 +40,18 @@ decision remains before Phase 1 is complete.
 
 ## Later RFCs
 
-Quantity, choice, linked soft-close groups, multi-parcel bidding, additional
+Quantity, choice, multi-parcel bidding, additional
 auctioneer overrides, and other formats remain out of scope until their
 semantics are specified and tested.
 
 [RFC 0004: Flexible live scheduling and closing groups](rfcs/0004-flexible-live-scheduling.md)
 was accepted on 2026-09-24: mutable group membership and explicit earlier/later
 deadlines during bidding, with atomic ordering, auditable operator actions, a
-host-set minimum shortening lead, and leader-change extensions. Next step:
-implement the coordinator and execute its behavioral vectors. Until then the
-baseline engine's behavior is unchanged and no support is advertised.
+host-set minimum shortening lead, and leader-change extensions. The bounded
+reference coordinator and its durable host/snapshot recovery examples are now
+implemented; see the [acceptance and integration evidence](docs/live-scheduling-implementation.md).
+Deployment certification and a separately approved release remain future work.
+The baseline engine's behavior is unchanged and no service capability is advertised.
 
 An optional rule that realigns a proxy-clipped short increment to the regular
 increment grid is explicitly deferred. The v0.1 baseline permits short

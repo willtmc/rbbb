@@ -1,7 +1,7 @@
 # Optional flexible live scheduling coordinator
 
-Status: accepted RFC 0004 contract; unreleased reference implementation;
-**service certification incomplete**. This document maps already accepted
+Status: accepted RFC 0004 contract; unreleased reference implementation complete;
+**deployment certification separate**. This document maps already accepted
 requirements; it does not activate `flexible_live_scheduling_draft_1`, extend
 the RFC 0001 command/event unions, or certify any implementation or deployment.
 
@@ -100,7 +100,7 @@ boundary. A baseline-only consumer rejects the unsupported capability. No automa
 production migration, capability advertisement or live-use permission is supplied.
 
 Executable evidence and limitations are indexed in the
-[implementation guide](../docs/live-scheduling-implementation.md#evidence-and-remaining-certification-gates)
+[implementation guide](../docs/live-scheduling-implementation.md#acceptance-evidence)
 and [REG01–21 map](../rfcs/proposals/flexible-live-scheduling/registration-cases.md#execution-map-reference-host-not-certification).
 The coordinator tests execute supplied behavioral vectors; whole-journal tests
 check reference replay, including registration and maximum reduction. This

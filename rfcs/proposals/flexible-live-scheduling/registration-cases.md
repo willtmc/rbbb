@@ -1,9 +1,9 @@
 # Synthetic registration acceptance cases
 
-Status: **accepted-contract review cases with partial executable reference-host evidence; not deployment certification**.
+Status: **accepted-contract cases with executable reference-host evidence; deployment obligations separate**.
 These cases follow [registration-contract.md](registration-contract.md), accepted
-2026-10-14. The execution map below distinguishes runtime/host checks from missing
-trusted-adapter and deployment evidence. Schema checks alone do not execute them.
+2026-10-14. The execution map below distinguishes runtime/host/trusted-adapter checks from
+deployment-specific evidence. Schema checks alone do not execute them.
 All identifiers, bidders, configurations and times below are invented.
 
 ## Shared fixture and exact oracle
@@ -110,7 +110,9 @@ unrelated closing sets being reformatted by accepted operations; the coordinator
 now preserves every set outside the scheduling delta's affected units exactly.
 Creation and baseline-only bids therefore cannot silently rewrite old topology.
 
-Open obligations above must become executable checks against the appropriate
-trusted host adapter. Do not replace them with caller-supplied permission flags
-and call that authentication. Passing the reference suite is not completion of
-REG01–21, issue #45, or capability certification.
+All 21 cases have reference evidence above under the accepted snapshot-first
+recovery scope. Deployment obligations must be checked against the actual
+identity provider, catalog policy, database and archive workflow; caller-supplied
+permission flags are not authentication. This matrix completes the bounded
+registration reference work in issue #45, not deployment capability certification.
+Deferred incremental cursor/apply-once stream checks are not snapshot-first gates.

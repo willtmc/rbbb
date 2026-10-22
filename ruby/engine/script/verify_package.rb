@@ -133,17 +133,41 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
     config = {"currency" => "USD", "opening_minor_units" => 1000,
       "increments" => [{"from_minor_units" => 0, "amount_minor_units" => 100}],
       "opens_at" => "2026-09-01T12:00:00Z", "closes_at" => "2026-09-01T13:00:00Z"}
-    closing_set = {"group_id" => nil, "member_unit_ids" => ["a"], "closes_at" => config["closes_at"], "extension" => nil}
-    coordinator = RBBB::LiveScheduling::Coordinator.new(auction_id: "evaluation-auction", configurations: {"a" => config},
-      snapshot: {"schedule_revision" => 0, "closing_sets" => [closing_set], "units" => {"a" => state.to_h}},
-      policy: {"minimum_shortening_lead_seconds" => 180})
+    closing_set = {"group_id" => "evaluation-group", "member_unit_ids" => ["a", "c"], "closes_at" => config["closes_at"],
+      "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 180}}
+    coordinator_args = {auction_id: "evaluation-auction", configurations: {"a" => config, "c" => config},
+      policy: {"minimum_shortening_lead_seconds" => 180}}
+    snapshot = {"schedule_revision" => 0, "closing_sets" => [closing_set],
+      "units" => {"a" => state.to_h, "c" => RBBB::State.empty(RBBB::Configuration.from_h(config)).to_h}}
+    coordinator = RBBB::LiveScheduling::Coordinator.new(**coordinator_args, snapshot: snapshot)
     intent = {"capability" => RBBB::LiveScheduling::CAPABILITY, "type" => "revise_closing_schedule",
       "command_id" => "evaluation-edit", "auction_id" => "evaluation-auction", "expected_schedule_revision" => 0,
-      "expected_units" => [{"unit_id" => "a", "version" => state.version}], "reason" => "Synthetic package check",
+      "expected_units" => [{"unit_id" => "a", "version" => state.version}, {"unit_id" => "c", "version" => 0}], "reason" => "Synthetic package check",
       "allow_shortening" => false, "resulting_closing_sets" => [closing_set.merge("closes_at" => "2026-09-01T13:10:00Z")], "retired_group_ids" => []}
     result = coordinator.edit(intent: intent, principal_id: "evaluation-operator", permissions: ["schedule"],
       effective_at: "2026-09-01T12:40:00Z", commit_id: "evaluation-commit")
     abort "installed live coordinator failed" unless result.rejection_reason.nil? && result.state["schedule_revision"] == 1
+    replayed = RBBB::LiveScheduling::Projector.apply(snapshot: snapshot, configurations: coordinator_args[:configurations], records: result.records)
+    abort "installed edit replay differs" unless replayed == result.state
+    coordinator = RBBB::LiveScheduling::Coordinator.new(**coordinator_args, snapshot: result.state)
+    linked = coordinator.bid(unit_id: "c", command: {"type" => "place_bid", "command_id" => "linked-bid",
+      "bidder_id" => "evaluation-second-bidder", "maximum_minor_units" => 3000},
+      effective_at: "2026-09-01T13:09:50Z", commit_id: "linked-commit")
+    abort "installed linked bid failed" unless linked.rejection_reason.nil? &&
+      linked.state["units"].values.all? { |unit| unit["closes_at"] == "2026-09-01T13:12:50Z" }
+    abort "installed extension replay differs" unless RBBB::LiveScheduling::Projector.apply(
+      snapshot: result.state, configurations: coordinator_args[:configurations], records: linked.records) == linked.state
+    coordinator = RBBB::LiveScheduling::Coordinator.new(**coordinator_args, snapshot: linked.state)
+    close_command = {"type" => "close_bidding", "command_id" => "linked-close"}
+    early = coordinator.close(group_id: "evaluation-group", command: close_command,
+      effective_at: "2026-09-01T13:10:00Z", commit_id: "early-close")
+    abort "installed group closed at old deadline" unless early.rejection_reason && early.records.empty?
+    closed = coordinator.close(group_id: "evaluation-group", command: close_command,
+      effective_at: "2026-09-01T13:12:50Z", commit_id: "closed-commit")
+    abort "installed atomic close failed" unless closed.rejection_reason.nil? &&
+      closed.state["units"].values.all? { |unit| unit["status"] == "closed" && unit["winning_minor_units"] == 1000 }
+    abort "installed close replay differs" unless RBBB::LiveScheduling::Projector.apply(
+      snapshot: linked.state, configurations: coordinator_args[:configurations], records: closed.records) == closed.state
 
     puts JSON.generate(
       version: RBBB::VERSION,
@@ -174,5 +198,5 @@ Dir.mktmpdir("rbbb-package-") do |temporary_directory|
     fail_verification("installed metadata differs: #{smoke_result.inspect}")
   end
 
-  puts "Verified #{gem_path.basename}: #{extracted_files.length} files, clean install, and bid smoke test."
+  puts "Verified #{gem_path.basename}: #{extracted_files.length} files, clean install, baseline bid and linked edit/extension/close/replay."
 end

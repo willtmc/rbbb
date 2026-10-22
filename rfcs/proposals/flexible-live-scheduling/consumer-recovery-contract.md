@@ -1,6 +1,6 @@
 # Authorized consumer recovery — proposed adapter contract
 
-Status: **ACCEPTED CONTRACT / REFERENCE SNAPSHOT INSTALLATION STAGED; NOT CERTIFIED**. Will McLemore accepted
+Status: **ACCEPTED CONTRACT / REFERENCE SNAPSHOT INSTALLATION IMPLEMENTED; DEPLOYMENT NOT CERTIFIED**. Will McLemore accepted
 snapshot-replacement-first and the host-owned authorization-context generation/
 invalidation requirements on 2026-10-15, recorded in RFC 0004. This embedding
 contract refines service-contract §6; it changes no existing event schema,
@@ -103,5 +103,6 @@ remain outside this reference implementation:
 Will McLemore accepted snapshot-replacement-first and the host-owned authorization
 generation/invalidation requirements on 2026-10-15. Incremental envelope/cursor
 design stays deferred until its visibility and continuity rules are explicitly
-accepted. The next implementation must execute the review cases above; this
-acceptance alone claims no passing recovery tests or deployment certification.
+accepted. The reference consumer executes the snapshot review cases above; see the
+[implementation evidence](../../../docs/live-scheduling-implementation.md#acceptance-evidence).
+Acceptance alone is not evidence of implementation or deployment certification.

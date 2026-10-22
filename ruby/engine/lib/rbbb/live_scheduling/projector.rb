@@ -36,6 +36,15 @@ module RBBB
         raise InvalidState, "registration requires apply_commit and atomic registry installation" if records.any? { |record| record["type"] == "bidding_unit_registered" }
         state = LiveScheduling.copy(snapshot)
         baseline, deltas = records.partition { |record| record.key?("unit_id") }
+        # Retained records have an authoritative order. Never sort a damaged or
+        # partial batch into an apparently valid commit during recovery.
+        unit_order = baseline.map { |record| record.fetch("unit_id") }
+        raise InvalidState, "record order conflict" unless records == baseline + deltas && unit_order == unit_order.sort
+        baseline.each do |record|
+          raise InvalidState, "invalid unit record" unless record.keys.sort == %w[event unit_id]
+        end
+        command_ids = baseline.map { |record| record.fetch("event").fetch("command_id") }.uniq
+        raise InvalidState, "mixed command batch" if command_ids.size > 1
         changes = deltas.select { |record| record["type"] == "closing_configuration_changed" }
         raise InvalidState, "multiple scheduling deltas" if changes.size > 1
         unless deltas.empty?
@@ -52,8 +61,16 @@ module RBBB
           end
         end
         baseline.group_by { |record| record.fetch("unit_id") }.sort.each do |id, entries|
+          transitions = entries.select { |entry| entry.fetch("event").key?("positions") && Engine::STATE_TRANSITION_EVENTS.include?(entry["event"]["type"]) }
+          raise InvalidState, "missing or reordered unit transition" unless transitions.size == 1 && entries.first == transitions.first
+          identities = entries.map { |entry| entry.fetch("event").values_at("command_id", "aggregate_version") }.uniq
+          raise InvalidState, "unit event identity conflict" unless identities.size == 1
+          if changes.any?
+            raise InvalidState, "command identity conflict" unless identities.first.first == changes.first.fetch("command_id")
+          end
           before = State.from_h(state.fetch("units").fetch(id))
-          engine = Engine.new(Configuration.from_h(configurations.fetch(id).merge("closes_at" => before.to_h["closes_at"])))
+          engine = Engine.new(Configuration.from_h(configurations.fetch(id).merge("closes_at" => before.to_h["closes_at"], "extension" => nil)))
+          validate_unit_records!(engine, before, entries.map { |entry| entry.fetch("event") }, changes.first)
           events = entries.map do |entry|
             data = entry.fetch("event")
             Event.new(type: data.fetch("type"), visibility: data.key?("positions") ? :privileged : :public,
@@ -75,6 +92,10 @@ module RBBB
         versions = change.fetch("unit_versions")
         ids = versions.map { |entry| entry.fetch("unit_id") }
         raise InvalidState, "duplicate version vector" unless ids.uniq.size == ids.size
+        closing = baseline.select { |record| record.dig("event", "type") == "bidding_closed" }
+        if closing.any?
+          raise InvalidState, "partial group close" unless closing == baseline && closing.map { |record| record["unit_id"] }.uniq.sort == ids.sort
+        end
         sets = change.fetch("resulting_closing_sets")
         members = sets.flat_map { |set| set.fetch("member_unit_ids") }
         raise InvalidState, "incomplete scheduling delta" unless members.sort == ids.sort
@@ -98,6 +119,39 @@ module RBBB
       rescue KeyError, TypeError, ArgumentError => e
         raise InvalidState, "incoherent scheduling commit: #{e.message}"
       end
+
+      # Derive the complete native event batch from its privileged transition.
+      # Engine.apply alone restores that transition even when public/audit
+      # companions are missing. Whole-commit replay must refuse that damage.
+      def validate_unit_records!(engine, before, records, change)
+        transition = records.first
+        command = transition.slice("command_id", "effective_at", "bidder_id", "bid_id", "operator_id", "reason", "notification_policy")
+        command["type"] = case transition.fetch("type")
+        when "maximum_accepted", "maximum_increased"
+          command["maximum_minor_units"] = transition.fetch("maximum_minor_units")
+          "place_bid"
+        when "maximum_reduced"
+          command["maximum_minor_units"] = transition.fetch("new_maximum_minor_units")
+          "reduce_maximum"
+        when "reserve_changed"
+          command["reserve_minor_units"] = transition.fetch("new_reserve_minor_units")
+          "change_reserve"
+        when "bid_voided" then "void_bid"
+        when "bidding_closed" then "close_bidding"
+        else raise InvalidState, "unsupported unit transition"
+        end
+        decision = engine.decide(before, command)
+        raise InvalidState, "invalid unit transition" if decision.rejected?
+        expected = decision.events.map(&:to_h)
+        if %w[maximum_accepted maximum_increased].include?(transition["type"]) &&
+            LiveScheduling.time(transition.fetch("closes_at")) > before.closes_at
+          raise InvalidState, "missing linked extension" unless change && change["effective_at"] == transition["effective_at"]
+          expected.each { |event| event["closes_at"] = transition["closes_at"] if event.key?("closes_at") }
+          expected << transition.slice("command_id", "aggregate_version", "closes_at").merge("type" => "closing_time_changed")
+        end
+        raise InvalidState, "incomplete or conflicting unit records" unless records == expected
+      end
+      private_class_method :validate_unit_records!
     end
   end
 end
