@@ -7,6 +7,11 @@ versioned artifacts.
 
 ## Unreleased
 
+- Clarify bidder revocation versus audited operator correction and add trusted
+  admission regressions: executed competition remains binding, operator identity
+  cannot be spoofed, corrections require reasons, and post-close voids remain
+  rejected. Historical partial removals must not imply full authorization voids.
+
 - Preserve competitive standing price when the leader raises a hidden maximum,
   including ordered reconstruction after a void. Retain reserve pressure and
   exact-maximum tie priority when reducing back to the executed floor. Add seven
