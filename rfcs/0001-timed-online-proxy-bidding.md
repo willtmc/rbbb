@@ -171,6 +171,13 @@ While bidding remains open, a bidder may reduce their maximum to any amount at
 or above their executed amount. They cannot withdraw an amount already
 executed by the proxy.
 
+Cancelling or revoking a maximum has the same bidder permissions as reducing it:
+only unused future proxy authority may be withdrawn. Executed competitive bids
+remain binding, including the current leader's executed bid. A bidder MUST NOT
+use revocation, a zero maximum, or an operator-command-shaped request to remove
+an executed commitment. For example, a $160 maximum that has executed $152
+against a $142 challenger can be reduced to $152, but not $142 or zero.
+
 A reduction is evaluated in authoritative command order. If intervening
 competition executes more of the proxy first, the executed floor rises and a
 now-invalid reduction is rejected.
@@ -240,6 +247,20 @@ resets it to 1:07.
 Bidders cannot erase accepted bids. Before closing, an authorized operator may
 void a bid using a command that includes operator identity, reason, and
 notification policy.
+
+The host MUST authenticate the actor and authorize operator correction separately
+from bidder access before invoking the pure engine. An `operator_id` supplied by
+a caller is not authorization. The actor must be server-bound; the correction
+must record the target, actual reason, authoritative time and notification
+policy. A bidder's cancellation request MUST NOT be promoted into this operation.
+
+A maximum revocation does not mean its original authorization was invalid from
+the beginning. In particular, removing one generated execution while preserving
+earlier executed bids is not a full authorization void. Importers MUST NOT infer
+such a void from a maximum-row deletion or manufacture an operator reason.
+If the source does not identify an authorized correction with sufficient scope
+and audit evidence, report it as unsupported/unassessed. Selective execution
+correction is not specified by this full-authorization void operation.
 
 Voiding emits a new immutable audit event; it does not delete the original bid.
 The engine recomputes standing amount, leader, reserve status, and next required
@@ -317,6 +338,11 @@ close command is evaluated first and may extend closing; later bids are
 rejected.
 
 ## Amendments
+
+- 2026-10-22: maintainer reaffirmed that bidders may cancel only unused maximum
+  authority. Executed bids require separately authorized, audited operator
+  correction; row removals must not be silently promoted to full authorization
+  voids. Added host admission/floor/audit/post-close regressions.
 
 - 2026-10-22: maintainer-accepted clarification that a leader's maximum increase
   preserves competitive standing price, next required amount and executed floor,

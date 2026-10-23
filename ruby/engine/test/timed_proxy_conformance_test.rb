@@ -41,6 +41,7 @@ class TimedProxyConformanceTest < Minitest::Test
     034-clipped-leader-raise-preserves-late-extension.yaml
     035-tied-leader-raise-preserves-late-extension.yaml
     036-leader-raise-does-not-inflate-cancellation-floor.yaml
+    037-cancellation-preserves-executed-commitment.yaml
   ].freeze
 
   SCENARIOS.each do |filename|

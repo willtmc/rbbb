@@ -167,3 +167,14 @@ it must not complete a competitive increment at the same time. Subsequent
 challengers use the resulting displayed minimum normally. Void reconstruction
 applies these rules in authorization order; snapshot restore preserves the
 recorded state. Post-close bid correction remains unsupported.
+
+## Revocation and operator correction
+
+Bidder cancellation withdraws only unexecuted maximum authority. The executed
+floor remains binding. Hosts MUST bind bidder identity and separately authorize
+operator corrections; caller-provided operator identity is not a grant. Only an
+audited correction with target, actual reason, authoritative time and notification
+policy can invalidate an executed bid before closing. A full authorization void
+must not stand in for a maximum revocation or partial execution removal. Missing
+source scope/authorization/audit evidence is unsupported, not inferred. The
+post-close correction boundary remains unchanged.

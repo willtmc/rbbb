@@ -1,0 +1,21 @@
+name: Cancellation withdraws only unused authority and preserves executed commitment
+specification_version: 0.1.0-draft
+rfcs: ["0001"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: maximum-a, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 16000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: challenger-b, type: place_bid, bidder_id: bidder-b, maximum_minor_units: 14200, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: cancel-to-challenger, type: reduce_maximum, bidder_id: bidder-a, maximum_minor_units: 14200, effective_at: "2026-09-01T12:12:00Z"}
+  - {command_id: cancel-to-zero, type: reduce_maximum, bidder_id: bidder-a, maximum_minor_units: 0, effective_at: "2026-09-01T12:13:00Z"}
+  - {command_id: cancel-unused, type: reduce_maximum, bidder_id: bidder-a, maximum_minor_units: 15200, effective_at: "2026-09-01T12:14:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000}
+    - {type: standing_bid_changed, standing_minor_units: 15200, leader_changed: false}
+  privileged_events:
+    - {type: maximum_reduced, bidder_id: bidder-a, old_maximum_minor_units: 16000, new_maximum_minor_units: 15200, executed_floor_minor_units: 15200}
+  rejections:
+    - {command_id: cancel-to-challenger, status: rejected, reason: maximum_below_executed_amount, executed_floor_minor_units: 15200}
+    - {command_id: cancel-to-zero, status: rejected, reason: maximum_below_executed_amount, executed_floor_minor_units: 15200}
+  final_state: {leader_id: bidder-a, standing_minor_units: 15200, next_required_minor_units: 16200, positions: {bidder-a: {maximum_minor_units: 15200}}}
