@@ -37,6 +37,7 @@ module RBBB
 
     def decide(state, command)
       raise InvalidState, "engine requires an RBBB::State" unless state.is_a?(State)
+      validate_ladder_state!(state)
       return reject(nil, "invalid_command") unless command.respond_to?(:transform_keys)
 
       values = command.transform_keys(&:to_s)
@@ -90,7 +91,7 @@ module RBBB
 
       # Every transition carries the full aggregate snapshot, so the next state
       # is exactly what a host would restore from this event.
-      State.from_transition(configuration, transition)
+      validate_ladder_state!(State.from_transition(configuration, transition))
     end
 
     # Rebuild aggregate state from one privileged state-transition event
@@ -101,10 +102,27 @@ module RBBB
         raise InvalidState, "restore requires one privileged state-transition event"
       end
 
-      State.from_transition(configuration, event)
+      validate_ladder_state!(State.from_transition(configuration, event))
     end
 
     private
+
+    def validate_ladder_state!(state)
+      ladder = configuration.bid_ladder
+      state.positions.each_value do |position|
+        unless position.executable_maximum_minor_units == ladder.floor(position.maximum_minor_units) &&
+            (position.executed_minor_units.zero? || ladder.floor(position.executed_minor_units) == position.executed_minor_units)
+          raise InvalidState, "position does not match fixed bid ladder"
+        end
+      end
+      standing = state.standing_minor_units
+      expected_next = standing ? next_required_for(standing) : configuration.opening_minor_units
+      unless (!standing || (standing >= configuration.opening_minor_units && ladder.floor(standing) == standing)) &&
+          state.next_required_minor_units == expected_next
+        raise InvalidState, "standing price does not match fixed bid ladder"
+      end
+      state
+    end
 
     def decide_place_bid(state, command)
       bidder_id = command.fetch("bidder_id").to_s
@@ -126,8 +144,10 @@ module RBBB
       if existing && maximum <= existing.maximum_minor_units
         return reject(command_id, "maximum_not_increased")
       end
-      if state.leader_id && bidder_id != state.leader_id &&
-          maximum < state.next_required_minor_units
+      same_rung = existing && existing.executable_maximum_minor_units == configuration.bid_ladder.floor(maximum)
+      if state.leader_id && bidder_id != state.leader_id && !same_rung &&
+          (configuration.bid_ladder.floor(maximum) < state.next_required_minor_units ||
+            state.next_required_minor_units == state.standing_minor_units)
         return reject(command_id, "maximum_below_next_required")
       end
 
@@ -253,16 +273,21 @@ module RBBB
       positions = state.positions.transform_values(&:to_h)
       positions[bidder_id] = {
         "maximum_minor_units" => maximum,
-        "priority" => aggregate_version,
+        "executable_maximum_minor_units" => configuration.bid_ladder.floor(maximum),
+        "priority" => position_priority(existing&.to_h, maximum, aggregate_version),
         "executed_minor_units" => existing&.executed_minor_units || 0
       }
 
       ranked = positions.sort_by do |id, position|
-        [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
+        [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
       end
       leader_id = ranked.fetch(0).first
-      standing = standing_after_bid(ranked, state.reserve_minor_units, bidder_id,
-        state.leader_id, state.standing_minor_units)
+      standing = if existing && existing.executable_maximum_minor_units == configuration.bid_ladder.floor(maximum)
+        state.standing_minor_units
+      else
+        standing_after_bid(ranked, state.reserve_minor_units, bidder_id,
+          state.leader_id, state.standing_minor_units)
+      end
       standing = [standing, state.standing_minor_units || 0].max
       reserve_status = reserve_status_for(ranked.fetch(0).last, state.reserve_minor_units)
       next_required = next_required_for(standing)
@@ -271,7 +296,7 @@ module RBBB
       closes_at = extended_closing_time(state, effective_at, public_result_changed)
 
       positions.each do |id, position|
-        executed = id == leader_id ? standing : position.fetch("maximum_minor_units")
+        executed = id == leader_id ? standing : position.fetch("executable_maximum_minor_units")
         position["executed_minor_units"] = [
           position.fetch("executed_minor_units"),
           executed
@@ -288,6 +313,7 @@ module RBBB
           "bid_id" => bid_id,
           "bidder_id" => bidder_id,
           "maximum_minor_units" => maximum,
+          "bidder_notice" => maximum_notice(maximum),
           "executed_minor_units" => positions.fetch(bidder_id).fetch("executed_minor_units"),
           "leader_id" => leader_id,
           "standing_minor_units" => standing,
@@ -347,12 +373,13 @@ module RBBB
       positions = state.positions.transform_values(&:to_h)
       positions[bidder_id] = {
         "maximum_minor_units" => maximum,
-        "priority" => aggregate_version,
+        "executable_maximum_minor_units" => configuration.bid_ladder.floor(maximum),
+        "priority" => position_priority(existing&.to_h, maximum, aggregate_version),
         "executed_minor_units" => existing.executed_minor_units
       }
 
       leader_id = positions.min_by do |id, position|
-        [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
+        [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
       end.first
       leader_changed = leader_id != state.leader_id
       closes_at = extended_closing_time(state, effective_at, leader_changed)
@@ -366,6 +393,7 @@ module RBBB
           "bidder_id" => bidder_id,
           "old_maximum_minor_units" => existing.maximum_minor_units,
           "new_maximum_minor_units" => maximum,
+          "bidder_notice" => maximum_notice(maximum),
           "executed_floor_minor_units" => existing.executed_minor_units,
           "leader_id" => leader_id,
           "standing_minor_units" => state.standing_minor_units,
@@ -639,10 +667,13 @@ module RBBB
           existing = positions[bidder_id]
           positions[bidder_id] = {
             "maximum_minor_units" => maximum,
-            "priority" => entry.fetch("priority"),
+            "executable_maximum_minor_units" => configuration.bid_ladder.floor(maximum),
+            "priority" => position_priority(existing, maximum, entry.fetch("priority")),
             "executed_minor_units" => existing&.fetch("executed_minor_units") || 0
           }
-          snapshot = price_positions(positions, reserve_minor_units, bidder_id, snapshot)
+          unless existing && existing.fetch("executable_maximum_minor_units") == configuration.bid_ladder.floor(maximum)
+            snapshot = price_positions(positions, reserve_minor_units, bidder_id, snapshot)
+          end
           apply_executions!(positions, snapshot)
         else
           existing = positions[bidder_id]
@@ -650,10 +681,11 @@ module RBBB
           next unless maximum < existing.fetch("maximum_minor_units")
           next unless maximum >= existing.fetch("executed_minor_units")
 
+          existing["priority"] = position_priority(existing, maximum, entry.fetch("priority"))
           existing["maximum_minor_units"] = maximum
-          existing["priority"] = entry.fetch("priority")
+          existing["executable_maximum_minor_units"] = configuration.bid_ladder.floor(maximum)
           snapshot["leader_id"] = positions.min_by do |id, position|
-            [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
+            [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
           end.first
         end
       end
@@ -663,7 +695,7 @@ module RBBB
 
     def price_positions(positions, reserve_minor_units, bidder_id, previous)
       ranked = positions.sort_by do |id, position|
-        [-position.fetch("maximum_minor_units"), position.fetch("priority"), id]
+        [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
       end
       leader_id = ranked.fetch(0).first
       standing = standing_after_bid(ranked, reserve_minor_units, bidder_id,
@@ -687,7 +719,8 @@ module RBBB
         ranked.first.first == previous_leader
 
       reserve_pressure = reserve_minor_units ?
-        [ranked.first.last.fetch("maximum_minor_units"), reserve_minor_units].min : 0
+        [ranked.first.last.fetch("executable_maximum_minor_units"),
+          configuration.bid_ladder.ceiling(reserve_minor_units) || Money::MAX_MINOR_UNITS].min : 0
       [previous_standing, reserve_pressure].max
     end
 
@@ -704,7 +737,7 @@ module RBBB
       leader_id = snapshot.fetch("leader_id")
       standing = snapshot.fetch("standing_minor_units")
       positions.each do |id, position|
-        executed = id == leader_id ? standing : position.fetch("maximum_minor_units")
+        executed = id == leader_id ? standing : position.fetch("executable_maximum_minor_units")
         position["executed_minor_units"] = [
           position.fetch("executed_minor_units"),
           executed
@@ -790,8 +823,35 @@ module RBBB
 
     # The next required amount saturates at the interoperable bound so that
     # no derived amount ever exceeds what a maximum may carry.
+    def position_priority(existing, maximum, sequence)
+      if existing && existing.fetch("executable_maximum_minor_units") == configuration.bid_ladder.floor(maximum)
+        existing.fetch("priority")
+      else
+        sequence
+      end
+    end
+
+    def maximum_notice(maximum)
+      executable = configuration.bid_ladder.floor(maximum)
+      return nil if maximum == executable
+
+      following = configuration.bid_ladder.above(executable)
+      format_amount = lambda do |amount|
+        if %w[USD EUR GBP CAD AUD NZD CHF].include?(configuration.currency)
+          "#{configuration.currency} #{amount / 100}.#{(amount % 100).to_s.rjust(2, '0')}"
+        else
+          "#{amount} minor units (#{configuration.currency})"
+        end
+      end
+      message = "Your maximum of #{format_amount.call(maximum)} is accepted. Under this item's bid increments, we can bid up to #{format_amount.call(executable)} for you."
+      message += " The next available amount is #{format_amount.call(following)}." if following
+      {"code" => "maximum_not_fully_executable", "currency" => configuration.currency,
+       "entered_maximum_minor_units" => maximum, "executable_maximum_minor_units" => executable,
+       "next_ladder_minor_units" => following, "message" => message}
+    end
+
     def next_required_for(standing)
-      [standing + configuration.increment_for(standing), Money::MAX_MINOR_UNITS].min
+      configuration.bid_ladder.above(standing) || standing
     end
 
     def standing_amount(ranked, reserve_minor_units)
@@ -800,16 +860,17 @@ module RBBB
         configuration.opening_minor_units
       else
         runner_up = ranked.fetch(1).last
-        runner_up.fetch("maximum_minor_units") +
-          configuration.increment_for(runner_up.fetch("maximum_minor_units"))
+        configuration.bid_ladder.above(runner_up.fetch("executable_maximum_minor_units")) ||
+          runner_up.fetch("executable_maximum_minor_units")
       end
       reserve_pressure = if reserve_minor_units
-        [leader.fetch("maximum_minor_units"), reserve_minor_units].min
+        [leader.fetch("executable_maximum_minor_units"),
+          configuration.bid_ladder.ceiling(reserve_minor_units) || Money::MAX_MINOR_UNITS].min
       else
         configuration.opening_minor_units
       end
       [
-        leader.fetch("maximum_minor_units"),
+        leader.fetch("executable_maximum_minor_units"),
         [configuration.opening_minor_units, competitive, reserve_pressure].max
       ].min
     end
@@ -818,7 +879,7 @@ module RBBB
       return nil unless reserve_minor_units
       return "reserve_not_met" unless leader
 
-      if leader.fetch("maximum_minor_units") >= reserve_minor_units
+      if leader.fetch("executable_maximum_minor_units") >= reserve_minor_units
         "reserve_met"
       else
         "reserve_not_met"

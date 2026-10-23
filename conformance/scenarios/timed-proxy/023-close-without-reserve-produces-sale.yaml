@@ -1,6 +1,6 @@
 name: Closing with a bid and no reserve produces a sale
-specification_version: 0.1.0-draft
-rfcs: ["0001"]
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
 configuration: {fixture: usd-standard}
 starting_state: {events: []}
 commands:

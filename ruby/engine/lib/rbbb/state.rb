@@ -5,6 +5,7 @@ module RBBB
   class State
     Position = Struct.new(
       :maximum_minor_units,
+      :executable_maximum_minor_units,
       :priority,
       :executed_minor_units,
       keyword_init: true
@@ -12,6 +13,7 @@ module RBBB
       def to_h
         {
           "maximum_minor_units" => maximum_minor_units,
+          "executable_maximum_minor_units" => executable_maximum_minor_units,
           "priority" => priority,
           "executed_minor_units" => executed_minor_units
         }
@@ -248,6 +250,7 @@ module RBBB
       values = position.respond_to?(:to_h) ? position.to_h.transform_keys(&:to_s) : {}
       Position.new(
         maximum_minor_units: values.fetch("maximum_minor_units"),
+        executable_maximum_minor_units: values.fetch("executable_maximum_minor_units"),
         priority: values.fetch("priority"),
         executed_minor_units: values.fetch("executed_minor_units")
       ).freeze
@@ -315,11 +318,15 @@ module RBBB
         unless position.maximum_minor_units.is_a?(Integer) && position.maximum_minor_units >= 0
           raise InvalidState, "maximums must be non-negative integers"
         end
+        unless Money.amount?(position.executable_maximum_minor_units) &&
+            position.executable_maximum_minor_units <= position.maximum_minor_units
+          raise InvalidState, "executable maximum must be within entered maximum"
+        end
         unless position.priority.is_a?(Integer) && position.priority.positive? && position.priority <= version
           raise InvalidState, "position priority must belong to the applied event stream"
         end
         unless position.executed_minor_units.is_a?(Integer) &&
-            position.executed_minor_units.between?(0, position.maximum_minor_units)
+            position.executed_minor_units.between?(0, position.executable_maximum_minor_units)
           raise InvalidState, "executed amount must be between zero and maximum"
         end
       end
@@ -328,19 +335,18 @@ module RBBB
 
       leader = positions.fetch(leader_id)
       unless standing_minor_units.is_a?(Integer) &&
-          standing_minor_units.between?(0, leader.maximum_minor_units)
+          standing_minor_units.between?(0, leader.executable_maximum_minor_units)
         raise InvalidState, "standing amount must be within the leader maximum"
       end
       # The next required amount saturates at the interoperable bound, so the
       # two are permitted to be equal only when both sit on that bound.
-      saturated = standing_minor_units == Money::MAX_MINOR_UNITS &&
-        next_required_minor_units == Money::MAX_MINOR_UNITS
+      saturated = standing_minor_units == next_required_minor_units
       unless saturated || next_required_minor_units > standing_minor_units
         raise InvalidState, "next required amount must exceed standing amount"
       end
 
       ranked_leader = positions.min_by do |bidder_id, position|
-        [-position.maximum_minor_units, position.priority, bidder_id]
+        [-position.executable_maximum_minor_units, position.priority, bidder_id]
       end.first
       raise InvalidState, "leader does not match maximum priority" unless ranked_leader == leader_id
     end

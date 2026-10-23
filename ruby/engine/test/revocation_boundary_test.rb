@@ -24,7 +24,7 @@ class RevocationBoundaryTest < Minitest::Test
       permissions: ->(**scope) { scope[:principal_id] == "operator-demo" ? %w[void close] : ["bid"] })
     bid("bidder-a", "maximum-a", 16_000)
     bid("bidder-b", "challenge-b", 14_200)
-    assert_equal 15_200, unit.fetch("standing_minor_units")
+    assert_equal 15_000, unit.fetch("standing_minor_units")
   end
 
   def teardown = FileUtils.remove_entry(@directory)
@@ -43,19 +43,19 @@ class RevocationBoundaryTest < Minitest::Test
 
   def test_bidder_cancels_unused_authority_but_cannot_revoke_executed_competition
     before = @host.snapshot
-    [0, 14_200, 15_199].each_with_index do |amount, index|
+    [0, 14_200, 14_999].each_with_index do |amount, index|
       result = bid("bidder-a", "invalid-cancel-#{index}", amount, type: "reduce_maximum")
       assert_equal "maximum_below_executed_amount", result.fetch("rejection_reason")
       assert_empty result.fetch("records")
       assert_equal before, @host.snapshot
     end
-    result = bid("bidder-a", "cancel-unused", 15_200, type: "reduce_maximum")
+    result = bid("bidder-a", "cancel-unused", 15_000, type: "reduce_maximum")
     assert_nil result.fetch("rejection_reason")
-    assert_equal 15_200, unit.fetch("positions").fetch("bidder-a").fetch("maximum_minor_units")
-    assert_equal 15_200, unit.fetch("positions").fetch("bidder-a").fetch("executed_minor_units")
-    assert_equal 15_200, unit.fetch("standing_minor_units")
+    assert_equal 15_000, unit.fetch("positions").fetch("bidder-a").fetch("maximum_minor_units")
+    assert_equal 15_000, unit.fetch("positions").fetch("bidder-a").fetch("executed_minor_units")
+    assert_equal 15_000, unit.fetch("standing_minor_units")
     assert_equal "bidder-a", unit.fetch("leader_id")
-    assert_equal 16_200, unit.fetch("next_required_minor_units")
+    assert_equal 16_000, unit.fetch("next_required_minor_units")
     refute result.fetch("records").any? { |record| record.dig("event", "type") == "standing_bid_changed" }
   end
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: RBBB command API
-  version: 0.1.0-draft
+  version: 0.2.0-draft
   description: >-
     Experimental language-neutral HTTP command contract for RFC 0001. No
     hosted service exists and production service guarantees are not yet stable.
@@ -52,7 +52,7 @@ components:
     CommandResult:
       type: object
       additionalProperties: false
-      required: [command_id, status, aggregate_version, public_events]
+      required: [command_id, status, aggregate_version, public_events, bidder_notice]
       properties:
         command_id:
           type: string
@@ -61,6 +61,8 @@ components:
           enum: [committed]
         aggregate_version:
           $ref: ./common/integer.schema.json#/$defs/positiveInteger
+        bidder_notice:
+          $ref: "./events/maximum-notice.schema.json"
         public_events:
           type: array
           items:
