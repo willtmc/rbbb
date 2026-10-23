@@ -1,10 +1,14 @@
 # RFC 0001: Timed online proxy bidding baseline
 
+> Specification 0.2.0: [accepted RFC 0005](0005-fixed-bid-ladder.md) supersedes
+> the former short-increment and raw-maximum ranking rules. The current
+> pricing sections below incorporate that decision; Git retains the 0.1.0 baseline.
+
 - Status: accepted
 - Author: Will McLemore
 - Created: 2026-09-01
 - Accepted: 2026-09-01
-- Specification target: 0.1.0-draft
+- Specification target: 0.2.0-draft
 
 ## Summary
 
@@ -19,8 +23,7 @@ audited operator bid removal, and constrained operator changes to closing time
 and reserve.
 
 This RFC does not cover outcry, quantity, choice, linked closing groups,
-multi-parcel allocation, post-close reopening, or forced realignment after a
-short increment.
+multi-parcel allocation or post-close reopening.
 
 ## Terminology
 
@@ -33,7 +36,7 @@ already been used in an accepted standing-price decision.
 
 **Next required amount** is the minimum maximum a challenger must submit.
 
-**Leader** is the real bidder currently first in maximum-and-priority order.
+**Leader** is the real bidder currently first in executable-maximum-and-priority order.
 The reserve can affect price but can never be the leader or winner.
 
 ## Configuration
@@ -53,9 +56,9 @@ amount, the reserve, increment tier lower bounds and increments, every command
 maximum, and every derived amount. A configuration outside the bound is
 invalid; a bid or reduction maximum above it is rejected as `invalid_maximum`;
 a reserve change above it is rejected as `invalid_reserve`. Derived amounts
-never exceed the bound: when the standing amount plus its increment would
-exceed it, the next required amount is the bound itself. That saturated case
-is the only one in which the next required amount equals the standing amount.
+never exceed the bound. At the last representable rung, the next required
+amount saturates at that rung and further challengers are rejected. The numeric
+bound is not an extra cut bid.
 
 The same bound applies to every other integer in the contract: extension
 trigger window and extension duration in seconds, expected and aggregate
@@ -83,87 +86,45 @@ at $1,000.
 
 ## Placing and pricing bids
 
-The first maximum must be at least the opening amount. A first maximum below
-opening is rejected. A first maximum at or above opening establishes the
-standing amount at opening unless reserve pressure requires more.
+Specification 0.2.0 uses the fixed tier-anchored ladder defined by
+[RFC 0005](0005-fixed-bid-ladder.md) and the
+[normative ladder contract](../specification/fixed-bid-ladder.md). All executed
+amounts are ladder rungs. Arbitrary maximum entries remain accepted; cut bids
+are not. The opening amount is the first executable rung. A first maximum
+below opening is rejected; a new challenger must reach the next displayed rung.
 
-A challenger's maximum must be at least the displayed next required amount.
-The current leader may increase their private maximum by any positive amount,
-even when the increase is smaller than a full increment. In ordinary competitive
-bidding this changes future private authority only: the standing amount, next
-required amount and executed floor MUST remain unchanged. In particular, a
-previously clipped increment MUST NOT be completed merely because the leader
-raises their maximum. A subsequent accepted challenger is priced normally.
+Retain the entered maximum separately from its executable maximum: the highest
+rung it authorizes. Rank by executable maximum, then its acceptance priority.
+Remainder-only edits preserve priority. Moving to a different executable maximum
+assigns new priority. Thus a higher raw remainder cannot win a tie.
 
-Clarification accepted by the maintainer on 2026-10-22: this leader exception
-applies before the competitive formula below. For example, with a $10 increment,
-a leader capped at $132 against a $125 runner-up remains at $132 after raising
-their maximum to $137; the next required amount remains $142, not $145.
-The rejected alternative was to reprice from current maxima on every increase.
-That would create a new public commitment from an edit to future authority.
+With competition, price is the lesser of the leader's executable maximum and
+the next rung above the runner-up's executable maximum, subject to opening,
+reserve pressure and binding executed floors. There is no proxy clipping to
+an off-ladder amount. The next required bid is the next rung above standing.
 
-Confidential reserve pressure remains an explicit exception: a leading bidder's
-increase may advance the standing amount toward the unchanged reserve, capped
-by the new maximum. It MUST NOT also fill a competitive increment. Only an
-actual increase in standing amount raises the executed floor. Existing closing
-policies still apply: RFC 0001 qualifies public changes, while a linked closing
-set's RFC 0004 own-adjustment exclusion remains unchanged.
+The current leader may increase private authority by any positive minor-unit
+amount. Ordinary competitive standing price, next required amount and executed
+floor remain unchanged. A later accepted challenger is priced normally. The
+only price-changing exception is unmet reserve pressure below. Remainder-only
+edits by any existing bidder are private and do not change price or closing.
 
-Among real bidders, the greatest maximum leads. Equal maxima are ordered by the
-authoritative sequence in which those exact maxima were accepted; the earlier
-maximum retains priority.
-
-Without reserve pressure, competition establishes:
-
-```text
-competitive amount = min(
-  leader maximum,
-  runner-up maximum + increment_for(runner-up maximum)
-)
-```
-
-The increment tier is selected using the losing maximum, not the prior standing
-amount. The standing amount cannot exceed the leader's maximum. Consequently,
-a maximum may produce a short increment. For example, if the losing maximum is
-$1,000, its applicable increment is $25, and the leader's maximum is $1,001,
-the standing amount is $1,001 rather than $1,025.
-
-The next required amount is:
-
-```text
-standing amount + increment_for(standing amount)
-```
-
-After the $1,001 short-increment example, the next required amount is $1,026
-when the $25 tier applies at $1,001.
+Accepted odd maxima and reductions carry a private, nonblocking bidder notice
+showing their highest executable amount and the next rung. No automatic upward
+rounding or extra confirmation is allowed; see RFC 0005's response contract.
 
 ## Confidential reserve
 
-The reserve behaves like a synthetic proxy threshold for pricing, except that
-it can never lead or win and loses every tie to a real bidder.
+Reserve is a threshold, never a bidder or winner. Off-ladder reserve pressure
+uses the first rung at or above the reserve, capped by executable authority.
+Reserve is met only when the executable maximum reaches the raw reserve. If no
+representable rung can reach reserve, reserve remains unmet. For example, a
+$134 reserve on a $10 ladder requires $140; a $139 maximum executes only $130
+and remains below reserve. Lowering reserve never unwinds an executed price.
 
-Reserve pressure contributes:
-
-```text
-reserve amount applied = min(leader maximum, configured reserve)
-```
-
-For a first bid or a challenger, the public standing amount is the greatest
-amount required by opening, competition, and reserve pressure, capped at the
-leader's maximum. A current leader's maximum increase follows the standing-price
-preservation rule above.
-
-A maximum equal to reserve meets reserve. A maximum below reserve may lead at
-its full maximum while the public status remains `reserve_not_met`. A maximum
-above reserve raises the standing amount to at least reserve and makes the
-public status `reserve_met`.
-
-The public contract exposes only reserve status, never the reserve amount.
-Confidential means unpublished, not undiscoverable: because reserve pressure
-stops the standing amount exactly at the reserve, a bidder whose maximum
-exceeds it, and any observer once status becomes `reserve_met`, can infer the
-amount from the public price. A bidding unit that closes below reserve
-produces `no_sale`, not a winner.
+The public contract exposes only reserve status, never the raw reserve.
+Confidential does not mean undiscoverable: public price and reserve status can
+bound the reserve. A unit closing below reserve produces no_sale.
 
 ## Reducing an unexecuted proxy
 
@@ -175,8 +136,9 @@ Cancelling or revoking a maximum has the same bidder permissions as reducing it:
 only unused future proxy authority may be withdrawn. Executed competitive bids
 remain binding, including the current leader's executed bid. A bidder MUST NOT
 use revocation, a zero maximum, or an operator-command-shaped request to remove
-an executed commitment. For example, a $160 maximum that has executed $152
-against a $142 challenger can be reduced to $152, but not $142 or zero.
+an executed commitment. For example, a $160 maximum that has executed $150
+against a $142 entered maximum (executable to $140 on a $10 ladder) can be
+reduced to $150, but not $140 or zero.
 
 A reduction is evaluated in authoritative command order. If intervening
 competition executes more of the proxy first, the executed floor rises and a
@@ -187,12 +149,13 @@ That rejection reports the bidder's own executed floor as
 field is bidder-own data: the executed amount belongs to the bidder whose proxy
 was used, and a host returns it only to that bidder over the command channel.
 When a sole bidder's proxy has executed up to reserve pressure the floor equals
-the confidential reserve, but that amount is already the bidder's public
+the executed ladder amount at or above reserve, but that amount is already the bidder's public
 standing amount. The field never reveals another bidder's maximum, an
 unexecuted reserve, or any identity.
 
-A reduction that returns to a tied maximum uses the same exact-maximum priority
-rule: its newly accepted maximum follows the earlier equal maximum. This can
+A reduction to a different executable maximum uses executable-maximum priority:
+its new rung follows an earlier equal rung. A remainder-only reduction retains
+the original priority. This can
 change the leader at the unchanged standing amount; it must not discard the
 executed floor or create a new competitive price. That leader change is public
 and follows the existing extension policy.
@@ -371,9 +334,9 @@ rejected.
 
 ### Require all maxima to land on increment boundaries
 
-Rejected for v0.1. Bidders may authorize any positive minor-unit amount that
-meets the next required amount. Proxy clipping can therefore produce a short
-increment.
+Rejected for both 0.1 and 0.2 as an input restriction. Since accepted RFC 0005,
+execution follows the ladder even though authorization may end between rungs.
+The short increments of 0.1 are no longer permitted.
 
 ### Add the extension duration to the previous close
 
@@ -392,7 +355,6 @@ must prevail over the reserve.
 
 ## Deferred capabilities
 
-- optional forced realignment to regular increments after proxy clipping;
 - linked extension groups;
 - post-close reopening and correction;
 - bidder self-service notification preferences;

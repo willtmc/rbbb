@@ -17,7 +17,8 @@ new_state = engine.apply(current_state, decision.events)
 
 The current implementation covers exact minor-unit money, configurable
 increment tiers, opening bids, proxy competition, earlier-equal priority,
-proxy clipping, challenger minimums, private leader maximum increases, and
+fixed ladder execution, arbitrary maxima with private bidder notices, no cut bids,
+challenger minimums, private leader maximum increases, and
 confidential reserve pricing and status. It also enforces authoritative closing
 times, configurable per-unit soft-close extensions, and bidder withdrawal of
 unexecuted proxy authority. Authorized operator bid voiding preserves the
@@ -185,7 +186,8 @@ or capability-advertisement permission follows from passing the reference suite.
 
 ## Install the evaluation gem
 
-Version `0.1.0.pre.3` is an experimental evaluation package. It has no runtime
+Published version `0.1.0.pre.3` is a legacy experimental evaluation package
+that predates the fixed ladder. It has no runtime
 dependencies and supports Ruby 3.2 and newer. Install the exact prerelease from
 RubyGems.org:
 
@@ -194,13 +196,13 @@ gem install rbbb --version 0.1.0.pre.3
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 
-To build the same version from a reviewed checkout:
+To build the fixed-ladder version from a reviewed current checkout (not yet published):
 
 ```sh
 cd ruby/engine
 bundle exec rake package:verify
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.3.gem
+gem install ./rbbb-0.2.0.pre.1.gem
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 

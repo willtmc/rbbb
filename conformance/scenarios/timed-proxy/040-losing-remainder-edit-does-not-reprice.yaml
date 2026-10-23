@@ -1,0 +1,21 @@
+name: Losing bidder remainder edit cannot reprice earlier tied competition
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: odd-a, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 24100, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: odd-b, type: place_bid, bidder_id: bidder-b, maximum_minor_units: 24900, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: raise-a, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 30000, effective_at: "2026-09-01T12:12:00Z"}
+  - {command_id: remainder-b, type: place_bid, bidder_id: bidder-b, maximum_minor_units: 24999, effective_at: "2026-09-01T12:13:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
+    - {type: standing_bid_changed, standing_minor_units: 24000, next_required_minor_units: 25000}
+  final_state:
+    leader_id: bidder-a
+    standing_minor_units: 24000
+    next_required_minor_units: 25000
+    positions:
+      bidder-a: {maximum_minor_units: 30000, executable_maximum_minor_units: 30000, priority: 3, executed_minor_units: 24000}
+      bidder-b: {maximum_minor_units: 24999, executable_maximum_minor_units: 24000, priority: 2, executed_minor_units: 24000}

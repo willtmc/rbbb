@@ -1,5 +1,7 @@
 # RFC 0001 contract conventions
 
+Current pricing: [fixed bid ladder, odd maxima and no cut bids](fixed-bid-ladder.md) (0.2.0-draft).
+
 Status: experimental
 
 This document explains how the language-neutral schemas relate to RFC 0001,
@@ -88,7 +90,9 @@ The public schema must never acquire a bidder, leader, or winner identifier; a
 private maximum; a reserve amount; or an operator-only reason. A host may map
 its own authorized anonymous bidder presentation outside this contract.
 
-The ordinary HTTP command result returns only `public_events`. A committed
+The ordinary HTTP command result returns `public_events` and a nullable
+`bidder_notice` containing only the submitting bidder's own maximum information.
+This notice is private to that authenticated response, never a public event. A committed
 command may return an empty public-event array when it changes only private
 authority. The privileged event union is for an authenticated audit and
 persistence boundary; this draft intentionally does not expose that boundary
@@ -109,9 +113,8 @@ The only such field today is `executed_floor_minor_units`, which accompanies
 amount, the lowest maximum that bidder may still authorize, so the bidder can
 submit a valid reduction without a privileged query. It is bidder-own data:
 while that bidder leads it equals the public standing amount, and otherwise it
-equals the bidder's own fully executed maximum. When a sole bidder's proxy has
-executed up to reserve pressure the value coincides with the confidential
-reserve, but the bidder already observes that amount as the public standing
+equals the bidder's own executed ladder amount. When a sole bidder's proxy has
+executed up to reserve pressure the value is the executed ladder price at or above reserve, but the bidder already observes that amount as the public standing
 amount. A host must return the field only to the bidder who issued the
 rejected command and must never place it in a public projection.
 
@@ -142,7 +145,7 @@ ordered invariants, including:
 
 - opening time precedes current closing time;
 - the next required amount exceeds the standing amount unless both sit on
-  the shared amount bound;
+  the last representable ladder rung;
 - authoritative times never regress across accepted commands, and every
   timestamp carries an explicit UTC offset;
 - an extension never moves closing time earlier;
@@ -161,8 +164,8 @@ than assuming shape validation is sufficient.
 RFC 0001's competitive formula is a transition rule, not a requirement to
 reprice every state from its current maxima. An increase by the current leader
 preserves the standing competitive amount, next required amount and executed
-floor, including after a clipped or tied maximum. Unchanged reserve pressure
-may still advance the price up to the lesser of reserve and the new maximum;
+floor, including after a tied executable maximum. Unchanged reserve pressure
+may still advance the price up to the lesser of the first rung at or above reserve and the new executable maximum;
 it must not complete a competitive increment at the same time. Subsequent
 challengers use the resulting displayed minimum normally. Void reconstruction
 applies these rules in authorization order; snapshot restore preserves the
@@ -178,3 +181,22 @@ policy can invalidate an executed bid before closing. A full authorization void
 must not stand in for a maximum revocation or partial execution removal. Missing
 source scope/authorization/audit evidence is unsupported, not inferred. The
 post-close correction boundary remains unchanged.
+
+## Fixed ladder state and compatibility
+
+Position `maximum_minor_units` retains entered authority.
+`executable_maximum_minor_units` stores its highest executable rung. Position
+priority belongs to acceptance of that rung, while authorization-history
+priority remains the sequence of every individual command. Remainder-only edits
+therefore append history without resetting position priority. Snapshots without
+this field are not 0.2 snapshots and cannot be restored into the new engine.
+The host must pin specification and configuration for each live auction.
+
+`Decision#bidder_notice` exposes the private notice to Ruby integrations.
+The reference admission adapter's `bidder_result` returns a safe bidder response
+without the host's privileged journal. Render its message after acceptance,
+without a second confirmation; retries retain it and recheck authorization.
+The example `examples/fixed_bid_ladder.rb` demonstrates the displayed text.
+Currency formatting belongs to the host; the reference message uses decimal
+formatting for its listed two-decimal currencies and explicit minor-unit text
+for other currency codes rather than guessing an exponent.

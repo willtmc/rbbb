@@ -46,6 +46,26 @@ class LiveSchedulingAdmissionIntegrationTest < Minitest::Test
     @adapter.public_send(operation, credential: "valid", **@operations.fetch(operation), **extra)
   end
 
+  def test_odd_maximum_notice_is_private_replayable_and_nonblocking
+    @principal = "bidder-notice"
+    command = {"type" => "place_bid", "command_id" => "odd-maximum", "maximum_minor_units" => 4079}
+    submit = -> { @adapter.bidder_result(credential: "valid", unit_id: "unit-c", command: command) }
+    response = submit.call
+    assert_equal "accepted", response.fetch("status")
+    notice = response.fetch("bidder_notice")
+    assert_equal 4079, notice.fetch("entered_maximum_minor_units")
+    assert_equal 4000, notice.fetch("executable_maximum_minor_units")
+    assert_equal 4100, notice.fetch("next_ladder_minor_units")
+    assert_equal %w[bidder_notice reason replayed status], response.keys.sort
+    assert_equal response.merge("replayed" => true), submit.call
+    @principal = "other-bidder"
+    denied = submit.call
+    assert_equal "not_authorized", denied.fetch("reason")
+    assert_nil denied.fetch("bidder_notice")
+    @allowed = false
+    assert_raises(RBBBExamples::LiveSchedulingAdmission::NotAuthorized) { submit.call }
+  end
+
   def test_all_entrypoints_deny_before_any_durable_bookkeeping
     @operations.each_key do |operation|
       before = rows

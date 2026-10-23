@@ -15,6 +15,18 @@ module RBBBExamples
       @host, @authenticate, @authorize, @permissions = host, authenticate, authorize, permissions
     end
 
+    # Bidder-facing response: omit the host's privileged journal and other maxima.
+    # Authentication, identity binding and retry authorization run through bid.
+    def bidder_result(credential:, unit_id:, command:)
+      response = bid(credential: credential, unit_id: unit_id, command: command)
+      event = response.fetch("records").filter_map { |record| record["event"] }.find do |record|
+        record["command_id"] == command["command_id"] && record.key?("bidder_notice")
+      end
+      {"status" => response["rejection_reason"] ? "rejected" : "accepted",
+       "reason" => response["rejection_reason"], "bidder_notice" => event && event["bidder_notice"],
+       "replayed" => response.fetch("replayed")}
+    end
+
     OPERATIONS.each do |operation, action|
       define_method(operation) do |credential:, **arguments|
         # Never allow client-supplied authority, even when it matches the user.

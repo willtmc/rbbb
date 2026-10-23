@@ -1,5 +1,7 @@
 # Request for comments process
 
+Current pricing: [fixed bid ladder, odd maxima and no cut bids](0005-fixed-bid-ladder.md) (0.2.0-draft).
+
 An RFC is required for any new or changed normative auction behavior, public
 contract, compatibility guarantee, or governance model.
 

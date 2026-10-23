@@ -19,7 +19,7 @@ class LeaderMaximumTest < Minitest::Test
     [engine.apply(state, decision.events), decision]
   end
 
-  def test_void_reconstruction_does_not_complete_a_clipped_increment
+  def test_void_reconstruction_preserves_the_ladder_price
     e = engine
     s = e.initial_state
     [["a", 13_200], ["b", 12_500], ["a", 18_000], ["a", 20_000]].each do |who, amount|
@@ -27,14 +27,14 @@ class LeaderMaximumTest < Minitest::Test
     end
     s, = apply(e, s, "void_bid", bid_id: "command-3", operator_id: "operator-demo",
       reason: "duplicate authorization", notification_policy: "none")
-    assert_equal 13_200, s.standing_minor_units
-    assert_equal 13_200, s.position_for("a").executed_minor_units
-    assert_equal 14_200, s.next_required_minor_units
+    assert_equal 13_000, s.standing_minor_units
+    assert_equal 13_000, s.position_for("a").executed_minor_units
+    assert_equal 14_000, s.next_required_minor_units
     s, = apply(e, s, "reduce_maximum", bidder_id: "a", maximum_minor_units: 13_200)
     assert_equal 13_200, s.position_for("a").maximum_minor_units
   end
 
-  def test_reduction_back_to_a_tie_follows_exact_maximum_priority_and_replays
+  def test_reduction_back_to_a_tie_follows_executable_maximum_priority_and_replays
     e = engine(extension: {trigger_window_seconds: 300, duration_seconds: 300})
     s = e.initial_state
     [["a", 24_000], ["b", 24_000], ["a", 29_000]].each do |who, amount|
@@ -58,12 +58,12 @@ class LeaderMaximumTest < Minitest::Test
     s = e.initial_state
     s, = apply(e, s, "place_bid", bidder_id: "a", maximum_minor_units: 13_200)
     s, decision = apply(e, s, "place_bid", bidder_id: "a", maximum_minor_units: 18_000)
-    assert_equal 13_400, s.standing_minor_units
+    assert_equal 14_000, s.standing_minor_units
     assert_equal "reserve_met", s.reserve_status
-    assert_equal 13_400, s.position_for("a").executed_minor_units
+    assert_equal 14_000, s.position_for("a").executed_minor_units
     assert decision.events.any?(&:public?)
     s, decision = apply(e, s, "place_bid", bidder_id: "a", maximum_minor_units: 20_000)
-    assert_equal 13_400, s.standing_minor_units
+    assert_equal 14_000, s.standing_minor_units
     assert_empty decision.events.select(&:public?)
   end
 

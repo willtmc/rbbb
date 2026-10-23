@@ -7,7 +7,7 @@ module RBBB
   # are required alongside currency, opening amount, and increments.
   class Configuration
     attr_reader :currency, :opening_minor_units, :reserve_minor_units,
-      :increment_schedule, :opens_at, :closes_at, :extension
+      :increment_schedule, :bid_ladder, :opens_at, :closes_at, :extension
 
     def self.from_h(attributes)
       values = attributes.transform_keys(&:to_s)
@@ -38,6 +38,7 @@ module RBBB
       @opening_minor_units = opening_minor_units
       @reserve_minor_units = reserve_minor_units
       @increment_schedule = IncrementSchedule.new(increments)
+      @bid_ladder = BidLadder.new(@increment_schedule, opening_minor_units)
       @opens_at = parse_timestamp(opens_at, "opens_at")
       @closes_at = parse_timestamp(closes_at, "closes_at")
       if @opens_at >= @closes_at

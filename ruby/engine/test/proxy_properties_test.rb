@@ -26,8 +26,10 @@ class ProxyPropertiesTest < Minitest::Test
       state = accept(@engine.initial_state, "command-1", "bidder-a", first_maximum)
       state = accept(state, "command-2", "bidder-b", second_maximum)
 
-      expected_leader = second_maximum > first_maximum ? "bidder-b" : "bidder-a"
-      leader_maximum, runner_up_maximum = [first_maximum, second_maximum].sort.reverse
+      first_executable = first_maximum / 1_000 * 1_000
+      second_executable = second_maximum / 1_000 * 1_000
+      expected_leader = second_executable > first_executable ? "bidder-b" : "bidder-a"
+      leader_maximum, runner_up_maximum = [first_executable, second_executable].sort.reverse
       expected_standing = [leader_maximum, runner_up_maximum + 1_000].min
 
       assert_equal expected_leader, state.leader_id,
@@ -59,7 +61,7 @@ class ProxyPropertiesTest < Minitest::Test
       decision = decide(engine, engine.initial_state, "reserve-#{index}", "bidder-a", maximum)
       state = engine.apply(engine.initial_state, decision.events)
       expected_status = maximum >= 100_000 ? "reserve_met" : "reserve_not_met"
-      expected_standing = [maximum, 100_000].min
+      expected_standing = maximum < 100_000 ? maximum / 1_000 * 1_000 : 100_000
       public_event = decision.events.find(&:public?).to_h
 
       assert_equal expected_standing, state.standing_minor_units, "maximum #{maximum}"

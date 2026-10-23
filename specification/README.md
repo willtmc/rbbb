@@ -1,5 +1,7 @@
 # RBBB specification
 
+Current pricing: [fixed bid ladder, odd maxima and no cut bids](fixed-bid-ladder.md) (0.2.0-draft).
+
 The specification is the language-neutral source of truth for compatible
 auction behavior. It is currently a **draft** and has no stable compatibility
 guarantee. RFC 0001 schemas are marked `experimental`: complete enough for

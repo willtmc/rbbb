@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0.pre.1 — fixed ladder evaluation
+
+Incompatible specification 0.2.0-draft, accepted in RFC 0005 on 2026-10-23:
+fixed ladder execution, arbitrary entered maxima, no cut bids, and private
+nonblocking bidder notices. Unused remainders affect neither price nor priority.
+Reserves execute at the first eligible rung, and corrections replay identical
+rules. Existing post-close and operator authorization boundaries remain intact.
+Positions now carry executable maximum separately from entered authority.
+Preserve 0.1 snapshots and the pinned baseline; no live migration is provided.
+
+
 All notable changes will be documented here.
 
 The project intends to follow Semantic Versioning once it begins publishing
