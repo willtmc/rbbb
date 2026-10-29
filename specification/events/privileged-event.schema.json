@@ -74,6 +74,7 @@
         "bidder_id",
         "maximum_minor_units",
         "executed_minor_units",
+        "bidder_notice",
         "state"
       ],
       "properties": {
@@ -81,6 +82,7 @@
         "bidder_id": {"type": "string", "minLength": 1, "maxLength": 255},
         "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
         "executed_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "bidder_notice": {"$ref": "maximum-notice.schema.json"},
         "state": {"$ref": "#/$defs/state"}
       }
     },
@@ -92,6 +94,7 @@
         "old_maximum_minor_units",
         "new_maximum_minor_units",
         "executed_floor_minor_units",
+        "bidder_notice",
         "state"
       ],
       "properties": {
@@ -99,6 +102,7 @@
         "old_maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
         "new_maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
         "executed_floor_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "bidder_notice": {"$ref": "maximum-notice.schema.json"},
         "state": {"$ref": "#/$defs/state"}
       }
     },

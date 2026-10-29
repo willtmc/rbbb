@@ -14,6 +14,7 @@ class EngineDifferentialTest < Minitest::Test
   BIDDERS = %w[bidder-a bidder-b bidder-c bidder-d].freeze
   BASE = Time.utc(2026, 9, 1, 12, 0, 0)
   PRIVATE_KEYS = %w[
+    bidder_notice executable_maximum_minor_units entered_maximum_minor_units
     bidder_id maximum_minor_units reserve_minor_units operator_id positions
     authorization_history reserve_history executed_minor_units leader_id
     winner_id old_reserve_minor_units new_reserve_minor_units bidder_ids
@@ -164,8 +165,8 @@ class EngineDifferentialTest < Minitest::Test
         assert_equal state.standing_minor_units, position.executed_minor_units,
           "#{label}: leader executed amount must equal the standing amount"
       else
-        assert_equal position.maximum_minor_units, position.executed_minor_units,
-          "#{label}: an outbid proxy must be fully executed"
+        assert_equal position.executable_maximum_minor_units, position.executed_minor_units,
+          "#{label}: an outbid proxy executes only its ladder authority"
       end
     end
   end
@@ -189,23 +190,29 @@ class EngineDifferentialTest < Minitest::Test
         "#{label}: a non-bid transition changed the standing price"
       return
     end
+    existing = before.position_for(command[:bidder_id])
+    if existing && existing.executable_maximum_minor_units == configuration.bid_ladder.floor(command[:maximum_minor_units])
+      assert_equal before.standing_minor_units, state.standing_minor_units,
+        "#{label}: remainder-only edit changed the price"
+      return
+    end
     if command[:bidder_id] == before.leader_id
       pressure = state.reserve_minor_units ?
-        [command[:maximum_minor_units], state.reserve_minor_units].min : 0
+        [configuration.bid_ladder.floor(command[:maximum_minor_units]), configuration.bid_ladder.ceiling(state.reserve_minor_units)].min : 0
       expected = [before.standing_minor_units, pressure].max
       assert_equal expected, state.standing_minor_units,
         "#{label}: leader maximum increase executed competitive bidding"
       return
     end
-    ranked = state.positions.sort_by { |id, position| [-position.maximum_minor_units, position.priority, id] }
-    leader_maximum = ranked.first.last.maximum_minor_units
+    ranked = state.positions.sort_by { |id, position| [-position.executable_maximum_minor_units, position.priority, id] }
+    leader_maximum = ranked.first.last.executable_maximum_minor_units
     competitive = if ranked.length > 1
-      runner_up = ranked[1].last.maximum_minor_units
-      runner_up + configuration.increment_for(runner_up)
+      runner_up = ranked[1].last.executable_maximum_minor_units
+      configuration.bid_ladder.above(runner_up)
     else
       configuration.opening_minor_units
     end
-    pressure = state.reserve_minor_units ? [leader_maximum, state.reserve_minor_units].min : configuration.opening_minor_units
+    pressure = state.reserve_minor_units ? [leader_maximum, configuration.bid_ladder.ceiling(state.reserve_minor_units)].min : configuration.opening_minor_units
     expected = [leader_maximum, [configuration.opening_minor_units, competitive, pressure].max].min
 
     expected = [expected, before.standing_minor_units || 0].max

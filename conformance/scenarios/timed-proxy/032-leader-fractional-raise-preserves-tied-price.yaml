@@ -1,6 +1,6 @@
 {
   "name": "leader-fractional-raise-preserves-tied-price",
-  "specification_version": "0.1.0-draft",
+  "specification_version": "0.2.0-draft",
   "rfcs": [
     "0001"
   ],

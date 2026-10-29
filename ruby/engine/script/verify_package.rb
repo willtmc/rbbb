@@ -15,6 +15,7 @@ EXPECTED_FILES = %w[
   LICENSE
   README.md
   lib/rbbb.rb
+  lib/rbbb/bid_ladder.rb
   lib/rbbb/configuration.rb
   lib/rbbb/decision.rb
   lib/rbbb/engine.rb

@@ -1,0 +1,29 @@
+name: Odd maxima retain authority without cut bids or remainder priority
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: odd-a, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 24100, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: odd-b, type: place_bid, bidder_id: bidder-b, maximum_minor_units: 24900, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: remainder-a, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 24999, effective_at: "2026-09-01T12:12:00Z"}
+  - {command_id: reduce-a, type: reduce_maximum, bidder_id: bidder-a, maximum_minor_units: 24000, effective_at: "2026-09-01T12:13:00Z"}
+  - {command_id: cut-c, type: place_bid, bidder_id: bidder-c, maximum_minor_units: 24999, effective_at: "2026-09-01T12:14:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000, next_required_minor_units: 11000}
+    - {type: standing_bid_changed, standing_minor_units: 24000, next_required_minor_units: 25000, leader_changed: false}
+  privileged_events:
+    - type: maximum_accepted
+      bidder_notice: {code: maximum_not_fully_executable, entered_maximum_minor_units: 24100, executable_maximum_minor_units: 24000, next_ladder_minor_units: 25000}
+    - type: maximum_accepted
+      bidder_notice: {code: maximum_not_fully_executable, entered_maximum_minor_units: 24900, executable_maximum_minor_units: 24000, next_ladder_minor_units: 25000}
+  rejections:
+    - {command_id: cut-c, status: rejected, reason: maximum_below_next_required}
+  final_state:
+    leader_id: bidder-a
+    standing_minor_units: 24000
+    next_required_minor_units: 25000
+    positions:
+      bidder-a: {maximum_minor_units: 24000, executable_maximum_minor_units: 24000, priority: 1, executed_minor_units: 24000}
+      bidder-b: {maximum_minor_units: 24900, executable_maximum_minor_units: 24000, priority: 2, executed_minor_units: 24000}

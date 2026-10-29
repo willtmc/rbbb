@@ -1,0 +1,21 @@
+name: Off-ladder reserve rounds to the next fixed tier rung
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
+configuration: {fixture: usd-tiered}
+starting_state: {events: []}
+commands:
+  - {command_id: reserve, type: change_reserve, operator_id: operator-a, reason: Synthetic reserve, reserve_minor_units: 100100, effective_at: "2026-09-01T12:01:00Z"}
+  - {command_id: odd, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 102499, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: rung, type: place_bid, bidder_id: bidder-a, maximum_minor_units: 102599, effective_at: "2026-09-01T12:11:00Z"}
+expected:
+  public_events:
+    - {type: reserve_status_changed, reserve_status: reserve_not_met}
+    - {type: standing_bid_changed, standing_minor_units: 100000, next_required_minor_units: 102500, reserve_status: reserve_not_met}
+    - {type: standing_bid_changed, standing_minor_units: 102500, next_required_minor_units: 105000, reserve_status: reserve_met}
+  final_state:
+    leader_id: bidder-a
+    standing_minor_units: 102500
+    next_required_minor_units: 105000
+    reserve_status: reserve_met
+    positions:
+      bidder-a: {maximum_minor_units: 102599, executable_maximum_minor_units: 102500, priority: 3, executed_minor_units: 102500}
