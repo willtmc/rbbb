@@ -362,7 +362,8 @@ module RBBB
 
       bid_ids = []
       authorization_history.each do |entry|
-        unless %w[place_bid maximum_reduced].include?(entry.fetch("type"))
+        type = entry.fetch("type")
+        unless type == "place_bid" || type == "maximum_reduced"
           raise InvalidState, "authorization type is invalid"
         end
         unless entry.fetch("maximum_minor_units").is_a?(Integer) &&
@@ -402,7 +403,8 @@ module RBBB
       unless priorities == priorities.sort && priorities.uniq == priorities
         raise InvalidState, "reserve change priorities must be unique and ordered"
       end
-      unless (priorities & authorization_history.map { |entry| entry.fetch("priority") }).empty?
+      unless priorities.empty? ||
+          (priorities & authorization_history.map { |entry| entry.fetch("priority") }).empty?
         raise InvalidState, "state history priorities must be unique"
       end
 

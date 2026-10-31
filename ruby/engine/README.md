@@ -231,3 +231,11 @@ The default task includes `package:verify`, which builds the gem in a temporary
 directory, checks the exact file allowlist, installs it into an isolated gem
 home, and runs a bid through the installed artifact. Run `bundle exec rake
 package:verify` when only that check is needed.
+
+For a repeatable allocation diagnostic, run
+`bundle exec ruby script/benchmark_history_validation.rb`. It builds 1,000
+synthetic authorizations, then measures validated snapshot restoration and
+decision/application in three batches of 300 iterations. Compare the same Ruby
+version and machine before and after a change; these local timings are not
+service capacity or production-readiness evidence. Every iteration still runs
+the normal history validation.
