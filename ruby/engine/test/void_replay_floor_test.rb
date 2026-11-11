@@ -74,6 +74,78 @@ class VoidReplayFloorTest < Minitest::Test
     assert_equal 1_000, state.position_for("y").executed_minor_units
   end
 
+  # The sequence recorded as conformance scenario 042 (increments of 1,000,
+  # opening 10,000): voiding the leader's last bid leaves another bidder
+  # executed above the maximum they have on file. RFC 0001 (amendment of
+  # 2026-11-10) allows the void; a host warns the operator.
+  def test_void_of_leaders_last_bid_prices_third_party_above_their_maximum_on_file
+    engine = RBBB::Engine.new(configuration(opening: 10_000, increments: [[0, 1_000]]))
+    state = run_commands(engine, third_party_commands.take(7))
+    assert_equal ["bidder-x", 20_000], [state.leader_id, state.standing_minor_units]
+    assert_equal 20_700, state.position_for("bidder-y").maximum_minor_units
+
+    decision = engine.decide(state, stamp(third_party_commands.last, 8))
+    assert decision.accepted?, decision.rejection.inspect
+    voided = engine.apply(state, decision.events)
+
+    assert_equal ["bidder-y", 21_000, 22_000],
+      [voided.leader_id, voided.standing_minor_units, voided.next_required_minor_units]
+    assert_equal({"maximum_minor_units" => 35_000, "executable_maximum_minor_units" => 35_000,
+                  "priority" => 5, "executed_minor_units" => 21_000}, voided.position_for("bidder-y").to_h)
+    assert_equal({"maximum_minor_units" => 20_000, "executable_maximum_minor_units" => 20_000,
+                  "priority" => 1, "executed_minor_units" => 20_000}, voided.position_for("bidder-x").to_h)
+
+    # The warning data is derivable from the state the host passed to decide
+    # and the positions on the bid_voided event; the decision adds no field.
+    assert_equal [{"bidder_id" => "bidder-y", "maximum_on_file_minor_units" => 20_700,
+                   "executed_minor_units" => 21_000}],
+      third_parties_above_maximum_on_file(state, decision)
+    refute_includes decision.events.find { |event| event.type == "bid_voided" }.data.keys, "warnings"
+  end
+
+  # Voiding the leader's bid is not the only way to price a bidder above their
+  # maximum on file. Here the voided bidder keeps the lead, and the other
+  # bidder's earlier reduction is given no effect, so their withdrawn authority
+  # stands again. The `affected` notification policy names only the voided
+  # bidder, so the warning data must not be derived from it.
+  def test_void_without_a_leader_change_still_reports_the_other_bidder
+    engine = RBBB::Engine.new(configuration(opening: 1_000, increments: [[0, 1_000]]))
+    commands = [
+      {"type" => "place_bid", "bid_id" => "x-1", "bidder_id" => "x", "maximum_minor_units" => 2_000},
+      {"type" => "place_bid", "bid_id" => "y-1", "bidder_id" => "y", "maximum_minor_units" => 2_000},
+      {"type" => "place_bid", "bid_id" => "x-2", "bidder_id" => "x", "maximum_minor_units" => 3_000},
+      {"type" => "reduce_maximum", "bidder_id" => "x", "maximum_minor_units" => 2_000},
+      {"type" => "place_bid", "bid_id" => "y-2", "bidder_id" => "y", "maximum_minor_units" => 3_000},
+      {"type" => "reduce_maximum", "bidder_id" => "y", "maximum_minor_units" => 2_000}
+    ]
+    state = run_commands(engine, commands)
+    assert_equal ["x", 2_000], [state.leader_id, state.standing_minor_units]
+    void = stamp({"type" => "void_bid", "bid_id" => "x-1", "operator_id" => "operator-1",
+                  "reason" => "synthetic correction", "notification_policy" => "affected"}, 7)
+    decision = engine.decide(state, void)
+    voided = engine.apply(state, decision.events)
+
+    assert_equal ["x", 3_000], [voided.leader_id, voided.standing_minor_units]
+    assert_equal [{"bidder_id" => "y", "maximum_on_file_minor_units" => 2_000, "executed_minor_units" => 3_000}],
+      third_parties_above_maximum_on_file(state, decision)
+    notice = decision.events.find { |event| event.type == "notification_requested" }
+    assert_equal %w[x], notice.data.fetch("bidder_ids")
+  end
+
+  # Observation, not a requirement: counts how many voids over every short
+  # history of two bidders leave a third party above their maximum on file.
+  # The engine allows these voids; hosts warn. The exhaustive pass also keeps
+  # the consistency invariants for every void it reaches.
+  def test_exhaustive_short_histories_observe_third_party_voids
+    engine = RBBB::Engine.new(configuration(opening: 1_000, increments: [[0, 1_000]]))
+    observed = Hash.new(0)
+    walk_histories(engine, engine.initial_state, 5, observed)
+
+    puts "void replay observation: #{observed.sort.to_h}" if ENV["RBBB_TEST_VERBOSE"]
+    assert_operator observed[:voids], :>, 1_000, "enumeration reached too few voids"
+    assert_operator observed[:third_party_above_maximum], :>, 0, "enumeration no longer reaches the case"
+  end
+
   # For random histories with voids: every event `decide` returns is accepted
   # by `apply`, executed amounts stay inside what each position can execute,
   # and the state after a void equals a fresh unit that received the remaining
@@ -82,6 +154,7 @@ class VoidReplayFloorTest < Minitest::Test
   def test_random_histories_with_voids_are_applied_and_match_a_fresh_replay
     voids = 0
     compared = 0
+    @third_party_voids = 0
     SEEDS.each do |seed|
       rng = Random.new(seed)
       CASES_PER_SEED.times do |index|
@@ -93,9 +166,72 @@ class VoidReplayFloorTest < Minitest::Test
 
     assert_operator voids, :>=, SEEDS.length * CASES_PER_SEED, "too few voids exercised"
     assert_operator compared * 2, :>, voids, "fresh replay compared too few voids (#{compared}/#{voids})"
+    # Observation only: random histories rarely lower a maximum twice, so this
+    # is usually small. The exhaustive test below reaches the case reliably.
+    puts "random voids leaving a third party above their maximum: #{@third_party_voids}/#{voids}" if ENV["RBBB_TEST_VERBOSE"]
   end
 
   private
+
+  def third_party_commands
+    [
+      {"type" => "place_bid", "bid_id" => "bid-x-1", "bidder_id" => "bidder-x", "maximum_minor_units" => 20_000},
+      {"type" => "place_bid", "bid_id" => "bid-y-1", "bidder_id" => "bidder-y", "maximum_minor_units" => 20_000},
+      {"type" => "place_bid", "bid_id" => "bid-x-2", "bidder_id" => "bidder-x", "maximum_minor_units" => 30_000},
+      {"type" => "reduce_maximum", "bidder_id" => "bidder-x", "maximum_minor_units" => 20_000},
+      {"type" => "place_bid", "bid_id" => "bid-y-2", "bidder_id" => "bidder-y", "maximum_minor_units" => 35_000},
+      {"type" => "reduce_maximum", "bidder_id" => "bidder-y", "maximum_minor_units" => 20_600},
+      {"type" => "place_bid", "bid_id" => "bid-y-3", "bidder_id" => "bidder-y", "maximum_minor_units" => 20_700},
+      {"type" => "void_bid", "bid_id" => "bid-x-2", "operator_id" => "operator-1",
+       "reason" => "synthetic correction", "notification_policy" => "affected"}
+    ]
+  end
+
+  # What a host needs for its operator warning, from the state it passed to
+  # `decide` and the positions on the `bid_voided` event. Needs no new field.
+  def third_parties_above_maximum_on_file(state, decision)
+    event = decision.events.find { |candidate| candidate.type == "bid_voided" }
+    event.data.fetch("positions").sort.filter_map do |bidder_id, position|
+      before = state.position_for(bidder_id)
+      next if bidder_id == event.data.fetch("bidder_id") || before.nil?
+      next unless position.fetch("executed_minor_units") > before.maximum_minor_units
+
+      {"bidder_id" => bidder_id, "maximum_on_file_minor_units" => before.maximum_minor_units,
+       "executed_minor_units" => position.fetch("executed_minor_units")}
+    end
+  end
+
+  ENUMERATION_MAXIMA = [2_000, 2_600, 3_000].freeze
+
+  def walk_histories(engine, state, depth, observed)
+    state.authorization_history.select { |entry| entry.fetch("type") == "place_bid" }.each do |entry|
+      void = stamp({"type" => "void_bid", "bid_id" => entry.fetch("bid_id"), "operator_id" => "operator-1",
+                    "reason" => "synthetic correction", "notification_policy" => "none"}, 500)
+      decision = engine.decide(state, void)
+      next unless decision.accepted?
+
+      after = engine.apply(state, decision.events)
+      assert_executed_amounts(after, "enumerated void of #{entry.fetch('bid_id')}")
+      observed[:voids] += 1
+      flagged = third_parties_above_maximum_on_file(state, decision)
+      next if flagged.empty?
+
+      observed[:third_party_above_maximum] += 1
+      observed[after.leader_id == state.leader_id ? :leader_unchanged : :leader_changed] += 1
+    end
+    return if depth.zero?
+
+    ["x", "y"].product(ENUMERATION_MAXIMA).each do |bidder, maximum|
+      id = "#{bidder}-#{state.version}"
+      [
+        {"type" => "place_bid", "bid_id" => id, "bidder_id" => bidder, "maximum_minor_units" => maximum},
+        {"type" => "reduce_maximum", "bidder_id" => bidder, "maximum_minor_units" => maximum}
+      ].each do |command|
+        decision = engine.decide(state, stamp(command, state.version + 1))
+        walk_histories(engine, engine.apply(state, decision.events), depth - 1, observed) if decision.accepted?
+      end
+    end
+  end
 
   def six_commands
     [
@@ -169,6 +305,9 @@ class VoidReplayFloorTest < Minitest::Test
       decision = engine.decide(state, command)
       next unless decision.accepted?
 
+      if command.fetch("type") == "void_bid" && !third_parties_above_maximum_on_file(state, decision).empty?
+        @third_party_voids += 1
+      end
       trace = "#{label} #{command.slice('type', 'bidder_id', 'bid_id', 'maximum_minor_units').inspect}"
       begin
         state = engine.apply(state, decision.events)

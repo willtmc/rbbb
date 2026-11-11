@@ -302,6 +302,29 @@ rejected.
 
 ## Amendments
 
+- 2026-11-10: maintainer decision on operator voids (Will McLemore). Reconstruction
+  after a void follows one rule ("rule A"): an entry that would put a bidder's
+  maximum below their executed amount in the replayed order has no effect, for a
+  later bid exactly as for a reduction. A recorded reduction at or above the
+  reconstructed maximum also has no effect, so no effect can restore authority a
+  bidder had lowered. Consequence for a third party: voiding the leader's last
+  bid can leave another bidder executed above the maximum they have on file. With
+  increments of 1,000 and opening 1,000: X bids 2,000; Y bids 2,000 (X leads at
+  2,000 on the tie); X bids 3,000; X reduces to 2,000 (Y leads at 2,000); Y bids
+  3,500; Y reduces to 2,600 (X leads at 2,000); Y bids 2,700; staff void X's bid
+  of 3,000. Y leads at 3,000 with maximum 3,500, though Y's maximum on file was
+  2,700: without X's 3,000, X's first bid keeps tie priority, Y's 3,500 replays
+  as a challenger and executes at 3,000, and Y's reduction and later bid fall
+  below 3,000 and are given no effect. This requires the other bidder to have
+  lowered their maximum earlier. The choices put to the maintainer were to refuse
+  such a void or to allow it with a warning; he chose to allow it. The engine
+  does not refuse the void; hosts are expected to warn the operator before
+  committing it, using the data described in the specification contract. Intended
+  use: a human admin removing a bad bidder who is winning a lot voids all of that
+  bidder's bids on the lot, or voids only that bidder's last bid (repeating if
+  needed) to put another bidder in the winning position. Builds on RFC 0005
+  (executable maxima and no cut bids). Covered by scenarios 041 and 042.
+
 - 2026-10-22: maintainer reaffirmed that bidders may cancel only unused maximum
   authority. Executed bids require separately authorized, audited operator
   correction; row removals must not be silently promoted to full authorization
