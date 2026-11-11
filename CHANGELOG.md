@@ -18,6 +18,24 @@ versioned artifacts.
 
 ## Unreleased
 
+- Fix operator void reconstruction returning a `bid_voided` event that `apply`
+  refused. A later bid that falls below its bidder's executed amount in the
+  reconstructed order now has no effect, as a reduction below it already had,
+  so executed amounts stay within executable maxima. Record the maintainer
+  decision of 2026-11-10 in RFC 0001: such a void can leave another bidder
+  executed above the maximum they have on file, the engine allows it, and hosts
+  warn the operator; the contract explains how a host derives the warning from
+  the prior state and the `bid_voided` positions (no new field). Adds scenarios
+  041 and 042 and a seeded property test with an exhaustive short-history
+  observation. For rare histories that `apply` already accepted before this
+  fix, the stored priority numbers after a void now differ, and so can the tie
+  order, because a bid below the replayed executed amount no longer takes
+  effect. The leader or the price can also differ from the previous release
+  when a bidder's most recent bid is voided, in histories with three or more
+  bidders in which bidders had lowered their maximums; the maintainer chose the
+  new result (RFC 0001 amendment, second ruling of 2026-11-10). Adds scenario
+  043 and two named regressions for it.
+
 - Clarify bidder revocation versus audited operator correction and add trusted
   admission regressions: executed competition remains binding, operator identity
   cannot be spoofed, corrections require reasons, and post-close voids remain

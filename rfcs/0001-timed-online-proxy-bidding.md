@@ -302,6 +302,50 @@ rejected.
 
 ## Amendments
 
+- 2026-11-10 (second ruling): maintainer decision on the result of a void
+  (Will McLemore). He was shown that in rare histories, voiding a bidder's last
+  bid gives a different winner or price under rule A than under the previous
+  engine, with nobody executed above their maximum on file. In every such case
+  found, the leader and price under rule A match those of a fresh auction run
+  with the voided bid never submitted; the previous engine reached its result by
+  passing through a replayed state the contract forbids (a bidder's maximum below
+  their executed amount). A losing bidder's stored position can differ from the
+  fresh run's. Both examples use opening 1,000 and increments of 1,000.
+  Winner changes: X bids 2,000; Y bids 2,000; X bids 3,000; X reduces to 2,000;
+  Y bids 4,500; Y reduces to 2,600; Y bids 2,700; W bids 4,500; Y bids 4,000. W
+  leads at 4,000. Staff void X's 3,000, X's last bid. The previous engine leaves
+  W leading at 4,000; rule A gives Y leading at 4,000, as the fresh run does.
+  Price changes: X bids 2,000; Y bids 2,000; X bids 3,000; X reduces to 2,000; Y
+  bids 3,000; Y reduces to 2,000; Y bids 2,600; W bids 3,000; Y bids 4,000. Y
+  leads at 4,000. Staff void X's 3,000. The previous engine leaves Y at 4,000;
+  rule A gives Y at 3,000, as the fresh run does. The choices put to him were to
+  keep the previous engine's result ("Hold the fix") or to release the engine's
+  new result ("Fixed engine's result"). He chose the fixed engine's result, to
+  be released as built. Covered by scenario 043 and by named regressions in
+  `void_replay_floor_test.rb`.
+
+- 2026-11-10: maintainer decision on operator voids (Will McLemore). Reconstruction
+  after a void follows one rule ("rule A"): an entry that would put a bidder's
+  maximum below their executed amount in the replayed order has no effect, for a
+  later bid exactly as for a reduction. Because an entry can be given no
+  effect, a void can restore authority a bidder had lowered. Consequence for a third party: voiding the leader's last
+  bid can leave another bidder executed above the maximum they have on file. With
+  increments of 1,000 and opening 1,000: X bids 2,000; Y bids 2,000 (X leads at
+  2,000 on the tie); X bids 3,000; X reduces to 2,000 (Y leads at 2,000); Y bids
+  3,500; Y reduces to 2,600 (X leads at 2,000); Y bids 2,700; staff void X's bid
+  of 3,000. Y leads at 3,000 with maximum 3,500, though Y's maximum on file was
+  2,700: without X's 3,000, X's first bid keeps tie priority, Y's 3,500 replays
+  as a challenger and executes at 3,000, and Y's reduction and later bid fall
+  below 3,000 and are given no effect. This requires the other bidder to have
+  lowered their maximum earlier. The choices put to the maintainer were to refuse
+  such a void or to allow it with a warning; he chose to allow it. The engine
+  does not refuse the void; hosts are expected to warn the operator before
+  committing it, using the data described in the specification contract. Intended
+  use: a human admin removing a bad bidder who is winning a lot voids all of that
+  bidder's bids on the lot, or voids only that bidder's last bid (repeating if
+  needed) to put another bidder in the winning position. Builds on RFC 0005
+  (executable maxima and no cut bids). Covered by scenarios 041 and 042.
+
 - 2026-10-22: maintainer reaffirmed that bidders may cancel only unused maximum
   authority. Executed bids require separately authorized, audited operator
   correction; row removals must not be silently promoted to full authorization

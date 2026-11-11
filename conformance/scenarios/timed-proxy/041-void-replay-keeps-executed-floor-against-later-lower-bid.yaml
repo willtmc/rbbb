@@ -1,0 +1,29 @@
+name: Void replay gives no effect to a later bid below the replayed executed amount
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bid_id: bid-a-1, bidder_id: bidder-a, maximum_minor_units: 130000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: place_bid, bid_id: bid-b-1, bidder_id: bidder-b, maximum_minor_units: 130000, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: command-3, type: place_bid, bid_id: bid-a-2, bidder_id: bidder-a, maximum_minor_units: 131000, effective_at: "2026-09-01T12:12:00Z"}
+  - {command_id: command-4, type: reduce_maximum, bidder_id: bidder-a, maximum_minor_units: 130400, effective_at: "2026-09-01T12:13:00Z"}
+  - {command_id: command-5, type: place_bid, bid_id: bid-a-3, bidder_id: bidder-a, maximum_minor_units: 130500, effective_at: "2026-09-01T12:14:00Z"}
+  - {command_id: command-6, type: void_bid, bid_id: bid-a-1, operator_id: operator-1, reason: bidder_entry_error, notification_policy: affected, effective_at: "2026-09-01T12:15:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000}
+    - {type: standing_bid_changed, standing_minor_units: 130000, leader_changed: false}
+    - {type: standing_bid_changed, standing_minor_units: 130000, leader_changed: true}
+    - {type: standing_bid_changed, standing_minor_units: 131000, next_required_minor_units: 132000, leader_changed: true}
+  privileged_events:
+    - {type: bid_voided, bid_id: bid-a-1, operator_id: operator-1, reason: bidder_entry_error}
+    - {type: executed_amount_changed, bidder_id: bidder-a, old_minor_units: 130000, new_minor_units: 131000}
+  final_state:
+    leader_id: bidder-a
+    standing_minor_units: 131000
+    next_required_minor_units: 132000
+    voided_bid_ids: [bid-a-1]
+    positions:
+      bidder-a: {maximum_minor_units: 131000, executable_maximum_minor_units: 131000, priority: 3, executed_minor_units: 131000}
+      bidder-b: {maximum_minor_units: 130000, executable_maximum_minor_units: 130000, priority: 2, executed_minor_units: 130000}

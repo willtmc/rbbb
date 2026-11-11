@@ -171,6 +171,51 @@ challengers use the resulting displayed minimum normally. Void reconstruction
 applies these rules in authorization order; snapshot restore preserves the
 recorded state. Post-close bid correction remains unsupported.
 
+An authorization accepted in the recorded order can fall below its bidder's
+executed amount in the reconstructed order. Reconstruction gives that entry no
+effect, whether it was recorded as a reduction or as a later bid; the bidder's
+preceding reconstructed authority stands. A recorded reduction that is at or
+above the bidder's reconstructed maximum likewise has no effect. A later bid
+that lowers the reconstructed maximum without crossing the executed amount
+applies. Every accepted void therefore yields a state that satisfies the
+invariants above.
+
+Because an entry can have no effect in the reconstructed order, a void can
+restore maximum authority that the bidder had lowered in the recorded order. A
+void can therefore leave a bidder other than the voided one executed above the
+maximum they have on file immediately before the void. Example (increments of
+1,000, opening 1,000): X bids 2,000; Y bids 2,000 (X leads at 2,000 on the
+tie); X bids 3,000; X reduces to 2,000 (Y leads at 2,000); Y bids 3,500; Y
+reduces to 2,600 (X leads at 2,000); Y bids 2,700; staff void X's bid of 3,000.
+Y then leads at 3,000 with maximum 3,500, though Y's maximum on file was 2,700.
+This requires the other bidder to have lowered their maximum earlier. Conformance
+scenario 042 records the same shape on the `usd-standard` fixture (opening
+10,000, increments of 1,000) with different amounts. The engine accepts such a void (maintainer
+decision of 2026-11-10, recorded in the RFC 0001 amendments); the host is
+expected to warn the operator before committing it.
+
+For leader and price, the result of a void is the result of running the unit
+again from the start with the voided entries never submitted. In the exhaustive
+and randomized checks run for this change, the winner and the price matched in
+every case checked; a losing bidder's stored maximum and priority
+number can differ from the re-run's. This is an observation, not a proof, and
+the engine does not compute the re-run. A void of a bidder's most recent bid can
+therefore give a different leader or price from the one the engine returned
+before this rule, in histories with three or more bidders in which bidders had
+lowered their maximums; the maintainer chose the new result (RFC 0001,
+amendments of 2026-11-10). Scenario 043 records such a case: W leads at 22,000
+before the void and Y leads at 22,000 after it.
+
+A host computes that warning without any additional engine field. Before it
+commits, it holds the state it passed to `decide` and the accepted `bid_voided`
+event. For each bidder in the event's `positions`, other than the event's
+`bidder_id`, whose `executed_minor_units` exceeds the `maximum_minor_units` that
+bidder's position held in the prior state, the host reports both amounts. The
+list covers a bidder whose price rose without any change of leader, which the
+`affected` notification policy does not (it names the voided bidder and the
+leaders before and after); do not derive the warning from notification
+recipients.
+
 ## Revocation and operator correction
 
 Bidder cancellation withdraws only unexecuted maximum authority. The executed
