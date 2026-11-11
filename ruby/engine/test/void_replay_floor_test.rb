@@ -132,6 +132,46 @@ class VoidReplayFloorTest < Minitest::Test
     assert_equal %w[x], notice.data.fetch("bidder_ids")
   end
 
+  # Two histories with three bidders in which voiding a bidder's last bid gives
+  # a different result from the engine before this change (opening 1,000,
+  # increments of 1,000). The maintainer chose the new result on 2026-11-10
+  # (RFC 0001 amendments): it matches re-running the auction as if the voided
+  # bid had never been submitted, for the leader and the price.
+  def test_void_of_last_bid_changes_the_winner_when_bidders_had_lowered_their_maximums
+    engine = RBBB::Engine.new(configuration(opening: 1_000, increments: [[0, 1_000]]))
+    commands = [
+      bid("x-1", "x", 2_000), bid("y-1", "y", 2_000), bid("x-2", "x", 3_000), reduce("x", 2_000),
+      bid("y-2", "y", 4_500), reduce("y", 2_600), bid("y-3", "y", 2_700), bid("w-1", "w", 4_500),
+      bid("y-4", "y", 4_000)
+    ]
+    state = run_commands(engine, commands)
+    assert_equal ["w", 4_000], [state.leader_id, state.standing_minor_units]
+
+    voided = accept(engine, state, stamp(void("x-2"), 10))
+
+    assert_equal ["y", 4_000, 5_000], [voided.leader_id, voided.standing_minor_units, voided.next_required_minor_units]
+    assert_equal({"x" => [2_000, 2_000], "y" => [4_000, 4_000], "w" => [4_500, 4_000]}, maxima_and_executed(voided))
+    assert_equal %w[x-2], voided.voided_bid_ids
+    assert_fresh_run_agrees_on_leader_and_price(engine, commands, "x-2", voided)
+  end
+
+  def test_void_of_last_bid_changes_the_price_when_bidders_had_lowered_their_maximums
+    engine = RBBB::Engine.new(configuration(opening: 1_000, increments: [[0, 1_000]]))
+    commands = [
+      bid("x-1", "x", 2_000), bid("y-1", "y", 2_000), bid("x-2", "x", 3_000), reduce("x", 2_000),
+      bid("y-2", "y", 3_000), reduce("y", 2_000), bid("y-3", "y", 2_600), bid("w-1", "w", 3_000),
+      bid("y-4", "y", 4_000)
+    ]
+    state = run_commands(engine, commands)
+    assert_equal ["y", 4_000], [state.leader_id, state.standing_minor_units]
+
+    voided = accept(engine, state, stamp(void("x-2"), 10))
+
+    assert_equal ["y", 3_000, 4_000], [voided.leader_id, voided.standing_minor_units, voided.next_required_minor_units]
+    assert_equal({"x" => [2_000, 2_000], "y" => [4_000, 3_000], "w" => [3_000, 3_000]}, maxima_and_executed(voided))
+    assert_fresh_run_agrees_on_leader_and_price(engine, commands, "x-2", voided)
+  end
+
   # Observation, not a requirement: counts how many voids over every short
   # history of two bidders leave a third party above their maximum on file.
   # The engine allows these voids; hosts warn. The exhaustive pass also keeps
@@ -185,6 +225,35 @@ class VoidReplayFloorTest < Minitest::Test
       {"type" => "void_bid", "bid_id" => "bid-x-2", "operator_id" => "operator-1",
        "reason" => "synthetic correction", "notification_policy" => "affected"}
     ]
+  end
+
+  def bid(bid_id, bidder_id, maximum)
+    {"type" => "place_bid", "bid_id" => bid_id, "bidder_id" => bidder_id, "maximum_minor_units" => maximum}
+  end
+
+  def reduce(bidder_id, maximum)
+    {"type" => "reduce_maximum", "bidder_id" => bidder_id, "maximum_minor_units" => maximum}
+  end
+
+  def void(bid_id)
+    {"type" => "void_bid", "bid_id" => bid_id, "operator_id" => "operator-1",
+     "reason" => "synthetic correction", "notification_policy" => "none"}
+  end
+
+  def maxima_and_executed(state)
+    state.positions.to_h { |id, position| [id, [position.maximum_minor_units, position.executed_minor_units]] }
+  end
+
+  # A fresh unit given the same commands without the voided bid. A command the
+  # engine rejects there is dropped, as it would not have been accepted live.
+  # Leader and price agree; a losing bidder's stored position can differ.
+  def assert_fresh_run_agrees_on_leader_and_price(engine, commands, voided_bid_id, voided)
+    fresh = commands.reject { |command| command["bid_id"] == voided_bid_id }.reduce(engine.initial_state) do |state, command|
+      decision = engine.decide(state, stamp(command, state.version + 1))
+      decision.accepted? ? engine.apply(state, decision.events) : state
+    end
+
+    assert_equal [fresh.leader_id, fresh.standing_minor_units], [voided.leader_id, voided.standing_minor_units]
   end
 
   # What a host needs for its operator warning, from the state it passed to

@@ -28,9 +28,13 @@ versioned artifacts.
   the prior state and the `bid_voided` positions (no new field). Adds scenarios
   041 and 042 and a seeded property test with an exhaustive short-history
   observation. For rare histories that `apply` already accepted before this
-  fix, the stored priority numbers after a void now differ and, rarer still, so
-  do the tie order and leader, because a bid below the replayed executed amount
-  no longer takes effect.
+  fix, the stored priority numbers after a void now differ, and so can the tie
+  order, because a bid below the replayed executed amount no longer takes
+  effect. The leader or the price can also differ from the previous release
+  when a bidder's most recent bid is voided, in histories with three or more
+  bidders in which bidders had lowered their maximums; the maintainer chose the
+  new result (RFC 0001 amendment, second ruling of 2026-11-10). Adds scenario
+  043 and two named regressions for it.
 
 - Clarify bidder revocation versus audited operator correction and add trusted
   admission regressions: executed competition remains binding, operator identity
