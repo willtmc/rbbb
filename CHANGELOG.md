@@ -18,6 +18,12 @@ versioned artifacts.
 
 ## Unreleased
 
+- Fix operator void reconstruction returning a `bid_voided` event that `apply`
+  refused. A later bid that falls below its bidder's executed amount in the
+  reconstructed order now has no effect, as a reduction below it already had,
+  so executed amounts stay within executable maxima. Adds scenario 041 and a
+  seeded property test over random histories with voids.
+
 - Clarify bidder revocation versus audited operator correction and add trusted
   admission regressions: executed competition remains binding, operator identity
   cannot be spoofed, corrections require reasons, and post-close voids remain

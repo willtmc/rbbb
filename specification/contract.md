@@ -171,6 +171,13 @@ challengers use the resulting displayed minimum normally. Void reconstruction
 applies these rules in authorization order; snapshot restore preserves the
 recorded state. Post-close bid correction remains unsupported.
 
+An authorization accepted in the recorded order can fall below its bidder's
+executed amount in the reconstructed order. Reconstruction gives that entry no
+effect, whether it was recorded as a reduction or as a later bid; the bidder's
+preceding reconstructed authority stands. A later bid that lowers the
+reconstructed maximum without crossing the executed amount applies. Every
+accepted void therefore yields a state that satisfies the invariants above.
+
 ## Revocation and operator correction
 
 Bidder cancellation withdraws only unexecuted maximum authority. The executed

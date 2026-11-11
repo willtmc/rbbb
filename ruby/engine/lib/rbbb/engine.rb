@@ -665,6 +665,10 @@ module RBBB
           next if voided_bid_ids.include?(entry.fetch("bid_id"))
 
           existing = positions[bidder_id]
+          # A later bid can sit below this bidder's executed amount in the
+          # replayed order. Like a reduction, it cannot cross that floor.
+          next if existing && maximum < existing.fetch("executed_minor_units")
+
           positions[bidder_id] = {
             "maximum_minor_units" => maximum,
             "executable_maximum_minor_units" => configuration.bid_ladder.floor(maximum),
