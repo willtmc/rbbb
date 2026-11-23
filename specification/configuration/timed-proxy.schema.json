@@ -62,6 +62,11 @@
         "duration_seconds": {
           "$ref": "../common/integer.schema.json#/$defs/positiveInteger",
           "description": "Seconds added to the triggering command time; bounded so closing-time arithmetic stays representable in every implementation."
+        },
+        "extend_on_void": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, an operator bid void that changes the leader or standing amount inside the trigger window extends closing time like an accepted bid."
         }
       }
     }

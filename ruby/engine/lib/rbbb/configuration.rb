@@ -73,6 +73,7 @@ module RBBB
       values = extension.transform_keys(&:to_s)
       trigger = values["trigger_window_seconds"]
       duration = values["duration_seconds"]
+      extend_on_void = values.fetch("extend_on_void", false)
       # Seconds share the interoperable integer bound so closing-time
       # arithmetic (command time plus duration) stays representable in every
       # implementation and inside the RFC 3339 four-digit-year range.
@@ -84,10 +85,14 @@ module RBBB
         raise InvalidConfiguration,
           "extension duration must be a positive integer no greater than #{MAX_SAFE_INTEGER}"
       end
+      unless extend_on_void == true || extend_on_void == false
+        raise InvalidConfiguration, "extension extend_on_void must be a boolean"
+      end
 
       {
         "trigger_window_seconds" => trigger,
-        "duration_seconds" => duration
+        "duration_seconds" => duration,
+        "extend_on_void" => extend_on_void
       }.freeze
     end
   end
