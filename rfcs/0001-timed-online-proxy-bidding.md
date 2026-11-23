@@ -199,7 +199,10 @@ before the current closing time, closing time is unchanged and no
 
 A qualifying bid is an accepted command that changes the public standing amount
 or leader. Increasing one's own private maximum without changing the public
-result does not extend closing.
+result does not extend closing. By default, operator bid voids do not extend
+closing; when `extension.extend_on_void` is explicitly enabled (`true`), a
+`void_bid` that changes the leader or standing amount inside the trigger window
+extends closing time using the same rule and emits `closing_time_changed`.
 
 Example: with a 1:00 PM close, five-minute trigger window, and five-minute
 extension, a qualifying bid at 12:58 resets close to 1:03. Another at 1:02

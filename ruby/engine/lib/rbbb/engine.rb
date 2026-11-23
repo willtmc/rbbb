@@ -569,6 +569,13 @@ module RBBB
         voided_bid_ids,
         state.reserve_history
       )
+      public_result_changed = recomputed.fetch("standing_minor_units") != state.standing_minor_units ||
+        recomputed.fetch("leader_id") != state.leader_id
+      closes_at = if configuration.extension&.fetch("extend_on_void", false)
+        extended_closing_time(state, effective_at, public_result_changed)
+      else
+        state.closes_at
+      end
       common_data = {
         "command_id" => command.fetch("command_id"),
         "aggregate_version" => aggregate_version
@@ -589,7 +596,7 @@ module RBBB
           "next_required_minor_units" => recomputed.fetch("next_required_minor_units"),
           "reserve_status" => recomputed.fetch("reserve_status"),
           "reserve_minor_units" => state.reserve_minor_units,
-          "closes_at" => Timestamp.dump(state.closes_at),
+          "closes_at" => Timestamp.dump(closes_at),
           "positions" => recomputed.fetch("positions"),
           "authorization_history" => state.authorization_history,
           "reserve_history" => state.reserve_history,
@@ -617,6 +624,14 @@ module RBBB
           type: "standing_bid_changed",
           visibility: :public,
           data: public_data
+        )
+      end
+
+      if closes_at != state.closes_at
+        events << Event.new(
+          type: "closing_time_changed",
+          visibility: :public,
+          data: common_data.merge("closes_at" => Timestamp.dump(closes_at))
         )
       end
 
