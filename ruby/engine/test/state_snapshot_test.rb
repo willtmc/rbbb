@@ -200,6 +200,71 @@ end
     refute_includes closed_state.public_view.values, "bidder-c"
   end
 
+  def test_state_from_h_rejects_arbitrary_equal_standing_and_next_required_and_overbound_amounts
+    open_state, = run_commands(@engine.initial_state, PREFIX_COMMANDS.take(1))
+    snapshot = open_state.to_h
+
+    tampered_equal = snapshot.merge(
+      "standing_minor_units" => 10_000,
+      "next_required_minor_units" => 10_000,
+      "positions" => {
+        "bidder-a" => {
+          "maximum_minor_units" => 10_000,
+          "executable_maximum_minor_units" => 10_000,
+          "priority" => 1,
+          "executed_minor_units" => 10_000
+        }
+      }
+    )
+    error = assert_raises(RBBB::InvalidState) { RBBB::State.from_h(tampered_equal) }
+    assert_match(/next required amount must exceed standing amount/, error.message)
+
+    over = RBBB::MAX_SAFE_INTEGER + 1
+    [
+      snapshot.merge("version" => over),
+      snapshot.merge("next_required_minor_units" => over),
+      snapshot.merge("reserve_minor_units" => over),
+      snapshot.merge("positions" => snapshot.fetch("positions").merge(
+        "bidder-a" => snapshot.fetch("positions").fetch("bidder-a").merge("maximum_minor_units" => over)
+      )),
+      snapshot.merge("authorization_history" => [
+        snapshot.fetch("authorization_history").first.merge("maximum_minor_units" => over)
+      ]),
+      snapshot.merge("reserve_history" => [
+        {"old_reserve_minor_units" => 40_000, "new_reserve_minor_units" => over, "priority" => 1}
+      ])
+    ].each do |invalid|
+      assert_raises(RBBB::InvalidState) { RBBB::State.from_h(invalid) }
+    end
+  end
+
+  def test_state_and_configuration_value_equality
+    open_state, = run_commands(@engine.initial_state, PREFIX_COMMANDS)
+    rebuilt = RBBB::State.from_h(open_state.to_h)
+
+    assert_equal open_state, rebuilt
+    assert open_state.eql?(rebuilt)
+    assert_equal open_state.hash, rebuilt.hash
+    refute_equal @engine.initial_state, open_state
+
+    config_a = @engine.configuration
+    config_b = RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      reserve_minor_units: 40_000,
+      increments: [
+        {from_minor_units: 0, amount_minor_units: 1_000},
+        {from_minor_units: 100_000, amount_minor_units: 2_500}
+      ],
+      opens_at: Time.utc(2026, 9, 1, 12, 0, 0),
+      closes_at: Time.utc(2026, 9, 1, 13, 0, 0),
+      extension: {trigger_window_seconds: 300, duration_seconds: 300}
+    )
+    assert_equal config_a, config_b
+    assert config_a.eql?(config_b)
+    assert_equal config_a.hash, config_b.hash
+  end
+
   private
 
   def run_commands(state, commands)

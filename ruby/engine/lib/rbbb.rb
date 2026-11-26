@@ -14,7 +14,6 @@ module RBBB
   class InvalidConfiguration < Error; end
   class InvalidMoney < Error; end
   class InvalidState < Error; end
-  class UnsupportedFeature < Error; end
 end
 
 require_relative "rbbb/money"

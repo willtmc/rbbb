@@ -70,4 +70,45 @@ class DecisionTest < Minitest::Test
     assert_equal RBBB::Decision::REASON_SPECIFIC_FIELDS, scoped
     assert_equal declared.sort, RBBB::Decision::REASON_SPECIFIC_FIELDS.values.flatten.sort
   end
+
+  def test_event_accessors_and_value_equality
+    engine = RBBB::Engine.new(RBBB::Configuration.new(
+      currency: "USD",
+      opening_minor_units: 10_000,
+      increments: [{from_minor_units: 0, amount_minor_units: 1_000}],
+      opens_at: "2026-09-01T12:00:00Z",
+      closes_at: "2026-09-01T13:00:00Z"
+    ))
+    command = {
+      command_id: "command-1",
+      type: "place_bid",
+      bidder_id: "bidder-a",
+      maximum_minor_units: 50_000,
+      effective_at: "2026-09-01T12:30:00Z"
+    }
+    first = engine.decide(engine.initial_state, command)
+    second = engine.decide(engine.initial_state, command)
+
+    assert_equal "maximum_accepted", first.transition_event.type
+    assert_equal ["standing_bid_changed"], first.public_events.map(&:type)
+    assert_equal ["maximum_accepted"], first.privileged_events.map(&:type)
+    assert_equal first, second
+    assert first.eql?(second)
+    assert_equal first.hash, second.hash
+    assert_equal first.events.first, second.events.first
+    assert_equal first.events.first.hash, second.events.first.hash
+
+    public_event = RBBB::Event.new(type: "closing_time_changed", visibility: :public, data: {a: 1})
+    privileged_event = RBBB::Event.new(type: "closing_time_changed", visibility: :privileged, data: {a: 1})
+    refute_equal public_event, privileged_event
+
+    rejected_a = RBBB::Decision.rejected(command_id: "command-1", reason: "invalid_command")
+    rejected_b = RBBB::Decision.rejected(command_id: "command-1", reason: "invalid_command")
+    assert_nil rejected_a.transition_event
+    assert_empty rejected_a.public_events
+    assert_empty rejected_a.privileged_events
+    assert_equal rejected_a, rejected_b
+    assert_equal rejected_a.hash, rejected_b.hash
+    refute_equal first, rejected_a
+  end
 end

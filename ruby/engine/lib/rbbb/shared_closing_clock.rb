@@ -3,7 +3,7 @@
 module RBBB
   # RFC 0003 clock component; the host owns atomic unit/clock persistence.
   class SharedClosingClock
-    attr_reader :revision, :closes_at, :quiet_period_seconds, :last_effective_at
+    attr_reader :group_id, :unit_ids, :revision, :closes_at, :quiet_period_seconds, :last_effective_at
 
     def initialize(group_id:, unit_ids:, closes_at:, quiet_period_seconds:, revision: 0, last_effective_at: nil)
       unless group_id.is_a?(String) && !group_id.empty? && unit_ids.is_a?(Array) && !unit_ids.empty? &&
@@ -69,6 +69,15 @@ module RBBB
       public_view.merge("quiet_period_seconds" => quiet_period_seconds, "last_effective_at" => Timestamp.dump(last_effective_at))
     end
 
+    def ==(other)
+      other.is_a?(SharedClosingClock) && to_h == other.to_h
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, to_h].hash
+    end
+
     private
 
     # RFC 0004: any accepted change to the public standing qualifies, except the
@@ -82,9 +91,7 @@ module RBBB
     end
 
     def parse_time(value)
-      time = Timestamp.parse(value)
-      raise InvalidConfiguration, "timestamp outside supported range" unless time.year.between?(1, 9999)
-      time
+      Timestamp.parse(value)
     rescue ArgumentError, RangeError
       raise InvalidConfiguration, "invalid clock timestamp"
     end

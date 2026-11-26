@@ -247,4 +247,30 @@ class EngineTest < Minitest::Test
       assert_equal CLOSES_AT, candidate.to_h.fetch("closes_at")
     end
   end
+
+  def test_change_closing_time_accepts_time_objects
+    decision = @engine.decide(@engine.initial_state, {
+      command_id: "command-close-time",
+      type: "change_closing_time",
+      operator_id: "operator-1",
+      reason: "seller_authorized_change",
+      closes_at: Time.utc(2026, 9, 1, 14, 0, 0),
+      effective_at: Time.utc(2026, 9, 1, 12, 10, 0)
+    })
+
+    assert decision.accepted?, decision.rejection.inspect
+    applied = @engine.apply(@engine.initial_state, decision.events)
+    assert_equal "2026-09-01T14:00:00Z", applied.to_h.fetch("closes_at")
+
+    overflow = @engine.decide(@engine.initial_state, {
+      command_id: "command-close-overflow",
+      type: "change_closing_time",
+      operator_id: "operator-1",
+      reason: "seller_authorized_change",
+      closes_at: Time.utc(10_000, 1, 1, 0, 0, 0),
+      effective_at: Time.utc(2026, 9, 1, 12, 10, 0)
+    })
+    assert overflow.rejected?
+    assert_equal "invalid_closing_time", overflow.rejection.fetch("reason")
+  end
 end
