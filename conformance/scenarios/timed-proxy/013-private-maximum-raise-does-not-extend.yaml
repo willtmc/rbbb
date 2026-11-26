@@ -1,6 +1,6 @@
 name: Private maximum increase without public change does not extend closing
-specification_version: 0.1.0-draft
-rfcs: ["0001"]
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
 configuration: {fixture: usd-soft-close}
 starting_state: {events: []}
 commands:

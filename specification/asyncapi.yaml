@@ -1,7 +1,7 @@
 asyncapi: 3.1.0
 info:
   title: RBBB event subscription API
-  version: 0.1.0-draft
+  version: 0.2.0-draft
   description: >-
     Experimental contract for committed public RFC 0001 event delivery.
     Private audit events require a separate privileged surface.

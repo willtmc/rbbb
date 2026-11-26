@@ -1,10 +1,14 @@
 # RFC 0001: Timed online proxy bidding baseline
 
+> Specification 0.2.0: [accepted RFC 0005](0005-fixed-bid-ladder.md) supersedes
+> the former short-increment and raw-maximum ranking rules. The current
+> pricing sections below incorporate that decision; Git retains the 0.1.0 baseline.
+
 - Status: accepted
 - Author: Will McLemore
 - Created: 2026-09-01
 - Accepted: 2026-09-01
-- Specification target: 0.1.0-draft
+- Specification target: 0.2.0-draft
 
 ## Summary
 
@@ -19,8 +23,7 @@ audited operator bid removal, and constrained operator changes to closing time
 and reserve.
 
 This RFC does not cover outcry, quantity, choice, linked closing groups,
-multi-parcel allocation, post-close reopening, or forced realignment after a
-short increment.
+multi-parcel allocation or post-close reopening.
 
 ## Terminology
 
@@ -33,7 +36,7 @@ already been used in an accepted standing-price decision.
 
 **Next required amount** is the minimum maximum a challenger must submit.
 
-**Leader** is the real bidder currently first in maximum-and-priority order.
+**Leader** is the real bidder currently first in executable-maximum-and-priority order.
 The reserve can affect price but can never be the leader or winner.
 
 ## Configuration
@@ -53,9 +56,9 @@ amount, the reserve, increment tier lower bounds and increments, every command
 maximum, and every derived amount. A configuration outside the bound is
 invalid; a bid or reduction maximum above it is rejected as `invalid_maximum`;
 a reserve change above it is rejected as `invalid_reserve`. Derived amounts
-never exceed the bound: when the standing amount plus its increment would
-exceed it, the next required amount is the bound itself. That saturated case
-is the only one in which the next required amount equals the standing amount.
+never exceed the bound. At the last representable rung, the next required
+amount saturates at that rung and further challengers are rejected. The numeric
+bound is not an extra cut bid.
 
 The same bound applies to every other integer in the contract: extension
 trigger window and extension duration in seconds, expected and aggregate
@@ -83,74 +86,59 @@ at $1,000.
 
 ## Placing and pricing bids
 
-The first maximum must be at least the opening amount. A first maximum below
-opening is rejected. A first maximum at or above opening establishes the
-standing amount at opening unless reserve pressure requires more.
+Specification 0.2.0 uses the fixed tier-anchored ladder defined by
+[RFC 0005](0005-fixed-bid-ladder.md) and the
+[normative ladder contract](../specification/fixed-bid-ladder.md). All executed
+amounts are ladder rungs. Arbitrary maximum entries remain accepted; cut bids
+are not. The opening amount is the first executable rung. A first maximum
+below opening is rejected; a new challenger must reach the next displayed rung.
 
-A challenger's maximum must be at least the displayed next required amount.
-The current leader may increase their private maximum by any positive amount,
-even when the increase is smaller than a full increment, because doing so does
-not change the public result.
+Retain the entered maximum separately from its executable maximum: the highest
+rung it authorizes. Rank by executable maximum, then its acceptance priority.
+Remainder-only edits preserve priority. Moving to a different executable maximum
+assigns new priority. Thus a higher raw remainder cannot win a tie.
 
-Among real bidders, the greatest maximum leads. Equal maxima are ordered by the
-authoritative sequence in which those exact maxima were accepted; the earlier
-maximum retains priority.
+With competition, price is the lesser of the leader's executable maximum and
+the next rung above the runner-up's executable maximum, subject to opening,
+reserve pressure and binding executed floors. There is no proxy clipping to
+an off-ladder amount. The next required bid is the next rung above standing.
 
-Without reserve pressure, competition establishes:
+The current leader may increase private authority by any positive minor-unit
+amount. Ordinary competitive standing price, next required amount and executed
+floor remain unchanged. A later accepted challenger is priced normally. The
+only price-changing exception is unmet reserve pressure below. Remainder-only
+edits by any existing bidder are private and do not change price or closing.
 
-```text
-competitive amount = min(
-  leader maximum,
-  runner-up maximum + increment_for(runner-up maximum)
-)
-```
-
-The increment tier is selected using the losing maximum, not the prior standing
-amount. The standing amount cannot exceed the leader's maximum. Consequently,
-a maximum may produce a short increment. For example, if the losing maximum is
-$1,000, its applicable increment is $25, and the leader's maximum is $1,001,
-the standing amount is $1,001 rather than $1,025.
-
-The next required amount is:
-
-```text
-standing amount + increment_for(standing amount)
-```
-
-After the $1,001 short-increment example, the next required amount is $1,026
-when the $25 tier applies at $1,001.
+Accepted odd maxima and reductions carry a private, nonblocking bidder notice
+showing their highest executable amount and the next rung. No automatic upward
+rounding or extra confirmation is allowed; see RFC 0005's response contract.
 
 ## Confidential reserve
 
-The reserve behaves like a synthetic proxy threshold for pricing, except that
-it can never lead or win and loses every tie to a real bidder.
+Reserve is a threshold, never a bidder or winner. Off-ladder reserve pressure
+uses the first rung at or above the reserve, capped by executable authority.
+Reserve is met only when the executable maximum reaches the raw reserve. If no
+representable rung can reach reserve, reserve remains unmet. For example, a
+$134 reserve on a $10 ladder requires $140; a $139 maximum executes only $130
+and remains below reserve. Lowering reserve never unwinds an executed price.
 
-Reserve pressure contributes:
-
-```text
-reserve amount applied = min(leader maximum, configured reserve)
-```
-
-The public standing amount is the greatest amount required by opening,
-competition, and reserve pressure, capped at the leader's maximum.
-
-A maximum equal to reserve meets reserve. A maximum below reserve may lead at
-its full maximum while the public status remains `reserve_not_met`. A maximum
-above reserve raises the standing amount to at least reserve and makes the
-public status `reserve_met`.
-
-The public contract exposes only reserve status, never the reserve amount.
-Confidential means unpublished, not undiscoverable: because reserve pressure
-stops the standing amount exactly at the reserve, a bidder whose maximum
-exceeds it, and any observer once status becomes `reserve_met`, can infer the
-amount from the public price. A bidding unit that closes below reserve
-produces `no_sale`, not a winner.
+The public contract exposes only reserve status, never the raw reserve.
+Confidential does not mean undiscoverable: public price and reserve status can
+bound the reserve. A unit closing below reserve produces no_sale.
 
 ## Reducing an unexecuted proxy
 
 While bidding remains open, a bidder may reduce their maximum to any amount at
 or above their executed amount. They cannot withdraw an amount already
 executed by the proxy.
+
+Cancelling or revoking a maximum has the same bidder permissions as reducing it:
+only unused future proxy authority may be withdrawn. Executed competitive bids
+remain binding, including the current leader's executed bid. A bidder MUST NOT
+use revocation, a zero maximum, or an operator-command-shaped request to remove
+an executed commitment. For example, a $160 maximum that has executed $150
+against a $142 entered maximum (executable to $140 on a $10 ladder) can be
+reduced to $150, but not $140 or zero.
 
 A reduction is evaluated in authoritative command order. If intervening
 competition executes more of the proxy first, the executed floor rises and a
@@ -161,9 +149,16 @@ That rejection reports the bidder's own executed floor as
 field is bidder-own data: the executed amount belongs to the bidder whose proxy
 was used, and a host returns it only to that bidder over the command channel.
 When a sole bidder's proxy has executed up to reserve pressure the floor equals
-the confidential reserve, but that amount is already the bidder's public
+the executed ladder amount at or above reserve, but that amount is already the bidder's public
 standing amount. The field never reveals another bidder's maximum, an
 unexecuted reserve, or any identity.
+
+A reduction to a different executable maximum uses executable-maximum priority:
+its new rung follows an earlier equal rung. A remainder-only reduction retains
+the original priority. This can
+change the leader at the unchanged standing amount; it must not discard the
+executed floor or create a new competitive price. That leader change is public
+and follows the existing extension policy.
 
 An accepted reduction is privately audited. When it changes no public result,
 it emits no public price event and does not trigger a closing extension.
@@ -204,7 +199,10 @@ before the current closing time, closing time is unchanged and no
 
 A qualifying bid is an accepted command that changes the public standing amount
 or leader. Increasing one's own private maximum without changing the public
-result does not extend closing.
+result does not extend closing. By default, operator bid voids do not extend
+closing; when `extension.extend_on_void` is explicitly enabled (`true`), a
+`void_bid` that changes the leader or standing amount inside the trigger window
+extends closing time using the same rule and emits `closing_time_changed`.
 
 Example: with a 1:00 PM close, five-minute trigger window, and five-minute
 extension, a qualifying bid at 12:58 resets close to 1:03. Another at 1:02
@@ -216,9 +214,25 @@ Bidders cannot erase accepted bids. Before closing, an authorized operator may
 void a bid using a command that includes operator identity, reason, and
 notification policy.
 
+The host MUST authenticate the actor and authorize operator correction separately
+from bidder access before invoking the pure engine. An `operator_id` supplied by
+a caller is not authorization. The actor must be server-bound; the correction
+must record the target, actual reason, authoritative time and notification
+policy. A bidder's cancellation request MUST NOT be promoted into this operation.
+
+A maximum revocation does not mean its original authorization was invalid from
+the beginning. In particular, removing one generated execution while preserving
+earlier executed bids is not a full authorization void. Importers MUST NOT infer
+such a void from a maximum-row deletion or manufacture an operator reason.
+If the source does not identify an authorized correction with sufficient scope
+and audit evidence, report it as unsupported/unassessed. Selective execution
+correction is not specified by this full-authorization void operation.
+
 Voiding emits a new immutable audit event; it does not delete the original bid.
 The engine recomputes standing amount, leader, reserve status, and next required
-amount from remaining valid bids. It also recomputes each remaining bidder's
+amount from remaining valid bids in authoritative order, applying the same
+leader-increase exception as live bidding. It MUST NOT reconstruct price solely
+from final maxima or introduce a new price movement at the end of replay. It also recomputes each remaining bidder's
 executed amount from those bids. A voided competing bid cannot continue to bind
 another bidder's proxy-withdrawal floor.
 
@@ -291,6 +305,62 @@ rejected.
 
 ## Amendments
 
+- 2026-11-10 (second ruling): maintainer decision on the result of a void
+  (Will McLemore). He was shown that in rare histories, voiding a bidder's last
+  bid gives a different winner or price under rule A than under the previous
+  engine, with nobody executed above their maximum on file. In every such case
+  found, the leader and price under rule A match those of a fresh auction run
+  with the voided bid never submitted; the previous engine reached its result by
+  passing through a replayed state the contract forbids (a bidder's maximum below
+  their executed amount). A losing bidder's stored position can differ from the
+  fresh run's. Both examples use opening 1,000 and increments of 1,000.
+  Winner changes: X bids 2,000; Y bids 2,000; X bids 3,000; X reduces to 2,000;
+  Y bids 4,500; Y reduces to 2,600; Y bids 2,700; W bids 4,500; Y bids 4,000. W
+  leads at 4,000. Staff void X's 3,000, X's last bid. The previous engine leaves
+  W leading at 4,000; rule A gives Y leading at 4,000, as the fresh run does.
+  Price changes: X bids 2,000; Y bids 2,000; X bids 3,000; X reduces to 2,000; Y
+  bids 3,000; Y reduces to 2,000; Y bids 2,600; W bids 3,000; Y bids 4,000. Y
+  leads at 4,000. Staff void X's 3,000. The previous engine leaves Y at 4,000;
+  rule A gives Y at 3,000, as the fresh run does. The choices put to him were to
+  keep the previous engine's result ("Hold the fix") or to release the engine's
+  new result ("Fixed engine's result"). He chose the fixed engine's result, to
+  be released as built. Covered by scenario 043 and by named regressions in
+  `void_replay_floor_test.rb`.
+
+- 2026-11-10: maintainer decision on operator voids (Will McLemore). Reconstruction
+  after a void follows one rule ("rule A"): an entry that would put a bidder's
+  maximum below their executed amount in the replayed order has no effect, for a
+  later bid exactly as for a reduction. Because an entry can be given no
+  effect, a void can restore authority a bidder had lowered. Consequence for a third party: voiding the leader's last
+  bid can leave another bidder executed above the maximum they have on file. With
+  increments of 1,000 and opening 1,000: X bids 2,000; Y bids 2,000 (X leads at
+  2,000 on the tie); X bids 3,000; X reduces to 2,000 (Y leads at 2,000); Y bids
+  3,500; Y reduces to 2,600 (X leads at 2,000); Y bids 2,700; staff void X's bid
+  of 3,000. Y leads at 3,000 with maximum 3,500, though Y's maximum on file was
+  2,700: without X's 3,000, X's first bid keeps tie priority, Y's 3,500 replays
+  as a challenger and executes at 3,000, and Y's reduction and later bid fall
+  below 3,000 and are given no effect. This requires the other bidder to have
+  lowered their maximum earlier. The choices put to the maintainer were to refuse
+  such a void or to allow it with a warning; he chose to allow it. The engine
+  does not refuse the void; hosts are expected to warn the operator before
+  committing it, using the data described in the specification contract. Intended
+  use: a human admin removing a bad bidder who is winning a lot voids all of that
+  bidder's bids on the lot, or voids only that bidder's last bid (repeating if
+  needed) to put another bidder in the winning position. Builds on RFC 0005
+  (executable maxima and no cut bids). Covered by scenarios 041 and 042.
+
+- 2026-10-22: maintainer reaffirmed that bidders may cancel only unused maximum
+  authority. Executed bids require separately authorized, audited operator
+  correction; row removals must not be silently promoted to full authorization
+  voids. Added host admission/floor/audit/post-close regressions.
+
+- 2026-10-22: maintainer-accepted clarification that a leader's maximum increase
+  preserves competitive standing price, next required amount and executed floor,
+  with only existing reserve pressure allowed to advance the price. Ordered void
+  reconstruction follows the same rule. Clarified exact-maximum tie priority when
+  reducing back to an executed floor. Covered by scenarios 031–036 and the
+  synthetic shared-closing-clock leader-maximum vector.
+
 - 2026-09-01: clarified that extensions never shorten closing, that bids
   before opening time are rejected, that authoritative time is monotone across
   accepted commands, and that timestamps require an explicit offset. Backed by
@@ -311,9 +381,9 @@ rejected.
 
 ### Require all maxima to land on increment boundaries
 
-Rejected for v0.1. Bidders may authorize any positive minor-unit amount that
-meets the next required amount. Proxy clipping can therefore produce a short
-increment.
+Rejected for both 0.1 and 0.2 as an input restriction. Since accepted RFC 0005,
+execution follows the ladder even though authorization may end between rungs.
+The short increments of 0.1 are no longer permitted.
 
 ### Add the extension duration to the previous close
 
@@ -332,7 +402,6 @@ must prevail over the reserve.
 
 ## Deferred capabilities
 
-- optional forced realignment to regular increments after proxy clipping;
 - linked extension groups;
 - post-close reopening and correction;
 - bidder self-service notification preferences;

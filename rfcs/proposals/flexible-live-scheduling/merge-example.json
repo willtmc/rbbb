@@ -1,0 +1,207 @@
+{
+  "status": "proposed_shape_example_not_engine_execution",
+  "review_scenarios": [
+    "FLS-03",
+    "FLS-05",
+    "FLS-06"
+  ],
+  "command": {
+    "capability": "flexible_live_scheduling_draft_1",
+    "type": "reconfigure_closing_groups",
+    "command_id": "command-merge-demo",
+    "auction_id": "auction-demo",
+    "effective_at": "2031-04-17T12:00:00Z",
+    "expected_schedule_revision": 7,
+    "expected_units": [
+      {
+        "unit_id": "unit-a",
+        "version": 4
+      },
+      {
+        "unit_id": "unit-b",
+        "version": 2
+      },
+      {
+        "unit_id": "unit-c",
+        "version": 3
+      }
+    ],
+    "operator_id": "operator-demo",
+    "reason": "Demonstration operational adjustment",
+    "allow_shortening": true,
+    "resulting_closing_sets": [
+      {
+        "group_id": "group-joined",
+        "member_unit_ids": [
+          "unit-a",
+          "unit-b",
+          "unit-c"
+        ],
+        "closes_at": "2031-04-17T15:10:00Z",
+        "extension": {
+          "trigger_window_seconds": 120,
+          "duration_seconds": 180
+        }
+      }
+    ],
+    "retired_group_ids": [
+      "group-left",
+      "group-right"
+    ]
+  },
+  "public_change": {
+    "capability": "flexible_live_scheduling_draft_1",
+    "type": "closing_configuration_changed",
+    "command_id": "command-merge-demo",
+    "commit_id": "commit-demo",
+    "auction_id": "auction-demo",
+    "effective_at": "2031-04-17T12:00:00Z",
+    "visibility": "public",
+    "schedule_revision": 8,
+    "unit_versions": [
+      {
+        "unit_id": "unit-a",
+        "version": 5
+      },
+      {
+        "unit_id": "unit-b",
+        "version": 3
+      },
+      {
+        "unit_id": "unit-c",
+        "version": 4
+      }
+    ],
+    "resulting_closing_sets": [
+      {
+        "group_id": "group-joined",
+        "member_unit_ids": [
+          "unit-a",
+          "unit-b",
+          "unit-c"
+        ],
+        "closes_at": "2031-04-17T15:10:00Z",
+        "extension": {
+          "trigger_window_seconds": 120,
+          "duration_seconds": 180
+        }
+      }
+    ],
+    "retired_group_ids": [
+      "group-left",
+      "group-right"
+    ]
+  },
+  "audit_event": {
+    "capability": "flexible_live_scheduling_draft_1",
+    "type": "closing_configuration_committed",
+    "command_id": "command-merge-demo",
+    "commit_id": "commit-demo",
+    "auction_id": "auction-demo",
+    "effective_at": "2031-04-17T12:00:00Z",
+    "visibility": "privileged",
+    "operator_id": "operator-demo",
+    "reason": "Demonstration operational adjustment",
+    "allow_shortening": true,
+    "previous_schedule_revision": 7,
+    "schedule_revision": 8,
+    "previous_unit_versions": [
+      {
+        "unit_id": "unit-a",
+        "version": 4
+      },
+      {
+        "unit_id": "unit-b",
+        "version": 2
+      },
+      {
+        "unit_id": "unit-c",
+        "version": 3
+      }
+    ],
+    "unit_versions": [
+      {
+        "unit_id": "unit-a",
+        "version": 5
+      },
+      {
+        "unit_id": "unit-b",
+        "version": 3
+      },
+      {
+        "unit_id": "unit-c",
+        "version": 4
+      }
+    ],
+    "previous_closing_sets": [
+      {
+        "group_id": "group-left",
+        "member_unit_ids": [
+          "unit-a",
+          "unit-b"
+        ],
+        "closes_at": "2031-04-17T15:00:00Z",
+        "extension": {
+          "trigger_window_seconds": 120,
+          "duration_seconds": 180
+        }
+      },
+      {
+        "group_id": "group-right",
+        "member_unit_ids": [
+          "unit-c"
+        ],
+        "closes_at": "2031-04-17T15:20:00Z",
+        "extension": {
+          "trigger_window_seconds": 120,
+          "duration_seconds": 180
+        }
+      }
+    ],
+    "resulting_closing_sets": [
+      {
+        "group_id": "group-joined",
+        "member_unit_ids": [
+          "unit-a",
+          "unit-b",
+          "unit-c"
+        ],
+        "closes_at": "2031-04-17T15:10:00Z",
+        "extension": {
+          "trigger_window_seconds": 120,
+          "duration_seconds": 180
+        }
+      }
+    ],
+    "retired_group_ids": [
+      "group-left",
+      "group-right"
+    ]
+  },
+  "notification_intent": {
+    "capability": "flexible_live_scheduling_draft_1",
+    "type": "closing_change_notice",
+    "command_id": "command-merge-demo",
+    "commit_id": "commit-demo",
+    "auction_id": "auction-demo",
+    "effective_at": "2031-04-17T12:00:00Z",
+    "visibility": "privileged",
+    "affected_unit_ids": [
+      "unit-a",
+      "unit-b",
+      "unit-c"
+    ],
+    "change_kinds": [
+      "shortened",
+      "extended",
+      "membership"
+    ],
+    "audience": "affected_participants"
+  },
+  "rejection_example": {
+    "capability": "flexible_live_scheduling_draft_1",
+    "type": "closing_change_rejected",
+    "command_id": "command-merge-demo",
+    "reason": "shortening_not_allowed"
+  }
+}

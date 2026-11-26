@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/willtmc/rbbb/specification/events/maximum-notice.schema.json",
+  "title": "Private bidder maximum notice",
+  "type": [
+    "object",
+    "null"
+  ],
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "currency",
+    "entered_maximum_minor_units",
+    "executable_maximum_minor_units",
+    "next_ladder_minor_units",
+    "message"
+  ],
+  "properties": {
+    "code": {
+      "const": "maximum_not_fully_executable"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "entered_maximum_minor_units": {
+      "$ref": "../common/money.schema.json#/$defs/minorUnits"
+    },
+    "executable_maximum_minor_units": {
+      "$ref": "../common/money.schema.json#/$defs/minorUnits"
+    },
+    "next_ladder_minor_units": {
+      "$ref": "../common/money.schema.json#/$defs/optionalMinorUnits"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "x-rbbb-status": "experimental"
+}

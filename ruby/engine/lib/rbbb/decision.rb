@@ -45,6 +45,11 @@ module RBBB
       freeze
     end
 
+    # Private response for the submitting bidder; never broadcast this value.
+    def bidder_notice
+      events.find { |event| event.privileged? && event.data.key?("bidder_notice") }&.data&.fetch("bidder_notice")
+    end
+
     def accepted?
       rejection.nil?
     end

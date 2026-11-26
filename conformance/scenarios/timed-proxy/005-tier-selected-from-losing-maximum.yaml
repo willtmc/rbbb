@@ -1,6 +1,6 @@
 name: Increment tier is selected from the losing maximum
-specification_version: 0.1.0-draft
-rfcs: ["0001"]
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
 configuration: {fixture: usd-tiered}
 starting_state: {events: []}
 commands:

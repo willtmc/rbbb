@@ -105,7 +105,7 @@ class InteroperabilityTest < Minitest::Test
     assert_equal "invalid_reserve", reserve.rejection.fetch("reason")
   end
 
-  def test_next_required_amount_saturates_at_the_bound
+  def test_next_required_amount_saturates_at_the_last_rung
     engine = RBBB::Engine.new(build_configuration)
     state = engine.initial_state
     state = engine.apply(state, engine.decide(state, place_bid("command-1", "bidder-a", BOUND - 500)).events)
@@ -113,10 +113,10 @@ class InteroperabilityTest < Minitest::Test
     state = engine.apply(state, decision.events)
 
     assert decision.accepted?, decision.rejection.inspect
-    assert_equal BOUND, state.standing_minor_units
-    assert_equal BOUND, state.next_required_minor_units
+    assert_equal BOUND / 1_000 * 1_000, state.standing_minor_units
+    assert_equal BOUND / 1_000 * 1_000, state.next_required_minor_units
     public_event = decision.events.find { |event| event.type == "standing_bid_changed" }
-    assert_equal BOUND, public_event.to_h.fetch("next_required_minor_units")
+    assert_equal BOUND / 1_000 * 1_000, public_event.to_h.fetch("next_required_minor_units")
   end
 
   def test_timestamp_accepts_millisecond_precision

@@ -41,6 +41,28 @@ class SchemaAssertionsTest < Minitest::Test
     end
   end
 
+  def test_bounds_and_array_uniqueness_are_not_ignored
+    schema = {"type" => "array", "minItems" => 1, "maxItems" => 2, "uniqueItems" => true,
+      "items" => {"type" => "integer", "minimum" => 0, "maximum" => 3}}
+    assert_matches_schema(schema, [0, 3])
+    [[], [1, 1], [0, 1, 2], [-1], [4]].each do |invalid|
+      assert_raises(Minitest::Assertion) { assert_matches_schema(schema, invalid) }
+    end
+    assert_raises(Minitest::Assertion) { assert_matches_schema({"type" => "string", "maxLength" => 2}, "abc") }
+  end
+
+  def test_chained_refs_resolve_and_cycles_fail_closed
+    schema = {"$ref" => "#/$defs/first", "$defs" => {
+      "first" => {"$ref" => "#/$defs/second"},
+      "second" => {"type" => "integer", "maximum" => 3}
+    }}
+    assert_matches_schema(schema, 3)
+    assert_raises(Minitest::Assertion) { assert_matches_schema(schema, 4) }
+    schema["$defs"]["second"] = {"$ref" => "#/$defs/first"}
+    error = assert_raises(Minitest::Assertion) { assert_matches_schema(schema, 3) }
+    assert_match(/cyclic schema reference/, error.message)
+  end
+
   def test_unresolvable_file_ref_fails_clearly
     error = assert_raises(Minitest::Assertion) do
       assert_matches_schema({"$ref" => "./missing.schema.json"}, {}, root: @schema)

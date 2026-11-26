@@ -1,5 +1,7 @@
 # RBBB specification
 
+Current pricing: [fixed bid ladder, odd maxima and no cut bids](fixed-bid-ladder.md) (0.2.0-draft).
+
 The specification is the language-neutral source of truth for compatible
 auction behavior. It is currently a **draft** and has no stable compatibility
 guarantee. RFC 0001 schemas are marked `experimental`: complete enough for
@@ -21,6 +23,11 @@ silently choose one; open an issue and add a conformance case with the fix.
 
 See also the optional [initial closing schedule planner](initial-closing-schedule.md),
 governed by scoped RFC 0002. It does not change baseline bidding commands.
+
+The optional [flexible live scheduling coordinator](flexible-live-scheduling.md)
+maps accepted RFC 0004 records, registration and snapshot recovery to the baseline
+contract. It remains unreleased and uncertified; it does not extend the baseline
+command/event unions or advertise capability support.
 
 ## Stability markers
 

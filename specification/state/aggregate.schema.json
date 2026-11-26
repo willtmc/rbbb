@@ -81,9 +81,10 @@
     "position": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["maximum_minor_units", "priority", "executed_minor_units"],
+      "required": ["maximum_minor_units", "executable_maximum_minor_units", "priority", "executed_minor_units"],
       "properties": {
         "maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
+        "executable_maximum_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"},
         "priority": {"$ref": "../common/integer.schema.json#/$defs/positiveInteger"},
         "executed_minor_units": {"$ref": "../common/money.schema.json#/$defs/minorUnits"}
       }

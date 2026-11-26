@@ -1,5 +1,7 @@
 # Request for comments process
 
+Current pricing: [fixed bid ladder, odd maxima and no cut bids](0005-fixed-bid-ladder.md) (0.2.0-draft).
+
 An RFC is required for any new or changed normative auction behavior, public
 contract, compatibility guarantee, or governance model.
 
@@ -15,6 +17,10 @@ contract, compatibility guarantee, or governance model.
 
 An RFC may be proposed, accepted, rejected, withdrawn, or superseded. Merging a
 proposed document does not make it normative unless its status says accepted.
+
+## Proposals under review
+
+None.
 
 ## Evaluation questions
 
@@ -34,3 +40,9 @@ proposed document does not make it normative unless its status says accepted.
 
 - [RFC 0003: Fixed-membership shared closing clock](0003-shared-closing-clock.md)
   accepts the clock component only, not the full live scheduling coordinator.
+  Amended by RFC 0004 (proxy-adjustment rule).
+
+- [RFC 0004: Flexible live scheduling and closing groups](0004-flexible-live-scheduling.md)
+  accepts the live regrouping/rescheduling contract, including a minimum
+  shortening lead and leader-change extensions. The coordinator is not yet
+  implemented and no support is advertised.

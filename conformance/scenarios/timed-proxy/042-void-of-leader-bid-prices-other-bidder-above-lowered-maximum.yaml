@@ -1,0 +1,32 @@
+name: Void of the leader's last bid can leave another bidder executed above the maximum they have on file
+specification_version: 0.2.0-draft
+rfcs: ["0001", "0005"]
+configuration: {fixture: usd-standard}
+starting_state: {events: []}
+commands:
+  - {command_id: command-1, type: place_bid, bid_id: bid-x-1, bidder_id: bidder-x, maximum_minor_units: 20000, effective_at: "2026-09-01T12:10:00Z"}
+  - {command_id: command-2, type: place_bid, bid_id: bid-y-1, bidder_id: bidder-y, maximum_minor_units: 20000, effective_at: "2026-09-01T12:11:00Z"}
+  - {command_id: command-3, type: place_bid, bid_id: bid-x-2, bidder_id: bidder-x, maximum_minor_units: 30000, effective_at: "2026-09-01T12:12:00Z"}
+  - {command_id: command-4, type: reduce_maximum, bidder_id: bidder-x, maximum_minor_units: 20000, effective_at: "2026-09-01T12:13:00Z"}
+  - {command_id: command-5, type: place_bid, bid_id: bid-y-2, bidder_id: bidder-y, maximum_minor_units: 35000, effective_at: "2026-09-01T12:14:00Z"}
+  - {command_id: command-6, type: reduce_maximum, bidder_id: bidder-y, maximum_minor_units: 20600, effective_at: "2026-09-01T12:15:00Z"}
+  - {command_id: command-7, type: place_bid, bid_id: bid-y-3, bidder_id: bidder-y, maximum_minor_units: 20700, effective_at: "2026-09-01T12:16:00Z"}
+  - {command_id: command-8, type: void_bid, bid_id: bid-x-2, operator_id: operator-1, reason: bidder_entry_error, notification_policy: affected, effective_at: "2026-09-01T12:17:00Z"}
+expected:
+  public_events:
+    - {type: standing_bid_changed, standing_minor_units: 10000, leader_changed: true}
+    - {type: standing_bid_changed, standing_minor_units: 20000, next_required_minor_units: 21000, leader_changed: false}
+    - {type: standing_bid_changed, standing_minor_units: 20000, next_required_minor_units: 21000, leader_changed: true}
+    - {type: standing_bid_changed, standing_minor_units: 20000, next_required_minor_units: 21000, leader_changed: true}
+    - {type: standing_bid_changed, standing_minor_units: 21000, next_required_minor_units: 22000, leader_changed: true}
+  privileged_events:
+    - {type: bid_voided, bid_id: bid-x-2, operator_id: operator-1, reason: bidder_entry_error}
+    - {type: executed_amount_changed, bidder_id: bidder-y, old_minor_units: 20000, new_minor_units: 21000}
+  final_state:
+    leader_id: bidder-y
+    standing_minor_units: 21000
+    next_required_minor_units: 22000
+    voided_bid_ids: [bid-x-2]
+    positions:
+      bidder-x: {maximum_minor_units: 20000, executable_maximum_minor_units: 20000, priority: 1, executed_minor_units: 20000}
+      bidder-y: {maximum_minor_units: 35000, executable_maximum_minor_units: 35000, priority: 5, executed_minor_units: 21000}

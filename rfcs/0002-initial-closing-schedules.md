@@ -12,8 +12,8 @@ nonconsecutive group membership, and a default shared deadline equal to the
 latest member slot, with explicit override. This records that scoped decision
 and permits its initial-planning implementation.
 
-The separate direction that proxy adjustments do not change closing clocks is
-not implemented here. Acceptance of this planning subset is not acceptance of
+The separate proxy-adjustment clock rule, narrowed by RFC 0004 to the current
+leader's own adjustments, lives in RFC 0003 and is not part of this planner. Acceptance of this planning subset is not acceptance of
 the entire flexible live scheduling transaction/coordinator proposal.
 
 ## Accepted rules
@@ -34,8 +34,8 @@ Member-list and group-list order do not change the resulting schedule.
 
 The output is a plan only. It accepts no existing bidding state and performs no
 mutation, registration, live shortening, soft-close extension or group close.
-Hosts must not apply it over an active auction as a substitute for the proposed
-atomic scheduling coordinator. A planned group does not give RFC 0001 engines
+Hosts must not apply it over an active auction as a substitute for the atomic
+scheduling coordinator accepted in RFC 0004 (not yet implemented). A planned group does not give RFC 0001 engines
 linked soft-close capability.
 
 ## Validation and compatibility

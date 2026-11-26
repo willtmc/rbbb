@@ -168,7 +168,7 @@ end
       assert_matches_schema(schema, IDENTITY.merge(snapshot))
     end
 
-    assert_equal({"bidder-a" => {"maximum_minor_units" => 45_000, "priority" => 3,
+    assert_equal({"bidder-a" => {"maximum_minor_units" => 45_000, "executable_maximum_minor_units" => 45_000, "priority" => 3,
       "executed_minor_units" => 40_000}}, open_state.to_h.fetch("positions"))
     assert_equal 3, open_state.to_h.fetch("authorization_history").length
     assert_equal 1, open_state.to_h.fetch("reserve_history").length

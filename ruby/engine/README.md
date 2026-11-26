@@ -17,7 +17,8 @@ new_state = engine.apply(current_state, decision.events)
 
 The current implementation covers exact minor-unit money, configurable
 increment tiers, opening bids, proxy competition, earlier-equal priority,
-proxy clipping, challenger minimums, private leader maximum increases, and
+fixed ladder execution, arbitrary maxima with private bidder notices, no cut bids,
+challenger minimums, private leader maximum increases, and
 confidential reserve pricing and status. It also enforces authoritative closing
 times, configurable per-unit soft-close extensions, and bidder withdrawal of
 unexecuted proxy authority. Authorized operator bid voiding preserves the
@@ -25,8 +26,10 @@ original bid, deterministically recomputes standing and executed amounts, and
 emits host-facing notification intent. Audited operator commands may also
 change closing time and reserve under the RFC's pre-bid and post-bid
 constraints without unwinding already executed amounts. Explicit ordered
-closing produces `sold`, `no_sale`, or `no_bid` terminal state. Persistence,
-networking, service-level idempotency, and authentication are not implemented.
+closing produces `sold`, `no_sale`, or `no_bid` terminal state. The baseline pure
+engine does not provide persistence, networking, service-level idempotency or
+authentication. Optional repository examples provide durable scheduling and
+trusted admission integration, described below.
 
 The pure engine records `operator_id`; it does not authenticate or authorize
 that identity. A host must authorize the operator before submitting any
@@ -152,7 +155,8 @@ updated.public_view
 
 A new qualifying accepted bid during the quiet period extends the shared
 clock to bid time plus the quiet period; every member reads the same deadline.
-Proxy adjustments and rejected bids do not extend it. Stale revisions,
+The current leader's own proxy adjustments and rejected bids do not extend it;
+an outbid bidder raising an existing maximum does (RFC 0004). Stale revisions,
 unrecognized members, unsynchronized deadlines and time regression are refused.
 
 This is **not a complete linked bidding service**. The host still must synchronize
@@ -161,9 +165,29 @@ receipts. `due?` only indicates that the common deadline has arrived; it does no
 close outcomes. Live regrouping and group transaction/recovery work are separate.
 See the [component contract](../../specification/shared-closing-clock.md).
 
+## Live scheduling coordinator (unreleased reference implementation)
+
+Explicitly require `rbbb/live_scheduling` from a reviewed source checkout for
+RFC 0004 linked-group edits, bidding/extension, atomic closing, registration,
+operator mutations and complete privileged replay. The SQLite reference host
+orders every mutation with durable receipts/events/outbox. Trusted admission,
+authorized snapshot reads and atomic snapshot replacement examples are included.
+Baseline engine behavior and published capability metadata remain unchanged.
+
+The accepted behavioral vectors, resource boundaries, independent-process races,
+crash/restore and snapshot recovery cases execute in the test suite. See the
+[implementation, acceptance and migration guide](../../docs/live-scheduling-implementation.md)
+for precise API and evidence. Deployment certification remains separate.
+
+The published `0.1.0.pre.3` package does not contain this coordinator. The source
+version constant has not been bumped or released: pin a reviewed source commit
+for evaluation, or use a separately approved future prerelease. No live bidding
+or capability-advertisement permission follows from passing the reference suite.
+
 ## Install the evaluation gem
 
-Version `0.1.0.pre.3` is an experimental evaluation package. It has no runtime
+Published version `0.1.0.pre.3` is a legacy experimental evaluation package
+that predates the fixed ladder. It has no runtime
 dependencies and supports Ruby 3.2 and newer. Install the exact prerelease from
 RubyGems.org:
 
@@ -172,13 +196,13 @@ gem install rbbb --version 0.1.0.pre.3
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 
-To build the same version from a reviewed checkout:
+To build the fixed-ladder version from a reviewed current checkout (not yet published):
 
 ```sh
 cd ruby/engine
 bundle exec rake package:verify
 gem build rbbb.gemspec
-gem install ./rbbb-0.1.0.pre.3.gem
+gem install ./rbbb-0.2.0.pre.1.gem
 ruby -rrbbb -e 'puts [RBBB::VERSION, RBBB::SPECIFICATION_VERSION, RBBB::RELEASE_STATUS].join(" ")'
 ```
 
