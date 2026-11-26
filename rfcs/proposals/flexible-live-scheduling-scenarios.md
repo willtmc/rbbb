@@ -254,8 +254,11 @@ remain unchanged. Another qualifying group bid at 15:03 moves the group to
 
 **Then:** all closing times remain unchanged, including when a raise crosses the
 reserve and moves the public price to it. Normal bidding validity checks still
-apply; a reduction cannot go below the executed floor, so it never changes the
-public result. This exemption covers only the current leader's own adjustments
+apply; a reduction cannot go below the executed floor (so it cannot lower the
+standing amount), though under RFC 0001 a leader reducing onto a tied
+executable rung with later priority can change the leader and standing public
+state (in this non-tied example, leader and public state remain unchanged). This
+exemption covers only the current leader's own adjustments
 (see FLS-21). Current engine behavior and the existing private-only example
 alone do not certify it.
 

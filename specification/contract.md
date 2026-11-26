@@ -83,8 +83,14 @@ unions:
 - `events/public-event.schema.json` contains only observable price, reserve
   status, schedule, and closing-result facts;
 - `events/privileged-event.schema.json` contains the identities, maxima,
-  reserve values, operator reasons, notification intent, and resulting state
-  needed for audit and replay.
+  reserve values, operator reasons, notification intent, and flat replay state
+  fields on transition event payloads (`maximum_accepted`, `maximum_increased`,
+  `maximum_reduced`, `bid_voided`, `reserve_changed`, `closing_time_changed`,
+  `bidding_closed`), while companion privileged events
+  (`executed_amount_changed`, `notification_requested`) carry only their
+  specific fields. Envelope metadata (`command_id`, `aggregate_version`,
+  `effective_at`) lives on `events/base.schema.json` rather than duplicated
+  inside `data`.
 
 The public schema must never acquire a bidder, leader, or winner identifier; a
 private maximum; a reserve amount; or an operator-only reason. A host may map
@@ -226,6 +232,14 @@ policy can invalidate an executed bid before closing. A full authorization void
 must not stand in for a maximum revocation or partial execution removal. Missing
 source scope/authorization/audit evidence is unsupported, not inferred. The
 post-close correction boundary remains unchanged.
+
+By default, an operator `void_bid` does not extend closing time. When
+`extension.extend_on_void` is explicitly set to `true` in
+`configuration/timed-proxy.schema.json`, a `void_bid` that changes the leader
+or standing amount inside the trigger window extends `closes_at` using the
+standard soft-close rule, records the extended `closes_at` on `bid_voided`, and
+emits a public `closing_time_changed` event (scenario `044`). RFC 0004 linked
+closing sets keep `extend_on_void` disabled.
 
 ## Fixed ladder state and compatibility
 

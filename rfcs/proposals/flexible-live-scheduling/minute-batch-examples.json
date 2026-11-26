@@ -95,7 +95,7 @@
       "bidder_role": "current_leader",
       "leader_changed": false,
       "public_projection_changed": false,
-      "note": "A reduction cannot go below the executed floor, so it cannot change the public result.",
+      "note": "A reduction cannot go below the executed floor, though under RFC 0001 a leader reducing onto a tied executable rung with later priority can change the leader and standing public state; in this non-tied case both remain unchanged.",
       "expected_group_close": "15:02"
     }
   ]

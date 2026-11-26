@@ -305,6 +305,15 @@ rejected.
 
 ## Amendments
 
+- 2026-11-24 (PR #59): added opt-in `extension.extend_on_void` (default `false`)
+  to timed proxy extension configuration. When `true`, an operator `void_bid`
+  that changes the leader or standing amount inside the trigger window extends
+  closing time by the same rule as a qualifying bid, records the extended
+  `closes_at` on `bid_voided`, and emits public `closing_time_changed`. Default
+  behavior (`false`) is unchanged, and RFC 0004 linked closing sets keep
+  `extend_on_void` disabled. Covered by conformance scenario `044` and fixture
+  `usd-soft-close-extend-on-void`.
+
 - 2026-11-10 (second ruling): maintainer decision on the result of a void
   (Will McLemore). He was shown that in rare histories, voiding a bidder's last
   bid gives a different winner or price under rule A than under the previous

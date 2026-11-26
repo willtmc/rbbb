@@ -47,7 +47,11 @@ details.
 Money is represented as an ISO 4217 currency code and integer minor units.
 Floating-point amounts are forbidden at public boundaries.
 
-## Deferred semantics
+## Normative semantics and RFCs
 
-This draft does not decide pricing, increment, tie, reserve, extension,
-opening, or closing rules. Those require accepted RFCs and conformance cases.
+Pricing, increment, fixed-ladder, tie, reserve, extension, scheduling, and
+closing rules are defined by accepted RFCs
+[0001](../rfcs/0001-timed-online-proxy-bidding.md) through
+[0005](../rfcs/0005-fixed-bid-ladder.md) and backed by executable conformance
+suites under [`conformance/`](../conformance/README.md). Any new or changed
+auction semantics continue to require an accepted RFC and conformance cases.

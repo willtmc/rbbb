@@ -9,6 +9,8 @@ class ConformanceRunner
   AGGREGATE_SCHEMA = "specification/state/aggregate.schema.json"
   PUBLIC_STATE_SCHEMA = "specification/state/bidding-unit.schema.json"
   PUBLIC_EVENT_SCHEMA = "specification/events/public-event.schema.json"
+  PRIVILEGED_EVENT_SCHEMA = "specification/events/privileged-event.schema.json"
+  REJECTION_SCHEMA = "specification/rejections/rejection.schema.json"
 
   def initialize(test_case)
     @test_case = test_case
@@ -30,6 +32,7 @@ class ConformanceRunner
     public_events = []
     public_envelopes = []
     privileged_events = []
+    privileged_envelopes = []
     rejections = []
 
     scenario.fetch("commands").each do |command|
@@ -37,7 +40,8 @@ class ConformanceRunner
       if decision.accepted?
         public_events.concat(decision.events.select(&:public?).map(&:to_h))
         privileged_events.concat(decision.events.select(&:privileged?).map(&:to_h))
-        public_envelopes.concat(public_event_envelopes(identity, command, decision.events))
+        public_envelopes.concat(event_envelopes(identity, command, decision.events, visibility: :public))
+        privileged_envelopes.concat(event_envelopes(identity, command, decision.events, visibility: :privileged))
         state = engine.apply(state, decision.events)
       else
         rejections << decision.rejection
@@ -62,6 +66,12 @@ class ConformanceRunner
     public_envelopes.each_with_index do |envelope, index|
       assert_schema(PUBLIC_EVENT_SCHEMA, envelope, "public event[#{index}]")
     end
+    privileged_envelopes.each_with_index do |envelope, index|
+      assert_schema(PRIVILEGED_EVENT_SCHEMA, envelope, "privileged event[#{index}]")
+    end
+    rejections.each_with_index do |rejection, index|
+      assert_schema(REJECTION_SCHEMA, rejection, "rejection[#{index}]")
+    end
   end
 
   private
@@ -72,28 +82,30 @@ class ConformanceRunner
     YAML.safe_load_file(path, aliases: false)
   end
 
-  # Wraps each public event in the transport envelope described by
-  # specification/events/base.schema.json. The engine emits event data with
-  # the command_id and aggregate_version inline; the host lifts those into
-  # the envelope and supplies identity, ordering, and recording fields.
-  def public_event_envelopes(identity, command, events)
+  # Wraps each engine event of the given visibility in the transport envelope
+  # described by specification/events/base.schema.json. The engine emits
+  # command_id, aggregate_version, and (on transitions) effective_at inline;
+  # the host lifts those into the envelope and supplies identity, ordering, and
+  # recording fields.
+  def event_envelopes(identity, command, events, visibility:)
     events.each_with_index.filter_map do |event, event_index|
-      next unless event.public?
+      next unless event.visibility == visibility
 
       data = event.data.dup
       command_id = data.delete("command_id")
       aggregate_version = data.delete("aggregate_version")
+      effective_at = data.delete("effective_at") || command.fetch("effective_at")
       {
         "event_id" => "#{command_id}-#{event_index}",
         "type" => event.type,
-        "visibility" => "public",
+        "visibility" => visibility.to_s,
         "auction_id" => identity.fetch("auction_id"),
         "bidding_unit_id" => identity.fetch("bidding_unit_id"),
         "aggregate_version" => aggregate_version,
         "event_index" => event_index,
         "command_id" => command_id,
-        "effective_at" => command.fetch("effective_at"),
-        "recorded_at" => command.fetch("effective_at"),
+        "effective_at" => effective_at,
+        "recorded_at" => effective_at,
         "data" => data
       }
     end
