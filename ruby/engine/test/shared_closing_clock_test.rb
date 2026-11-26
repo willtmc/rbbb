@@ -134,4 +134,21 @@ class SharedClosingClockTest < Minitest::Test
     core = engine(current.closes_at)
     assert_raises(RBBB::InvalidState) { current.after_decision(unit_id: "lot-12", decision: bid(core, core.initial_state), expected_revision: current.revision) }
   end
+
+  def test_exposes_group_identity_readers_and_value_equality
+    first = clock
+    second = RBBB::SharedClosingClock.new(
+      group_id: "group-a",
+      unit_ids: %w[lot-103 lot-12 lot-47],
+      closes_at: Time.utc(2030, 1, 1, 13, 0, 0),
+      quiet_period_seconds: 180
+    )
+
+    assert_equal "group-a", first.group_id
+    assert_equal %w[lot-103 lot-12 lot-47], first.unit_ids
+    assert_equal first, second
+    assert first.eql?(second)
+    assert_equal first.hash, second.hash
+    refute_equal first, clock(group_id: "group-b")
+  end
 end

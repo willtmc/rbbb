@@ -73,7 +73,7 @@ module RBBB
 
     # Rebuild a validated state from a `State#to_h` snapshot. Identity keys
     # added by the host are ignored; every snapshot key must be present.
-    def self.from_h(snapshot)
+    def self.from_h(snapshot, bid_ladder: nil)
       raise InvalidState, "snapshot must be an object" unless snapshot.respond_to?(:transform_keys)
 
       values = snapshot.transform_keys(&:to_s)
@@ -97,7 +97,8 @@ module RBBB
         status: values.fetch("status"),
         result: values.fetch("result"),
         winner_id: values.fetch("winner_id"),
-        winning_minor_units: values.fetch("winning_minor_units")
+        winning_minor_units: values.fetch("winning_minor_units"),
+        bid_ladder: bid_ladder
       )
     rescue NoMethodError, TypeError
       raise InvalidState, "snapshot is malformed"
@@ -117,23 +118,26 @@ module RBBB
       raise InvalidState, "transition is missing #{missing.join(', ')}" if missing.any?
 
       from_h(
-        "version" => values.fetch("aggregate_version"),
-        "status" => values.fetch("status", "open"),
-        "opens_at" => configuration.opens_at,
-        "closes_at" => values["closes_at"],
-        "last_effective_at" => values["effective_at"],
-        "reserve_minor_units" => values["reserve_minor_units"],
-        "reserve_status" => values["reserve_status"],
-        "leader_id" => values["leader_id"],
-        "standing_minor_units" => values["standing_minor_units"],
-        "next_required_minor_units" => values["next_required_minor_units"],
-        "positions" => values["positions"],
-        "authorization_history" => values["authorization_history"],
-        "reserve_history" => values["reserve_history"],
-        "voided_bid_ids" => values["voided_bid_ids"],
-        "result" => values["result"],
-        "winner_id" => values["winner_id"],
-        "winning_minor_units" => values["winning_minor_units"]
+        {
+          "version" => values.fetch("aggregate_version"),
+          "status" => values.fetch("status", "open"),
+          "opens_at" => configuration.opens_at,
+          "closes_at" => values["closes_at"],
+          "last_effective_at" => values["effective_at"],
+          "reserve_minor_units" => values["reserve_minor_units"],
+          "reserve_status" => values["reserve_status"],
+          "leader_id" => values["leader_id"],
+          "standing_minor_units" => values["standing_minor_units"],
+          "next_required_minor_units" => values["next_required_minor_units"],
+          "positions" => values["positions"],
+          "authorization_history" => values["authorization_history"],
+          "reserve_history" => values["reserve_history"],
+          "voided_bid_ids" => values["voided_bid_ids"],
+          "result" => values["result"],
+          "winner_id" => values["winner_id"],
+          "winning_minor_units" => values["winning_minor_units"]
+        },
+        bid_ladder: configuration.bid_ladder
       )
     end
 
@@ -142,7 +146,7 @@ module RBBB
       last_effective_at: nil, reserve_minor_units: nil,
       authorization_history: [], reserve_history: [],
       voided_bid_ids: [], status: "open", result: nil, winner_id: nil,
-      winning_minor_units: nil)
+      winning_minor_units: nil, bid_ladder: nil)
       @version = version
       @positions = positions.each_with_object({}) do |(bidder_id, position), copy|
         copy[bidder_id.to_s.freeze] = coerce_position(position)
@@ -166,7 +170,7 @@ module RBBB
       @result = result&.to_s&.freeze
       @winner_id = winner_id&.to_s&.freeze
       @winning_minor_units = winning_minor_units
-      validate!
+      validate!(bid_ladder: bid_ladder)
       freeze
     end
 
@@ -234,6 +238,15 @@ module RBBB
       }
     end
 
+    def ==(other)
+      other.is_a?(State) && to_h == other.to_h
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, to_h].hash
+    end
+
     private
 
     def coerce_timestamp(value, field)
@@ -285,10 +298,12 @@ module RBBB
       raise InvalidState, "reserve change is missing #{e.key}"
     end
 
-    def validate!
-      raise InvalidState, "version must be a non-negative integer" unless version.is_a?(Integer) && version >= 0
-      unless next_required_minor_units.is_a?(Integer) && next_required_minor_units >= 0
-        raise InvalidState, "next required amount must be a non-negative integer"
+    def validate!(bid_ladder: nil)
+      unless version.is_a?(Integer) && version.between?(0, MAX_SAFE_INTEGER)
+        raise InvalidState, "version must be a non-negative integer no greater than #{MAX_SAFE_INTEGER}"
+      end
+      unless Money.amount?(next_required_minor_units)
+        raise InvalidState, "next required amount must be a non-negative integer no greater than #{Money::MAX_MINOR_UNITS}"
       end
       unless [nil, "reserve_not_met", "reserve_met"].include?(reserve_status)
         raise InvalidState, "reserve status is invalid"
@@ -315,8 +330,8 @@ module RBBB
       end
 
       positions.each_value do |position|
-        unless position.maximum_minor_units.is_a?(Integer) && position.maximum_minor_units >= 0
-          raise InvalidState, "maximums must be non-negative integers"
+        unless Money.amount?(position.maximum_minor_units)
+          raise InvalidState, "maximums must be non-negative integers no greater than #{Money::MAX_MINOR_UNITS}"
         end
         unless Money.amount?(position.executable_maximum_minor_units) &&
             position.executable_maximum_minor_units <= position.maximum_minor_units
@@ -334,13 +349,19 @@ module RBBB
       return unless leader_id
 
       leader = positions.fetch(leader_id)
-      unless standing_minor_units.is_a?(Integer) &&
-          standing_minor_units.between?(0, leader.executable_maximum_minor_units)
+      unless Money.amount?(standing_minor_units) &&
+          standing_minor_units <= leader.executable_maximum_minor_units
         raise InvalidState, "standing amount must be within the leader maximum"
       end
-      # The next required amount saturates at the interoperable bound, so the
-      # two are permitted to be equal only when both sit on that bound.
-      saturated = standing_minor_units == next_required_minor_units
+      # The next required amount saturates only at the final rung of the bid
+      # ladder, where no higher rung fits within Money::MAX_MINOR_UNITS.
+      saturated = standing_minor_units == next_required_minor_units &&
+        if bid_ladder
+          bid_ladder.above(standing_minor_units).nil?
+        else
+          standing_minor_units == leader.executable_maximum_minor_units &&
+            standing_minor_units > Money::MAX_MINOR_UNITS / 2
+        end
       unless saturated || next_required_minor_units > standing_minor_units
         raise InvalidState, "next required amount must exceed standing amount"
       end
@@ -365,9 +386,8 @@ module RBBB
         unless %w[place_bid maximum_reduced].include?(entry.fetch("type"))
           raise InvalidState, "authorization type is invalid"
         end
-        unless entry.fetch("maximum_minor_units").is_a?(Integer) &&
-            entry.fetch("maximum_minor_units") >= 0
-          raise InvalidState, "authorization maximum must be a non-negative integer"
+        unless Money.amount?(entry.fetch("maximum_minor_units"))
+          raise InvalidState, "authorization maximum must be a non-negative integer no greater than #{Money::MAX_MINOR_UNITS}"
         end
         if entry.fetch("bidder_id").empty?
           raise InvalidState, "authorization bidder ID must be present"
@@ -425,7 +445,7 @@ module RBBB
     end
 
     def valid_optional_minor_units?(value)
-      value.nil? || (value.is_a?(Integer) && value >= 0)
+      value.nil? || Money.amount?(value)
     end
 
     def validate_lifecycle!

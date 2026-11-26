@@ -21,6 +21,8 @@ module RBBB
       closing_time_changed
       bidding_closed
     ].freeze
+    MAX_IDENTIFIER_LENGTH = 255
+    TWO_DECIMAL_CURRENCIES = %w[USD EUR GBP CAD AUD NZD CHF].freeze
 
     attr_reader :configuration
 
@@ -43,9 +45,13 @@ module RBBB
       values = command.transform_keys(&:to_s)
       command_id = values["command_id"]
       return reject(command_id, "unsupported_command") unless SUPPORTED_COMMANDS.include?(values["type"])
-      return reject(command_id, "invalid_command") unless present_string?(command_id)
-      if values.key?("expected_version") && values["expected_version"] != state.version
-        return reject(command_id, "stale_aggregate_version")
+      return reject(command_id, "invalid_command") unless valid_command_id?(command_id)
+      if values.key?("expected_version")
+        expected_version = values["expected_version"]
+        unless expected_version.is_a?(Integer) && expected_version.between?(0, MAX_SAFE_INTEGER)
+          return reject(command_id, "invalid_command")
+        end
+        return reject(command_id, "stale_aggregate_version") unless expected_version == state.version
       end
       return reject(command_id, "bidding_closed") if state.closed?
       if time_regressed?(state, authoritative_time(values))
@@ -73,25 +79,32 @@ module RBBB
     end
 
     def apply(state, events)
+      raise InvalidState, "engine requires an RBBB::State" unless state.is_a?(State)
+      return state if events.empty?
+
       transitions = events.select do |event|
-        event.privileged? && STATE_TRANSITION_EVENTS.include?(event.type)
+        event.is_a?(Event) && event.privileged? && STATE_TRANSITION_EVENTS.include?(event.type)
       end
-      if transitions.length > 1
+      unless transitions.length == 1
         raise InvalidState, "apply accepts the events of exactly one accepted command"
       end
 
-      transition = transitions.first
-      return state unless transition
+      raise InvalidState, "cannot apply transition to closed state" if state.closed?
+      raise InvalidState, "aggregate version exhausted" if state.version >= MAX_SAFE_INTEGER
 
+      transition = transitions.first
       aggregate_version = transition.data.fetch("aggregate_version")
       unless aggregate_version == state.version + 1
         raise InvalidState, "event aggregate version is not the next version"
       end
+      validate_transition_time!(state, transition)
       validate_transition_history!(state, transition, aggregate_version)
 
       # Every transition carries the full aggregate snapshot, so the next state
       # is exactly what a host would restore from this event.
       validate_ladder_state!(State.from_transition(configuration, transition))
+    rescue KeyError
+      raise InvalidState, "transition event is missing required fields"
     end
 
     # Rebuild aggregate state from one privileged state-transition event
@@ -126,7 +139,11 @@ module RBBB
 
     def decide_place_bid(state, command)
       bidder_id = command.fetch("bidder_id").to_s
-      bid_id = command["bid_id"] || command.fetch("command_id")
+      bid_id = if command.key?("bid_id") && !command["bid_id"].nil?
+        command["bid_id"]
+      else
+        command.fetch("command_id")
+      end
       maximum = command["maximum_minor_units"]
       command_id = command["command_id"]
       return reject(command_id, "invalid_command") unless present_string?(bid_id)
@@ -227,11 +244,13 @@ module RBBB
 
     def decide_change_closing_time(state, command)
       command_id = command.fetch("command_id")
-      unless valid_operator_command?(command) && present_string?(command["closes_at"])
+      closes_at_input = command["closes_at"]
+      unless valid_operator_command?(command) &&
+          (present_string?(closes_at_input) || closes_at_input.is_a?(Time))
         return reject(command_id, "invalid_command")
       end
 
-      new_closes_at = Timestamp.parse(command.fetch("closes_at"))
+      new_closes_at = Timestamp.parse(closes_at_input)
       effective_at = authoritative_time(command)
       return reject(command_id, "invalid_command") unless effective_at
 
@@ -261,7 +280,7 @@ module RBBB
     end
 
     def build_bid_decision(state, command, bid_id, bidder_id, maximum, existing, effective_at)
-      aggregate_version = state.version + 1
+      aggregate_version = next_aggregate_version(state)
       authorization_history = state.authorization_history.map(&:dup)
       authorization_history << {
         "type" => "place_bid",
@@ -278,9 +297,7 @@ module RBBB
         "executed_minor_units" => existing&.executed_minor_units || 0
       }
 
-      ranked = positions.sort_by do |id, position|
-        [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
-      end
+      ranked = positions.sort_by { |id, position| leader_key(id, position) }
       leader_id = ranked.fetch(0).first
       standing = if existing && existing.executable_maximum_minor_units == configuration.bid_ladder.floor(maximum)
         state.standing_minor_units
@@ -294,75 +311,56 @@ module RBBB
       public_result_changed = standing != state.standing_minor_units ||
         leader_id != state.leader_id
       closes_at = extended_closing_time(state, effective_at, public_result_changed)
+      return reject(command.fetch("command_id"), "invalid_closing_time") unless closes_at
 
-      positions.each do |id, position|
-        executed = id == leader_id ? standing : position.fetch("executable_maximum_minor_units")
-        position["executed_minor_units"] = [
-          position.fetch("executed_minor_units"),
-          executed
-        ].max
-      end
+      apply_executions!(positions, "leader_id" => leader_id, "standing_minor_units" => standing)
 
       event_type = existing ? "maximum_increased" : "maximum_accepted"
       privileged = Event.new(
         type: event_type,
         visibility: :privileged,
-        data: {
-          "command_id" => command.fetch("command_id"),
-          "aggregate_version" => aggregate_version,
+        data: transition_snapshot(
+          state,
+          command,
+          aggregate_version,
+          effective_at: effective_at,
+          leader_id: leader_id,
+          standing_minor_units: standing,
+          next_required_minor_units: next_required,
+          reserve_status: reserve_status,
+          closes_at: closes_at,
+          positions: positions,
+          authorization_history: authorization_history
+        ).merge(
           "bid_id" => bid_id,
           "bidder_id" => bidder_id,
           "maximum_minor_units" => maximum,
           "bidder_notice" => maximum_notice(maximum),
-          "executed_minor_units" => positions.fetch(bidder_id).fetch("executed_minor_units"),
-          "leader_id" => leader_id,
-          "standing_minor_units" => standing,
-          "next_required_minor_units" => next_required,
-          "reserve_status" => reserve_status,
-          "reserve_minor_units" => state.reserve_minor_units,
-          "effective_at" => Timestamp.dump(effective_at),
-          "closes_at" => Timestamp.dump(closes_at),
-          "positions" => positions,
-          "authorization_history" => authorization_history,
-          "reserve_history" => state.reserve_history,
-          "voided_bid_ids" => state.voided_bid_ids
-        }
+          "executed_minor_units" => positions.fetch(bidder_id).fetch("executed_minor_units")
+        )
       )
 
       events = [privileged]
       if standing != state.standing_minor_units || leader_id != state.leader_id ||
           reserve_status != state.reserve_status
-        public_data = {
-          "command_id" => command.fetch("command_id"),
-          "aggregate_version" => aggregate_version,
-          "standing_minor_units" => standing,
-          "next_required_minor_units" => next_required,
-          "leader_changed" => leader_id != state.leader_id
-        }
-        public_data["reserve_status"] = reserve_status if reserve_status
-        events << Event.new(
-          type: "standing_bid_changed",
-          visibility: :public,
-          data: public_data
+        events << standing_bid_event(
+          command,
+          aggregate_version,
+          standing_minor_units: standing,
+          next_required_minor_units: next_required,
+          leader_changed: leader_id != state.leader_id,
+          reserve_status: reserve_status
         )
       end
       if closes_at != state.closes_at
-        events << Event.new(
-          type: "closing_time_changed",
-          visibility: :public,
-          data: {
-            "command_id" => command.fetch("command_id"),
-            "aggregate_version" => aggregate_version,
-            "closes_at" => Timestamp.dump(closes_at)
-          }
-        )
+        events << closing_time_event(command, aggregate_version, closes_at: closes_at)
       end
 
       Decision.accepted(events)
     end
 
     def build_reduction_decision(state, command, bidder_id, maximum, existing, effective_at)
-      aggregate_version = state.version + 1
+      aggregate_version = next_aggregate_version(state)
       authorization_history = state.authorization_history.map(&:dup)
       authorization_history << {
         "type" => "maximum_reduced",
@@ -378,61 +376,51 @@ module RBBB
         "executed_minor_units" => existing.executed_minor_units
       }
 
-      leader_id = positions.min_by do |id, position|
-        [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
-      end.first
+      leader_id = positions.min_by { |id, position| leader_key(id, position) }.first
       leader_changed = leader_id != state.leader_id
       closes_at = extended_closing_time(state, effective_at, leader_changed)
+      return reject(command.fetch("command_id"), "invalid_closing_time") unless closes_at
 
       event = Event.new(
         type: "maximum_reduced",
         visibility: :privileged,
-        data: {
-          "command_id" => command.fetch("command_id"),
-          "aggregate_version" => aggregate_version,
+        data: transition_snapshot(
+          state,
+          command,
+          aggregate_version,
+          effective_at: effective_at,
+          leader_id: leader_id,
+          closes_at: closes_at,
+          positions: positions,
+          authorization_history: authorization_history
+        ).merge(
           "bidder_id" => bidder_id,
           "old_maximum_minor_units" => existing.maximum_minor_units,
           "new_maximum_minor_units" => maximum,
           "bidder_notice" => maximum_notice(maximum),
-          "executed_floor_minor_units" => existing.executed_minor_units,
-          "leader_id" => leader_id,
-          "standing_minor_units" => state.standing_minor_units,
-          "next_required_minor_units" => state.next_required_minor_units,
-          "reserve_status" => state.reserve_status,
-          "reserve_minor_units" => state.reserve_minor_units,
-          "effective_at" => Timestamp.dump(effective_at),
-          "closes_at" => Timestamp.dump(closes_at),
-          "positions" => positions,
-          "authorization_history" => authorization_history,
-          "reserve_history" => state.reserve_history,
-          "voided_bid_ids" => state.voided_bid_ids
-        }
+          "executed_floor_minor_units" => existing.executed_minor_units
+        )
       )
 
       events = [event]
       if leader_changed
-        public_data = {
-          "command_id" => command.fetch("command_id"),
-          "aggregate_version" => aggregate_version,
-          "standing_minor_units" => state.standing_minor_units,
-          "next_required_minor_units" => state.next_required_minor_units,
-          "leader_changed" => true
-        }
-        public_data["reserve_status"] = state.reserve_status if state.reserve_status
-        events << Event.new(type: "standing_bid_changed", visibility: :public, data: public_data)
+        events << standing_bid_event(
+          command,
+          aggregate_version,
+          standing_minor_units: state.standing_minor_units,
+          next_required_minor_units: state.next_required_minor_units,
+          leader_changed: true,
+          reserve_status: state.reserve_status
+        )
       end
       if closes_at != state.closes_at
-        events << Event.new(type: "closing_time_changed", visibility: :public, data: {
-          "command_id" => command.fetch("command_id"),
-          "aggregate_version" => aggregate_version,
-          "closes_at" => Timestamp.dump(closes_at)
-        })
+        events << closing_time_event(command, aggregate_version, closes_at: closes_at)
       end
       Decision.accepted(events)
     end
 
     def build_reserve_change_decision(state, command, new_reserve, effective_at)
-      aggregate_version = state.version + 1
+      aggregate_version = next_aggregate_version(state)
       reserve_history = state.reserve_history.map(&:dup)
       reserve_history << {
         "old_reserve_minor_units" => state.reserve_minor_units,
@@ -441,29 +429,22 @@ module RBBB
       }
       leader = state.position_for(state.leader_id)
       reserve_status = reserve_status_for(leader&.to_h, new_reserve)
-      common_data = {
-        "command_id" => command.fetch("command_id"),
-        "aggregate_version" => aggregate_version
-      }
       transition = Event.new(
         type: "reserve_changed",
         visibility: :privileged,
-        data: common_data.merge(
+        data: transition_snapshot(
+          state,
+          command,
+          aggregate_version,
+          effective_at: effective_at,
+          reserve_status: reserve_status,
+          reserve_minor_units: new_reserve,
+          reserve_history: reserve_history
+        ).merge(
           "operator_id" => command.fetch("operator_id"),
           "reason" => command.fetch("reason"),
           "old_reserve_minor_units" => state.reserve_minor_units,
-          "new_reserve_minor_units" => new_reserve,
-          "effective_at" => Timestamp.dump(effective_at),
-          "leader_id" => state.leader_id,
-          "standing_minor_units" => state.standing_minor_units,
-          "next_required_minor_units" => state.next_required_minor_units,
-          "reserve_status" => reserve_status,
-          "reserve_minor_units" => new_reserve,
-          "closes_at" => Timestamp.dump(state.closes_at),
-          "positions" => state.positions.transform_values(&:to_h),
-          "authorization_history" => state.authorization_history,
-          "reserve_history" => reserve_history,
-          "voided_bid_ids" => state.voided_bid_ids
+          "new_reserve_minor_units" => new_reserve
         )
       )
 
@@ -472,7 +453,11 @@ module RBBB
         events << Event.new(
           type: "reserve_status_changed",
           visibility: :public,
-          data: common_data.merge("reserve_status" => reserve_status)
+          data: {
+            "command_id" => command.fetch("command_id"),
+            "aggregate_version" => aggregate_version,
+            "reserve_status" => reserve_status
+          }
         )
       end
 
@@ -480,72 +465,58 @@ module RBBB
     end
 
     def build_closing_time_change_decision(state, command, new_closes_at, effective_at)
-      aggregate_version = state.version + 1
+      aggregate_version = next_aggregate_version(state)
       old_closes_at = state.closes_at
-      common_data = {
-        "command_id" => command.fetch("command_id"),
-        "aggregate_version" => aggregate_version,
-        "old_closes_at" => Timestamp.dump(old_closes_at),
-        "closes_at" => Timestamp.dump(new_closes_at)
-      }
       transition = Event.new(
         type: "closing_time_changed",
         visibility: :privileged,
-        data: common_data.merge(
+        data: transition_snapshot(
+          state,
+          command,
+          aggregate_version,
+          effective_at: effective_at,
+          closes_at: new_closes_at
+        ).merge(
           "operator_id" => command.fetch("operator_id"),
           "reason" => command.fetch("reason"),
-          "effective_at" => Timestamp.dump(effective_at),
-          "leader_id" => state.leader_id,
-          "standing_minor_units" => state.standing_minor_units,
-          "next_required_minor_units" => state.next_required_minor_units,
-          "reserve_status" => state.reserve_status,
-          "reserve_minor_units" => state.reserve_minor_units,
-          "positions" => state.positions.transform_values(&:to_h),
-          "authorization_history" => state.authorization_history,
-          "reserve_history" => state.reserve_history,
-          "voided_bid_ids" => state.voided_bid_ids
+          "old_closes_at" => Timestamp.dump(old_closes_at)
         )
       )
-      public_event = Event.new(
-        type: "closing_time_changed",
-        visibility: :public,
-        data: common_data
+      public_event = closing_time_event(
+        command,
+        aggregate_version,
+        closes_at: new_closes_at,
+        old_closes_at: old_closes_at
       )
 
       Decision.accepted([transition, public_event])
     end
 
     def build_closing_decision(state, command, effective_at)
-      aggregate_version = state.version + 1
+      aggregate_version = next_aggregate_version(state)
       result = closing_result(state)
       winner_id = result == "sold" ? state.leader_id : nil
       winning_minor_units = result == "sold" ? state.standing_minor_units : nil
-      common_data = {
-        "command_id" => command.fetch("command_id"),
-        "aggregate_version" => aggregate_version,
-        "result" => result
-      }
       transition = Event.new(
         type: "bidding_closed",
         visibility: :privileged,
-        data: common_data.merge(
-          "effective_at" => Timestamp.dump(effective_at),
-          "leader_id" => state.leader_id,
-          "standing_minor_units" => state.standing_minor_units,
-          "next_required_minor_units" => state.next_required_minor_units,
-          "reserve_status" => state.reserve_status,
-          "reserve_minor_units" => state.reserve_minor_units,
-          "closes_at" => Timestamp.dump(state.closes_at),
-          "positions" => state.positions.transform_values(&:to_h),
-          "authorization_history" => state.authorization_history,
-          "reserve_history" => state.reserve_history,
-          "voided_bid_ids" => state.voided_bid_ids,
+        data: transition_snapshot(
+          state,
+          command,
+          aggregate_version,
+          effective_at: effective_at
+        ).merge(
+          "result" => result,
           "status" => "closed",
           "winner_id" => winner_id,
           "winning_minor_units" => winning_minor_units
         )
       )
-      public_data = common_data.dup
+      public_data = {
+        "command_id" => command.fetch("command_id"),
+        "aggregate_version" => aggregate_version,
+        "result" => result
+      }
       case result
       when "sold"
         public_data["winning_minor_units"] = winning_minor_units
@@ -562,7 +533,7 @@ module RBBB
     end
 
     def build_void_decision(state, command, target, effective_at)
-      aggregate_version = state.version + 1
+      aggregate_version = next_aggregate_version(state)
       voided_bid_ids = [*state.voided_bid_ids, command.fetch("bid_id")]
       recomputed = replay_authorizations(
         state.authorization_history,
@@ -576,6 +547,8 @@ module RBBB
       else
         state.closes_at
       end
+      return reject(command.fetch("command_id"), "invalid_closing_time") unless closes_at
+
       common_data = {
         "command_id" => command.fetch("command_id"),
         "aggregate_version" => aggregate_version
@@ -584,23 +557,24 @@ module RBBB
       events = [Event.new(
         type: "bid_voided",
         visibility: :privileged,
-        data: common_data.merge(
+        data: transition_snapshot(
+          state,
+          command,
+          aggregate_version,
+          effective_at: effective_at,
+          leader_id: recomputed.fetch("leader_id"),
+          standing_minor_units: recomputed.fetch("standing_minor_units"),
+          next_required_minor_units: recomputed.fetch("next_required_minor_units"),
+          reserve_status: recomputed.fetch("reserve_status"),
+          closes_at: closes_at,
+          positions: recomputed.fetch("positions"),
+          voided_bid_ids: voided_bid_ids
+        ).merge(
           "bid_id" => command.fetch("bid_id"),
           "bidder_id" => target.fetch("bidder_id"),
           "operator_id" => command.fetch("operator_id"),
           "reason" => command.fetch("reason"),
-          "notification_policy" => command.fetch("notification_policy"),
-          "effective_at" => Timestamp.dump(effective_at),
-          "leader_id" => recomputed.fetch("leader_id"),
-          "standing_minor_units" => recomputed.fetch("standing_minor_units"),
-          "next_required_minor_units" => recomputed.fetch("next_required_minor_units"),
-          "reserve_status" => recomputed.fetch("reserve_status"),
-          "reserve_minor_units" => state.reserve_minor_units,
-          "closes_at" => Timestamp.dump(closes_at),
-          "positions" => recomputed.fetch("positions"),
-          "authorization_history" => state.authorization_history,
-          "reserve_history" => state.reserve_history,
-          "voided_bid_ids" => voided_bid_ids
+          "notification_policy" => command.fetch("notification_policy")
         )
       )]
 
@@ -613,26 +587,18 @@ module RBBB
       end
 
       if public_state_changed?(state, recomputed)
-        public_data = common_data.merge(
-          "standing_minor_units" => recomputed.fetch("standing_minor_units"),
-          "next_required_minor_units" => recomputed.fetch("next_required_minor_units"),
-          "leader_changed" => state.leader_id != recomputed.fetch("leader_id")
-        )
-        reserve_status = recomputed.fetch("reserve_status")
-        public_data["reserve_status"] = reserve_status if reserve_status
-        events << Event.new(
-          type: "standing_bid_changed",
-          visibility: :public,
-          data: public_data
+        events << standing_bid_event(
+          command,
+          aggregate_version,
+          standing_minor_units: recomputed.fetch("standing_minor_units"),
+          next_required_minor_units: recomputed.fetch("next_required_minor_units"),
+          leader_changed: state.leader_id != recomputed.fetch("leader_id"),
+          reserve_status: recomputed.fetch("reserve_status")
         )
       end
 
       if closes_at != state.closes_at
-        events << Event.new(
-          type: "closing_time_changed",
-          visibility: :public,
-          data: common_data.merge("closes_at" => Timestamp.dump(closes_at))
-        )
+        events << closing_time_event(command, aggregate_version, closes_at: closes_at)
       end
 
       events << Event.new(
@@ -703,9 +669,7 @@ module RBBB
           existing["priority"] = position_priority(existing, maximum, entry.fetch("priority"))
           existing["maximum_minor_units"] = maximum
           existing["executable_maximum_minor_units"] = configuration.bid_ladder.floor(maximum)
-          snapshot["leader_id"] = positions.min_by do |id, position|
-            [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
-          end.first
+          snapshot["leader_id"] = positions.min_by { |id, position| leader_key(id, position) }.first
         end
       end
 
@@ -713,9 +677,7 @@ module RBBB
     end
 
     def price_positions(positions, reserve_minor_units, bidder_id, previous)
-      ranked = positions.sort_by do |id, position|
-        [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
-      end
+      ranked = positions.sort_by { |id, position| leader_key(id, position) }
       leader_id = ranked.fetch(0).first
       standing = standing_after_bid(ranked, reserve_minor_units, bidder_id,
         previous.fetch("leader_id"), previous.fetch("standing_minor_units"))
@@ -837,7 +799,10 @@ module RBBB
 
       # An extension may only push closing later. A duration shorter than the
       # remaining time must never pull the close forward.
-      [state.closes_at, effective_at + configuration.extension.fetch("duration_seconds")].max
+      candidate = [state.closes_at, effective_at + configuration.extension.fetch("duration_seconds")].max
+      Timestamp.parse(candidate)
+    rescue ArgumentError, RangeError
+      nil
     end
 
     # The next required amount saturates at the interoperable bound so that
@@ -856,7 +821,7 @@ module RBBB
 
       following = configuration.bid_ladder.above(executable)
       format_amount = lambda do |amount|
-        if %w[USD EUR GBP CAD AUD NZD CHF].include?(configuration.currency)
+        if TWO_DECIMAL_CURRENCIES.include?(configuration.currency)
           "#{configuration.currency} #{amount / 100}.#{(amount % 100).to_s.rjust(2, '0')}"
         else
           "#{amount} minor units (#{configuration.currency})"
@@ -906,11 +871,87 @@ module RBBB
     end
 
     def reject(command_id, reason, **fields)
-      Decision.rejected(command_id: command_id, reason: reason, **fields)
+      sanitized_id = valid_command_id?(command_id) ? command_id : nil
+      Decision.rejected(command_id: sanitized_id, reason: reason, **fields)
+    end
+
+    def valid_command_id?(value)
+      present_string?(value) && value.length <= MAX_IDENTIFIER_LENGTH
     end
 
     def present_string?(value)
       value.is_a?(String) && !value.empty?
+    end
+
+    def next_aggregate_version(state)
+      next_version = state.version + 1
+      raise InvalidState, "aggregate version exhausted" if next_version > MAX_SAFE_INTEGER
+
+      next_version
+    end
+
+    def leader_key(id, position)
+      [-position.fetch("executable_maximum_minor_units"), position.fetch("priority"), id]
+    end
+
+    def transition_snapshot(state, command, aggregate_version, effective_at:,
+      leader_id: state.leader_id,
+      standing_minor_units: state.standing_minor_units,
+      next_required_minor_units: state.next_required_minor_units,
+      reserve_status: state.reserve_status,
+      reserve_minor_units: state.reserve_minor_units,
+      closes_at: state.closes_at,
+      positions: state.positions.transform_values(&:to_h),
+      authorization_history: state.authorization_history,
+      reserve_history: state.reserve_history,
+      voided_bid_ids: state.voided_bid_ids)
+      {
+        "command_id" => command.fetch("command_id"),
+        "aggregate_version" => aggregate_version,
+        "leader_id" => leader_id,
+        "standing_minor_units" => standing_minor_units,
+        "next_required_minor_units" => next_required_minor_units,
+        "reserve_status" => reserve_status,
+        "reserve_minor_units" => reserve_minor_units,
+        "effective_at" => Timestamp.dump(effective_at),
+        "closes_at" => Timestamp.dump(closes_at),
+        "positions" => positions,
+        "authorization_history" => authorization_history,
+        "reserve_history" => reserve_history,
+        "voided_bid_ids" => voided_bid_ids
+      }
+    end
+
+    def standing_bid_event(command, aggregate_version, standing_minor_units:, next_required_minor_units:,
+      leader_changed:, reserve_status:)
+      public_data = {
+        "command_id" => command.fetch("command_id"),
+        "aggregate_version" => aggregate_version,
+        "standing_minor_units" => standing_minor_units,
+        "next_required_minor_units" => next_required_minor_units,
+        "leader_changed" => leader_changed
+      }
+      public_data["reserve_status"] = reserve_status if reserve_status
+      Event.new(type: "standing_bid_changed", visibility: :public, data: public_data)
+    end
+
+    def closing_time_event(command, aggregate_version, closes_at:, old_closes_at: nil)
+      data = {
+        "command_id" => command.fetch("command_id"),
+        "aggregate_version" => aggregate_version,
+        "closes_at" => Timestamp.dump(closes_at)
+      }
+      data["old_closes_at"] = Timestamp.dump(old_closes_at) if old_closes_at
+      Event.new(type: "closing_time_changed", visibility: :public, data: data)
+    end
+
+    def validate_transition_time!(state, transition)
+      effective_at = Timestamp.parse(transition.data.fetch("effective_at"))
+      if state.last_effective_at && effective_at < state.last_effective_at
+        raise InvalidState, "transition effective_at precedes state last_effective_at"
+      end
+    rescue ArgumentError, KeyError
+      raise InvalidState, "transition effective_at is invalid"
     end
 
     def valid_operator_command?(command)

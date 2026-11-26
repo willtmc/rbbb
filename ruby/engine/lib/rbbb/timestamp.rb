@@ -10,6 +10,7 @@ module RBBB
     # same command stream to the same closing times.
     PRECISION_DIGITS = 3
     NANOSECONDS_PER_UNIT = 10**(9 - PRECISION_DIGITS)
+    YEAR_RANGE = (1..9999).freeze
 
     # Date, "T", time, optional fraction of at most PRECISION_DIGITS digits,
     # and a mandatory zone designator. Ruby's Time.iso8601 silently treats a
@@ -34,11 +35,15 @@ module RBBB
         raise ArgumentError, "timestamp must be an ISO 8601 string or Time"
       end
 
-      unless (time.nsec % NANOSECONDS_PER_UNIT).zero?
+      utc = time.getutc
+      unless YEAR_RANGE.include?(utc.year)
+        raise ArgumentError, "timestamp year must be within #{YEAR_RANGE.begin}..#{YEAR_RANGE.end}"
+      end
+      unless (utc.nsec % NANOSECONDS_PER_UNIT).zero?
         raise ArgumentError, "timestamp precision must not exceed #{PRECISION_DIGITS} fractional digits"
       end
 
-      time.getutc.freeze
+      utc.freeze
     end
 
     # Canonical form: UTC with "Z", the fraction omitted when zero and
@@ -46,7 +51,12 @@ module RBBB
     def dump(time)
       return nil unless time
 
-      formatted = time.getutc.iso8601(PRECISION_DIGITS)
+      utc = time.getutc
+      unless YEAR_RANGE.include?(utc.year)
+        raise ArgumentError, "timestamp year must be within #{YEAR_RANGE.begin}..#{YEAR_RANGE.end}"
+      end
+
+      formatted = utc.iso8601(PRECISION_DIGITS)
       formatted.sub!(/0+Z\z/, "Z")
       formatted.sub!(/\.Z\z/, "Z")
       formatted

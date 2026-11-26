@@ -154,6 +154,185 @@ class HardeningTest < Minitest::Test
     assert_equal CLOSES_AT, state.to_h.fetch("closes_at")
   end
 
+  def test_timestamp_rejects_years_outside_rfc3339_four_digit_range
+    [
+      Time.utc(0, 12, 31, 23, 59, 59),
+      Time.utc(10_000, 1, 1, 0, 0, 0),
+      "0000-12-31T23:59:59Z",
+      "0001-01-01T00:00:00+01:00",
+      "9999-12-31T23:59:59-01:00"
+    ].each do |invalid|
+      assert_raises(ArgumentError) { RBBB::Timestamp.parse(invalid) }
+    end
+
+    assert_raises(ArgumentError) { RBBB::Timestamp.dump(Time.utc(0, 12, 31, 23, 59, 59)) }
+    assert_raises(ArgumentError) { RBBB::Timestamp.dump(Time.utc(10_000, 1, 1, 0, 0, 0)) }
+    assert_equal "0001-01-01T00:00:00Z", RBBB::Timestamp.dump(RBBB::Timestamp.parse("0001-01-01T00:00:00Z"))
+    assert_equal "9999-12-31T23:59:59.999Z", RBBB::Timestamp.dump(RBBB::Timestamp.parse("9999-12-31T23:59:59.999Z"))
+  end
+
+  def test_extension_overflow_past_year_9999_is_rejected_cleanly_in_decide
+    engine = build_engine(extension: {
+      trigger_window_seconds: 300,
+      duration_seconds: RBBB::MAX_SAFE_INTEGER,
+      extend_on_void: true
+    })
+
+    bid_overflow = place(engine, engine.initial_state, "cmd-bid", "bidder-a", 50_000,
+      effective_at: "2026-09-01T12:59:00Z")
+    assert bid_overflow.rejected?
+    assert_equal "invalid_closing_time", bid_overflow.rejection.fetch("reason")
+
+    state = engine.apply(engine.initial_state, place(engine, engine.initial_state, "cmd-1", "bidder-a", 50_000,
+      effective_at: "2026-09-01T12:10:00Z").events)
+    state = engine.apply(state, place(engine, state, "cmd-2", "bidder-b", 50_000,
+      effective_at: "2026-09-01T12:11:00Z").events)
+    state = engine.apply(state, place(engine, state, "cmd-3", "bidder-a", 60_000,
+      effective_at: "2026-09-01T12:12:00Z").events)
+
+    reduction_overflow = engine.decide(state, {
+      command_id: "cmd-reduce",
+      type: "reduce_maximum",
+      bidder_id: "bidder-a",
+      maximum_minor_units: 50_000,
+      effective_at: "2026-09-01T12:59:00Z"
+    })
+    assert reduction_overflow.rejected?
+    assert_equal "invalid_closing_time", reduction_overflow.rejection.fetch("reason")
+
+    void_overflow = engine.decide(state, {
+      command_id: "cmd-void",
+      type: "void_bid",
+      bid_id: "cmd-2",
+      operator_id: "operator-1",
+      reason: "review",
+      notification_policy: "none",
+      effective_at: "2026-09-01T12:59:00Z"
+    })
+    assert void_overflow.rejected?
+    assert_equal "invalid_closing_time", void_overflow.rejection.fetch("reason")
+  end
+
+  def test_apply_rejects_transitions_on_closed_state_and_backward_effective_at
+    engine = build_engine
+    first = place(engine, engine.initial_state, "command-1", "bidder-a", 50_000,
+      effective_at: "2026-09-01T12:30:00Z")
+    open_state = engine.apply(engine.initial_state, first.events)
+
+    assert_same open_state, engine.apply(open_state, [])
+    assert_raises(RBBB::InvalidState) { engine.apply(open_state, first.public_events) }
+
+    second = place(engine, open_state, "command-2", "bidder-b", 60_000,
+      effective_at: "2026-09-01T12:31:00Z")
+    backward_transition = RBBB::Event.new(
+      type: second.transition_event.type,
+      visibility: :privileged,
+      data: second.transition_event.data.merge("effective_at" => "2026-09-01T12:29:59Z")
+    )
+    error = assert_raises(RBBB::InvalidState) { engine.apply(open_state, [backward_transition]) }
+    assert_match(/precedes state last_effective_at/, error.message)
+
+    close_decision = engine.decide(open_state, {
+      command_id: "command-close",
+      type: "close_bidding",
+      effective_at: CLOSES_AT
+    })
+    closed_state = engine.apply(open_state, close_decision.events)
+    reopen_transition = RBBB::Event.new(
+      type: "maximum_accepted",
+      visibility: :privileged,
+      data: second.transition_event.data.merge(
+        "aggregate_version" => closed_state.version + 1,
+        "effective_at" => "2026-09-01T13:01:00Z"
+      )
+    )
+    error = assert_raises(RBBB::InvalidState) { engine.apply(closed_state, [reopen_transition]) }
+    assert_match(/closed state/, error.message)
+  end
+
+  def test_malformed_command_id_produces_nil_in_rejection
+    engine = build_engine
+    ["", 123, false, "x" * 256, nil].each do |bad_id|
+      invalid = engine.decide(engine.initial_state, {
+        command_id: bad_id,
+        type: "place_bid",
+        bidder_id: "bidder-a",
+        maximum_minor_units: 50_000,
+        effective_at: "2026-09-01T12:10:00Z"
+      })
+      assert invalid.rejected?
+      assert_equal "invalid_command", invalid.rejection.fetch("reason")
+      assert_nil invalid.rejection.fetch("command_id")
+
+      unsupported = engine.decide(engine.initial_state, {
+        command_id: bad_id,
+        type: "unknown_command"
+      })
+      assert unsupported.rejected?
+      assert_equal "unsupported_command", unsupported.rejection.fetch("reason")
+      assert_nil unsupported.rejection.fetch("command_id")
+    end
+  end
+
+  def test_non_integer_expected_version_and_explicit_false_bid_id_are_rejected
+    engine = build_engine
+
+    [0.0, "0", -1, RBBB::MAX_SAFE_INTEGER + 1, nil].each do |bad_version|
+      decision = engine.decide(engine.initial_state, {
+        command_id: "command-1",
+        type: "place_bid",
+        bidder_id: "bidder-a",
+        maximum_minor_units: 50_000,
+        expected_version: bad_version,
+        effective_at: "2026-09-01T12:10:00Z"
+      })
+      assert decision.rejected?
+      assert_equal "invalid_command", decision.rejection.fetch("reason")
+    end
+
+    false_bid_id = engine.decide(engine.initial_state, {
+      command_id: "command-1",
+      type: "place_bid",
+      bid_id: false,
+      bidder_id: "bidder-a",
+      maximum_minor_units: 50_000,
+      effective_at: "2026-09-01T12:10:00Z"
+    })
+    assert false_bid_id.rejected?
+    assert_equal "invalid_command", false_bid_id.rejection.fetch("reason")
+  end
+
+  def test_version_at_max_safe_integer_is_bounded_cleanly
+    engine = build_engine
+    max_state = RBBB::State.new(
+      version: RBBB::MAX_SAFE_INTEGER,
+      positions: {},
+      leader_id: nil,
+      standing_minor_units: nil,
+      next_required_minor_units: 10_000,
+      opens_at: OPENS_AT,
+      closes_at: CLOSES_AT
+    )
+
+    assert_raises(RBBB::InvalidState) do
+      place(engine, max_state, "command-overflow", "bidder-a", 50_000,
+        effective_at: "2026-09-01T12:10:00Z")
+    end
+    assert_raises(RBBB::InvalidState) do
+      RBBB::State.from_h(max_state.to_h.merge("version" => RBBB::MAX_SAFE_INTEGER + 1))
+    end
+  end
+
+  def test_configuration_from_h_rejects_non_hash_as_invalid_configuration
+    [nil, "not-a-hash", 42, []].each do |input|
+      assert_raises(RBBB::InvalidConfiguration) { RBBB::Configuration.from_h(input) }
+    end
+  end
+
+  def test_unsupported_feature_constant_is_removed
+    refute defined?(RBBB::UnsupportedFeature)
+  end
+
   private
 
   def build_state(opens_at:, closes_at:)

@@ -57,5 +57,28 @@ module RBBB
     def rejected?
       !accepted?
     end
+
+    def transition_event
+      events.find do |event|
+        event.privileged? && Engine::STATE_TRANSITION_EVENTS.include?(event.type)
+      end
+    end
+
+    def public_events
+      events.select(&:public?)
+    end
+
+    def privileged_events
+      events.select(&:privileged?)
+    end
+
+    def ==(other)
+      other.is_a?(Decision) && events == other.events && rejection == other.rejection
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, events, rejection].hash
+    end
   end
 end

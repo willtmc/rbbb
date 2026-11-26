@@ -10,6 +10,10 @@ module RBBB
       :increment_schedule, :bid_ladder, :opens_at, :closes_at, :extension
 
     def self.from_h(attributes)
+      unless attributes.respond_to?(:transform_keys)
+        raise InvalidConfiguration, "configuration must be an object"
+      end
+
       values = attributes.transform_keys(&:to_s)
       new(
         currency: values.fetch("currency"),
@@ -52,6 +56,29 @@ module RBBB
 
     def increment_for(minor_units)
       increment_schedule.increment_for(minor_units)
+    end
+
+    def ==(other)
+      other.is_a?(Configuration) && equality_key == other.equality_key
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, equality_key].hash
+    end
+
+    protected
+
+    def equality_key
+      [
+        currency,
+        opening_minor_units,
+        reserve_minor_units,
+        increment_schedule.to_a,
+        Timestamp.dump(opens_at),
+        Timestamp.dump(closes_at),
+        extension
+      ]
     end
 
     private

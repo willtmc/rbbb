@@ -28,6 +28,15 @@ module RBBB
       {"type" => type}.merge(data)
     end
 
+    def ==(other)
+      other.is_a?(Event) && type == other.type && visibility == other.visibility && data == other.data
+    end
+    alias eql? ==
+
+    def hash
+      [self.class, type, visibility, data].hash
+    end
+
     private
 
     def deep_freeze(value)

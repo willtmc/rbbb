@@ -59,9 +59,7 @@ module RBBB
     private_class_method :identities
 
     def timestamp(value)
-      time = Timestamp.parse(value)
-      raise InvalidConfiguration, "timestamp outside supported year range" unless time.year.between?(1, 9999)
-      time
+      Timestamp.parse(value)
     rescue ArgumentError, RangeError
       raise InvalidConfiguration, "invalid scheduling timestamp"
     end
