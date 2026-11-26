@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 require "json"
 require "sqlite3"
+require "securerandom"
 require_relative "shared_group_host"
 
 module RBBBExamples
@@ -21,6 +22,9 @@ module RBBBExamples
       transaction do |db|
         db.execute("CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id = 1), document TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS commits (sequence INTEGER PRIMARY KEY, command_id TEXT NOT NULL UNIQUE, request TEXT NOT NULL, result TEXT NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS delivery_stream (id INTEGER PRIMARY KEY CHECK(id = 1), identity TEXT NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS delivery_cursors (consumer TEXT PRIMARY KEY, sequence INTEGER NOT NULL)")
+        db.execute("INSERT OR IGNORE INTO delivery_stream (id, identity) VALUES (1, ?)", [SecureRandom.uuid])
         saved = db.get_first_value("SELECT document FROM metadata WHERE id = 1")
         if saved
           raise ArgumentError, "stored configuration differs" unless saved == @document
@@ -60,7 +64,66 @@ module RBBBExamples
       end
     end
 
+    # Journal commits are the outbox: no separate enqueue can be lost.
+    def next_public_delivery(consumer_id:)
+      consumer = delivery_consumer(consumer_id)
+      transaction do |db|
+        restore(db) # Validate committed results before exposing any projection.
+        pending_delivery(db, consumer)
+      end
+    end
+
+    def acknowledge_public_delivery(consumer_id:, delivery_id:)
+      consumer = delivery_consumer(consumer_id)
+      transaction do |db|
+        restore(db)
+        stream = db.get_first_value("SELECT identity FROM delivery_stream WHERE id = 1")
+        unless delivery_id.is_a?(String) && delivery_id.match?(/\A#{Regexp.escape(stream)}:[1-9][0-9]*\z/)
+          raise ArgumentError, "invalid delivery identity"
+        end
+        sequence = delivery_id.split(":").last.to_i
+        cursor = db.get_first_value("SELECT sequence FROM delivery_cursors WHERE consumer = ?", [consumer]) || 0
+        next false if sequence <= cursor
+        pending = pending_delivery(db, consumer)
+        unless pending && pending.fetch("delivery_id") == delivery_id
+          raise ArgumentError, "only the next pending delivery can be acknowledged"
+        end
+        db.execute("INSERT INTO delivery_cursors (consumer, sequence) VALUES (?, ?) ON CONFLICT(consumer) DO UPDATE SET sequence = excluded.sequence", [consumer, sequence])
+        true
+      end
+    end
+
+    # Caller owns transport and sink deduplication. Never call under the DB lock.
+    def deliver_next_public(consumer_id:)
+      consumer_id = delivery_consumer(consumer_id)
+      raise ArgumentError, "delivery callback required" unless block_given?
+      payload = next_public_delivery(consumer_id: consumer_id)
+      return nil unless payload
+      identity = payload.fetch("delivery_id").dup.freeze
+      yield payload
+      acknowledge_public_delivery(consumer_id: consumer_id, delivery_id: identity)
+      payload
+    end
+
     private
+
+    def delivery_consumer(value)
+      raise ArgumentError, "consumer ID required" unless value.is_a?(String) && !value.empty?
+      value.dup.freeze
+    end
+
+    def pending_delivery(db, consumer)
+      cursor = db.get_first_value("SELECT sequence FROM delivery_cursors WHERE consumer = ?", [consumer]) || 0
+      stream = db.get_first_value("SELECT identity FROM delivery_stream WHERE id = 1")
+      db.execute("SELECT sequence, result FROM commits WHERE sequence > ? ORDER BY sequence", [cursor]).each do |sequence, json|
+        result = JSON.parse(json)
+        next if result["rejection"]
+        # Explicit allowlist: never copy privileged events or receipt metadata.
+        return {"delivery_id" => "#{stream}:#{sequence}",
+          "clock" => result.fetch("clock"), "units" => result.fetch("units")}
+      end
+      nil
+    end
 
     def build_host
       document = JSON.parse(@document)
