@@ -6,3 +6,4 @@ increments:
     amount_minor_units: 1000
 opens_at: "2026-09-01T12:00:00Z"
 closes_at: "2026-09-01T13:00:00Z"
+extension: null

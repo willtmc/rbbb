@@ -5,10 +5,12 @@ require "fileutils"
 require "json"
 require "open3"
 require "tmpdir"
+require "yaml"
 
 # scripts/validate_documents.rb is the contract's guard against unbounded
-# integers. These tests run it against a scratch copy of the repository so a
-# regression in the guard itself fails the engine suite, not only CI.
+# integers, version drift, malformed fixtures/scenarios, and privileged leaks.
+# These tests run it against a scratch copy of the repository so a regression
+# in the guard itself fails the engine suite, not only CI.
 class SpecificationGuardTest < Minitest::Test
   REPO_ROOT = File.expand_path("../../..", __dir__)
   VALIDATOR = File.join(REPO_ROOT, "scripts", "validate_documents.rb")
@@ -59,6 +61,50 @@ class SpecificationGuardTest < Minitest::Test
     assert_match(%r{common/integer.schema.json: \$defs/positiveInteger must use the shared maximum}, stderr)
   end
 
+  def test_fixture_missing_extension_key_fails
+    stderr = run_validator_with_file_edit("conformance/fixtures/usd-standard.yaml") do |content|
+      fixture = YAML.safe_load(content, aliases: false)
+      fixture.delete("extension")
+      YAML.dump(fixture)
+    end
+
+    assert_match(%r{conformance/fixtures/usd-standard.yaml: missing required keys: extension}, stderr)
+  end
+
+  def test_scenario_unexpected_top_level_key_fails
+    stderr = run_validator_with_file_edit("conformance/scenarios/timed-proxy/001-first-maximum-opens-at-opening.yaml") do |content|
+      "extra_key: true\n#{content}"
+    end
+
+    assert_match(/unexpected top-level keys: extra_key/, stderr)
+  end
+
+  def test_version_drift_fails
+    stderr = run_validator_with_file_edit("specification/VERSION") { "9.9.9-draft\n" }
+
+    assert_match(/specification\/openapi.yaml: info\.version .* does not match specification\/VERSION/, stderr)
+    assert_match(/specification\/asyncapi.yaml: info\.version .* does not match specification\/VERSION/, stderr)
+    assert_match(/ruby\/engine\/lib\/rbbb\/version\.rb: SPECIFICATION_VERSION .* does not match specification\/VERSION/, stderr)
+  end
+
+  def test_expanded_public_leak_denylist_catches_privileged_keys_in_public_events
+    stderr = run_validator_with_file_edit("conformance/scenarios/timed-proxy/001-first-maximum-opens-at-opening.yaml") do |content|
+      scenario = YAML.safe_load(content, aliases: false)
+      scenario["expected"]["public_events"][0]["bidder_notice"] = nil
+      YAML.dump(scenario)
+    end
+
+    assert_match(/public_events\[0\] contains privileged keys: bidder_notice/, stderr)
+  end
+
+  def test_invalid_proposal_schema_ref_fails
+    stderr = run_validator_with_mutation("rfcs/proposals/flexible-live-scheduling/submission.schema.json") do |schema|
+      schema["properties"]["command_id"] = {"$ref" => "contract.schema.json#/$defs/missing_def"}
+    end
+
+    assert_match(%r{rfcs/proposals/flexible-live-scheduling/submission\.schema\.json: invalid \$ref}, stderr)
+  end
+
   private
 
   def run_validator(root = REPO_ROOT)
@@ -66,14 +112,24 @@ class SpecificationGuardTest < Minitest::Test
   end
 
   def run_validator_with_mutation(relative_path)
+    run_validator_with_file_edit(relative_path) do |content|
+      schema = JSON.parse(content)
+      yield schema
+      JSON.pretty_generate(schema)
+    end
+  end
+
+  def run_validator_with_file_edit(relative_path)
     Dir.mktmpdir("rbbb-guard") do |dir|
       %w[scripts specification conformance rfcs].each do |entry|
         FileUtils.cp_r(File.join(REPO_ROOT, entry), dir)
       end
+      version_target = File.join(dir, "ruby/engine/lib/rbbb/version.rb")
+      FileUtils.mkdir_p(File.dirname(version_target))
+      FileUtils.cp(File.join(REPO_ROOT, "ruby/engine/lib/rbbb/version.rb"), version_target)
+
       target = File.join(dir, relative_path)
-      schema = JSON.parse(File.read(target))
-      yield schema
-      File.write(target, JSON.pretty_generate(schema))
+      File.write(target, yield(File.read(target)))
 
       _stdout, stderr, status = run_validator(dir)
       refute status.success?, "expected the validator to fail after mutating #{relative_path}"

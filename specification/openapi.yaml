@@ -3,7 +3,8 @@ info:
   title: RBBB command API
   version: 0.2.0-draft
   description: >-
-    Experimental language-neutral HTTP command contract for RFC 0001. No
+    Experimental 0.2.0-draft language-neutral HTTP command contract for RFC 0001
+    timed online proxy bidding with RFC 0005 fixed bid ladder execution. No
     hosted service exists and production service guarantees are not yet stable.
   license:
     name: MIT
@@ -31,8 +32,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CommandResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
-          description: Aggregate version or command-id conflict
+          description: Aggregate version or bid-id conflict (stale_aggregate_version or bid_id_already_exists)
           content:
             application/json:
               schema:
@@ -48,7 +55,42 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+  responses:
+    BadRequest:
+      description: Malformed request body or command envelope validation failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid bearer authentication credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Authenticated caller is not authorized for the requested command or bidding unit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [status, error]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error:
+          type: string
+          minLength: 1
+          maxLength: 255
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
     CommandResult:
       type: object
       additionalProperties: false

@@ -5,6 +5,7 @@ require "pathname"
 require "yaml"
 
 ROOT = Pathname(__dir__).join("..").expand_path
+FORBIDDEN_PUBLIC_KEYS = /maximum|reserve_minor_units|operator_id|reason|bidder_id|leader_id|winner_id|bid_id|bidder_notice|positions|executed_minor_units|authorization_history|reserve_history|voided_bid_ids/
 
 def relative(path)
   Pathname(path).relative_path_from(ROOT)
@@ -88,9 +89,102 @@ def property_names(document)
   names.uniq
 end
 
+def non_negative_integer?(value, max)
+  value.is_a?(Integer) && value >= 0 && value <= max
+end
+
+def positive_integer?(value, max)
+  value.is_a?(Integer) && value >= 1 && value <= max
+end
+
+def validate_fixture(path, fixture, timed_proxy_schema, timestamp_regex, money_bound, errors)
+  label = relative(path)
+  unless fixture.is_a?(Hash)
+    errors << "#{label}: fixture must be an object"
+    return
+  end
+
+  required = timed_proxy_schema.fetch("required")
+  allowed = timed_proxy_schema.fetch("properties").keys
+  missing = required.reject { |key| fixture.key?(key) }
+  errors << "#{label}: missing required keys: #{missing.join(', ')}" if missing.any?
+  extra = fixture.keys - allowed
+  errors << "#{label}: unexpected keys: #{extra.join(', ')}" if extra.any?
+
+  currency = fixture["currency"]
+  unless currency.is_a?(String) && /\A[A-Z]{3}\z/.match?(currency)
+    errors << "#{label}: currency must be a 3-letter ISO 4217 code"
+  end
+  unless non_negative_integer?(fixture["opening_minor_units"], money_bound)
+    errors << "#{label}: opening_minor_units must be an integer in 0..#{money_bound}"
+  end
+  reserve = fixture["reserve_minor_units"]
+  unless reserve.nil? || non_negative_integer?(reserve, money_bound)
+    errors << "#{label}: reserve_minor_units must be null or an integer in 0..#{money_bound}"
+  end
+
+  increments = fixture["increments"]
+  if !increments.is_a?(Array) || increments.empty?
+    errors << "#{label}: increments must be a non-empty array"
+  else
+    increments.each_with_index do |tier, index|
+      unless tier.is_a?(Hash)
+        errors << "#{label}: increments[#{index}] must be an object"
+        next
+      end
+      tier_missing = %w[from_minor_units amount_minor_units].reject { |key| tier.key?(key) }
+      errors << "#{label}: increments[#{index}] missing #{tier_missing.join(', ')}" if tier_missing.any?
+      tier_extra = tier.keys - %w[from_minor_units amount_minor_units]
+      errors << "#{label}: increments[#{index}] unexpected keys: #{tier_extra.join(', ')}" if tier_extra.any?
+      unless non_negative_integer?(tier["from_minor_units"], money_bound)
+        errors << "#{label}: increments[#{index}].from_minor_units must be an integer in 0..#{money_bound}"
+      end
+      unless positive_integer?(tier["amount_minor_units"], money_bound)
+        errors << "#{label}: increments[#{index}].amount_minor_units must be an integer in 1..#{money_bound}"
+      end
+    end
+  end
+
+  %w[opens_at closes_at].each do |field|
+    value = fixture[field]
+    unless value.is_a?(String) && timestamp_regex.match?(value)
+      errors << "#{label}: #{field} must be a valid RFC 3339 timestamp with UTC offset"
+    end
+  end
+
+  return unless fixture.key?("extension")
+
+  extension = fixture["extension"]
+  return if extension.nil?
+
+  unless extension.is_a?(Hash)
+    errors << "#{label}: extension must be null or an object"
+    return
+  end
+
+  ext_schema = timed_proxy_schema.dig("$defs", "extension")
+  ext_missing = ext_schema.fetch("required").reject { |key| extension.key?(key) }
+  errors << "#{label}: extension missing #{ext_missing.join(', ')}" if ext_missing.any?
+  ext_extra = extension.keys - ext_schema.fetch("properties").keys
+  errors << "#{label}: extension unexpected keys: #{ext_extra.join(', ')}" if ext_extra.any?
+  unless non_negative_integer?(extension["trigger_window_seconds"], money_bound)
+    errors << "#{label}: extension.trigger_window_seconds must be an integer in 0..#{money_bound}"
+  end
+  unless positive_integer?(extension["duration_seconds"], money_bound)
+    errors << "#{label}: extension.duration_seconds must be an integer in 1..#{money_bound}"
+  end
+  if extension.key?("extend_on_void") && ![true, false].include?(extension["extend_on_void"])
+    errors << "#{label}: extension.extend_on_void must be a boolean"
+  end
+end
+
 errors = []
 
-Dir[ROOT.join("{specification,conformance}/**/*.json")].sort.each do |path|
+json_paths = (
+  Dir[ROOT.join("{specification,conformance}/**/*.json")] +
+  Dir[ROOT.join("rfcs/proposals/flexible-live-scheduling/*.schema.json")]
+).uniq.sort
+json_paths.each do |path|
   JSON.parse(File.read(path))
 rescue JSON::ParserError => e
   errors << "#{relative(path)}: invalid JSON: #{e.message}"
@@ -110,12 +204,47 @@ asyncapi = YAML.safe_load_file(ROOT.join("specification/asyncapi.yaml"), aliases
 errors << "specification/asyncapi.yaml: expected AsyncAPI 3" unless asyncapi["asyncapi"]&.start_with?("3.")
 errors << "specification/asyncapi.yaml: channels must be an object" unless asyncapi["channels"].is_a?(Hash)
 
-schemas = Dir[ROOT.join("{specification,conformance}/**/*.schema.json")].sort
+# Version consistency across specification/VERSION, OpenAPI, AsyncAPI, and Ruby engine.
+version_file = ROOT.join("specification/VERSION")
+spec_version = version_file.file? ? version_file.read.strip : nil
+if spec_version.nil? || spec_version.empty?
+  errors << "specification/VERSION: missing or empty specification version"
+else
+  if openapi.dig("info", "version") != spec_version
+    errors << "specification/openapi.yaml: info.version (#{openapi.dig('info', 'version').inspect}) does not match specification/VERSION (#{spec_version.inspect})"
+  end
+  if asyncapi.dig("info", "version") != spec_version
+    errors << "specification/asyncapi.yaml: info.version (#{asyncapi.dig('info', 'version').inspect}) does not match specification/VERSION (#{spec_version.inspect})"
+  end
+  ruby_version_path = ROOT.join("ruby/engine/lib/rbbb/version.rb")
+  if !ruby_version_path.file?
+    errors << "ruby/engine/lib/rbbb/version.rb: missing engine version file"
+  else
+    ruby_spec_match = ruby_version_path.read.match(/SPECIFICATION_VERSION\s*=\s*"([^"]+)"/)
+    ruby_spec_version = ruby_spec_match && ruby_spec_match[1]
+    if ruby_spec_version != spec_version
+      errors << "ruby/engine/lib/rbbb/version.rb: SPECIFICATION_VERSION (#{ruby_spec_version.inspect}) does not match specification/VERSION (#{spec_version.inspect})"
+    end
+  end
+end
+
+schemas = (
+  Dir[ROOT.join("{specification,conformance}/**/*.schema.json")] +
+  Dir[ROOT.join("rfcs/proposals/flexible-live-scheduling/*.schema.json")]
+).uniq.sort
 schema_documents = {}
 schema_ids = {}
 schemas.each do |path_string|
   path = Pathname(path_string)
-  schema = JSON.parse(path.read)
+  begin
+    schema = JSON.parse(path.read)
+  rescue JSON::ParserError
+    next
+  end
+  unless schema.is_a?(Hash)
+    errors << "#{relative(path)}: JSON Schema root must be an object"
+    next
+  end
   schema_documents[path] = schema
   errors << "#{relative(path)}: missing $schema" unless schema.key?("$schema")
   errors << "#{relative(path)}: missing $id" unless schema.key?("$id")
@@ -173,6 +302,27 @@ documents_with_refs.each do |path, document|
   end
 end
 
+money_schema = schema_documents.fetch(ROOT.join("specification/common/money.schema.json"))
+money_bound = money_schema.dig("$defs", "minorUnits", "maximum")
+timestamp_schema = schema_documents.fetch(ROOT.join("specification/common/timestamp.schema.json"))
+timestamp_regex = Regexp.new(timestamp_schema.fetch("pattern").sub(/\A\^/) { "\\A" }.sub(/\$\z/) { "\\z" })
+timed_proxy_schema = schema_documents.fetch(ROOT.join("specification/configuration/timed-proxy.schema.json"))
+
+fixture_paths = Dir[ROOT.join("conformance/fixtures/*.yaml")].sort
+fixture_paths.each do |path|
+  fixture = YAML.safe_load_file(path, aliases: false)
+  validate_fixture(path, fixture, timed_proxy_schema, timestamp_regex, money_bound, errors)
+end
+
+scenario_schema = schema_documents.fetch(ROOT.join("conformance/schemas/scenario.schema.json"))
+scenario_required = scenario_schema.fetch("required")
+scenario_allowed = scenario_schema.fetch("properties").keys
+expected_required = scenario_schema.dig("properties", "expected", "required")
+expected_allowed = scenario_schema.dig("properties", "expected", "properties").keys
+rfc_pattern = Regexp.new(
+  scenario_schema.dig("properties", "rfcs", "items", "pattern").sub(/\A\^/) { "\\A" }.sub(/\$\z/) { "\\z" }
+)
+
 scenario_paths = Dir[ROOT.join("conformance/scenarios/**/*.yaml")].sort
 scenario_names = {}
 scenario_command_types = []
@@ -183,42 +333,92 @@ scenario_rejections = []
 
 scenario_paths.each do |path|
   scenario = YAML.safe_load_file(path, aliases: false)
-  required = %w[name specification_version rfcs configuration starting_state commands expected]
-  missing = required.reject { |key| scenario.key?(key) }
+  unless scenario.is_a?(Hash)
+    errors << "#{relative(path)}: scenario must be an object"
+    next
+  end
+
+  missing = scenario_required.reject { |key| scenario.key?(key) }
   errors << "#{relative(path)}: missing #{missing.join(', ')}" if missing.any?
+  extra = scenario.keys - scenario_allowed
+  errors << "#{relative(path)}: unexpected top-level keys: #{extra.join(', ')}" if extra.any?
 
   name = scenario["name"]
+  errors << "#{relative(path)}: name must be a non-empty string" unless name.is_a?(String) && !name.empty?
   if scenario_names.key?(name)
     errors << "#{relative(path)}: duplicate name also used by #{scenario_names[name]}"
   else
     scenario_names[name] = relative(path)
   end
 
-  fixture = scenario.dig("configuration", "fixture")
+  sv = scenario["specification_version"]
+  unless sv.is_a?(String) && !sv.empty?
+    errors << "#{relative(path)}: specification_version must be a non-empty string"
+  end
+
+  unless scenario["configuration"].is_a?(Hash)
+    errors << "#{relative(path)}: configuration must be an object"
+  end
+  unless scenario["starting_state"].is_a?(Hash)
+    errors << "#{relative(path)}: starting_state must be an object"
+  end
+  commands = scenario["commands"]
+  if !commands.is_a?(Array) || commands.empty? || !commands.all? { |cmd| cmd.is_a?(Hash) }
+    errors << "#{relative(path)}: commands must be a non-empty array of objects"
+  end
+
+  fixture = scenario.dig("configuration", "fixture") if scenario["configuration"].is_a?(Hash)
   fixture_path = ROOT.join("conformance/fixtures/#{fixture}.yaml") if fixture
   errors << "#{relative(path)}: unknown fixture #{fixture}" if fixture && !fixture_path.file?
 
-  Array(scenario["rfcs"]).each do |rfc|
-    matches = Dir[ROOT.join("rfcs/#{rfc}-*.md")]
-    errors << "#{relative(path)}: unknown RFC #{rfc}" if matches.empty?
+  rfcs = scenario["rfcs"]
+  if !rfcs.is_a?(Array) || rfcs.empty?
+    errors << "#{relative(path)}: rfcs must be a non-empty array"
+  else
+    rfcs.each do |rfc|
+      unless rfc.is_a?(String) && rfc_pattern.match?(rfc)
+        errors << "#{relative(path)}: invalid RFC identifier #{rfc.inspect} (expected 4-digit string)"
+        next
+      end
+      matches = Dir[ROOT.join("rfcs/#{rfc}-*.md")]
+      errors << "#{relative(path)}: unknown RFC #{rfc}" if matches.empty?
+    end
   end
 
-  expected = scenario["expected"] || {}
-  errors << "#{relative(path)}: expected.public_events must be an array" unless expected["public_events"].is_a?(Array)
+  expected = scenario["expected"]
+  unless expected.is_a?(Hash)
+    errors << "#{relative(path)}: expected must be an object"
+    next
+  end
+  expected_missing = expected_required.reject { |key| expected.key?(key) }
+  errors << "#{relative(path)}: expected missing #{expected_missing.join(', ')}" if expected_missing.any?
+  expected_extra = expected.keys - expected_allowed
+  errors << "#{relative(path)}: expected has unexpected keys: #{expected_extra.join(', ')}" if expected_extra.any?
+
+  if !expected["public_events"].is_a?(Array) || !expected["public_events"].all? { |item| item.is_a?(Hash) }
+    errors << "#{relative(path)}: expected.public_events must be an array of objects"
+  end
+  if expected.key?("privileged_events") &&
+      (!expected["privileged_events"].is_a?(Array) || !expected["privileged_events"].all? { |item| item.is_a?(Hash) })
+    errors << "#{relative(path)}: expected.privileged_events must be an array of objects"
+  end
+  if expected.key?("rejections") &&
+      (!expected["rejections"].is_a?(Array) || !expected["rejections"].all? { |item| item.is_a?(Hash) })
+    errors << "#{relative(path)}: expected.rejections must be an array of objects"
+  end
   errors << "#{relative(path)}: expected.final_state must be an object" unless expected["final_state"].is_a?(Hash)
 
-  forbidden_public_keys = /maximum|reserve_minor_units|operator_id|reason|bidder_id|leader_id|winner_id/
   Array(expected["public_events"]).each_with_index do |event, index|
-    leaked = deep_keys(event).grep(forbidden_public_keys).uniq
+    leaked = deep_keys(event).grep(FORBIDDEN_PUBLIC_KEYS).uniq
     next if leaked.empty?
 
     errors << "#{relative(path)}: public_events[#{index}] contains privileged keys: #{leaked.join(', ')}"
   end
 
-  scenario_command_types.concat(Array(scenario["commands"]).filter_map { |command| command["type"] })
-  scenario_public_event_types.concat(Array(expected["public_events"]).filter_map { |event| event["type"] })
-  scenario_privileged_event_types.concat(Array(expected["privileged_events"]).filter_map { |event| event["type"] })
-  scenario_rejection_reasons.concat(Array(expected["rejections"]).filter_map { |rejection| rejection["reason"] })
+  scenario_command_types.concat(Array(commands).filter_map { |command| command["type"] if command.is_a?(Hash) })
+  scenario_public_event_types.concat(Array(expected["public_events"]).filter_map { |event| event["type"] if event.is_a?(Hash) })
+  scenario_privileged_event_types.concat(Array(expected["privileged_events"]).filter_map { |event| event["type"] if event.is_a?(Hash) })
+  scenario_rejection_reasons.concat(Array(expected["rejections"]).filter_map { |rejection| rejection["reason"] if rejection.is_a?(Hash) })
   Array(expected["rejections"]).each_with_index do |rejection, index|
     scenario_rejections << [relative(path), index, rejection] if rejection.is_a?(Hash)
   end
@@ -305,14 +505,13 @@ scenario_rejections.each do |label, index, rejection|
   errors << "#{label}: rejections[#{index}] contains keys the rejection schema does not declare for #{rejection['reason']}: #{undeclared_keys.join(', ')}"
 end
 
-forbidden_contract_keys = /maximum|reserve_minor_units|operator_id|reason|bidder_id|leader_id|winner_id/
 {
   "specification/events/public-event.schema.json" => public_event_schema,
   "specification/state/bidding-unit.schema.json" => schema_documents.fetch(
     ROOT.join("specification/state/bidding-unit.schema.json")
   )
 }.each do |label, document|
-  leaked = property_names(document).grep(forbidden_contract_keys)
+  leaked = property_names(document).grep(FORBIDDEN_PUBLIC_KEYS)
   errors << "#{label}: public schema contains privileged properties: #{leaked.join(', ')}" if leaked.any?
 end
 
@@ -336,8 +535,6 @@ end
 # Cross-language determinism: every amount and timestamp must go through the
 # shared bounded definitions so no implementation can accept a value that
 # another cannot represent exactly.
-money_schema = schema_documents.fetch(ROOT.join("specification/common/money.schema.json"))
-money_bound = money_schema.dig("$defs", "minorUnits", "maximum")
 errors << "specification/common/money.schema.json: minorUnits must declare maximum" unless money_bound
 money_schema.fetch("$defs").each do |name, definition|
   next if definition["maximum"] == money_bound
@@ -414,4 +611,4 @@ if errors.any?
   exit 1
 end
 
-puts "Validated #{schemas.length} JSON Schemas, #{scenario_paths.length} conformance scenarios, and the OpenAPI/AsyncAPI documents."
+puts "Validated #{schemas.length} JSON Schemas, #{fixture_paths.length} conformance fixtures, #{scenario_paths.length} conformance scenarios, and the OpenAPI/AsyncAPI documents."

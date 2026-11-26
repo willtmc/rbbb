@@ -258,8 +258,11 @@ or reductions of their maximum, do not reset an individual or group closing
 clock, even when the public projection changes (for example, a raise that
 crosses the reserve and moves the price to it). This departs from RFC 0001,
 where any change to the public standing amount qualifies, and applies only
-under this capability. A reduction cannot go below the executed floor, so in
-practice it never changes the public result.
+under this capability. A reduction cannot go below the executed floor (so it
+never lowers the standing amount), though under RFC 0001 a leader reducing onto
+a tied executable rung takes later priority and can change the leader and
+standing public state; when a reduction changes no public result, it does not
+extend closing under either RFC 0001 or this capability.
 
 Every other accepted bidding command follows RFC 0001's qualifying rule. In
 particular, any accepted command that changes the leader is a qualifying bid,

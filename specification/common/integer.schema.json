@@ -3,7 +3,7 @@
   "$id": "https://github.com/willtmc/rbbb/specification/common/integer.schema.json",
   "title": "Bounded integer",
   "description": "Shared integer ranges for counters, versions, priorities, and durations. Every non-monetary integer property in the contract references one of the $defs below so all implementations share one interoperable range; monetary amounts use money.schema.json instead.",
-  "x-rbbb-status": "draft",
+  "x-rbbb-status": "experimental",
   "type": "integer",
   "minimum": 0,
   "maximum": 9007199254740991,
