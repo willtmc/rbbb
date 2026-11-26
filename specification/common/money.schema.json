@@ -3,7 +3,7 @@
   "$id": "https://github.com/willtmc/rbbb/specification/common/money.schema.json",
   "title": "Money",
   "description": "A reusable exact monetary amount for boundaries that are not already scoped to one currency. RFC 0001 bidding-unit commands use *_minor_units fields instead; every such field references the shared $defs below so all implementations share one integer range.",
-  "x-rbbb-status": "draft",
+  "x-rbbb-status": "experimental",
   "type": "object",
   "additionalProperties": false,
   "required": ["currency", "minor_units"],

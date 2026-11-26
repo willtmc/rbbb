@@ -56,7 +56,7 @@
       "additionalProperties": false,
       "required": ["closes_at"],
       "properties": {
-        "old_closes_at": {"oneOf": [{"type": "null"}, {"$ref": "../common/timestamp.schema.json"}]},
+        "old_closes_at": {"$ref": "../common/timestamp.schema.json"},
         "closes_at": {"$ref": "../common/timestamp.schema.json"}
       }
     },
