@@ -87,4 +87,153 @@ class LiveSchedulingCoordinatorTest < Minitest::Test
       end
     end
   end
+
+  def test_leader_changing_reduce_maximum_extension_replays_cleanly_through_projector
+    config = {"currency" => "USD", "opening_minor_units" => 100, "reserve_minor_units" => nil,
+      "increments" => [{"from_minor_units" => 0, "amount_minor_units" => 100}],
+      "opens_at" => "2031-04-17T12:00:00Z", "closes_at" => "2031-04-17T13:00:00Z",
+      "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}
+    configs = {"unit-a" => config, "unit-b" => config}
+    engine = RBBB::Engine.new(RBBB::Configuration.from_h(config.merge("extension" => nil)))
+    # bidder-a bids 500 (priority 1), bidder-b matches 500 (priority 2), bidder-a raises to 700 (priority 3).
+    # When bidder-a reduces back to 500 (priority 4), bidder-b wins the tie on earlier priority (2 < 4).
+    state_a = engine.initial_state
+    [
+      {"command_id" => "a1", "type" => "place_bid", "bidder_id" => "bidder-a", "maximum_minor_units" => 500, "effective_at" => "2031-04-17T12:10:00Z"},
+      {"command_id" => "b1", "type" => "place_bid", "bidder_id" => "bidder-b", "maximum_minor_units" => 500, "effective_at" => "2031-04-17T12:11:00Z"},
+      {"command_id" => "a2", "type" => "place_bid", "bidder_id" => "bidder-a", "maximum_minor_units" => 700, "effective_at" => "2031-04-17T12:12:00Z"}
+    ].each do |cmd|
+      state_a = engine.apply(state_a, engine.decide(state_a, cmd).events)
+    end
+    assert_equal "bidder-a", state_a.leader_id
+    assert_equal 500, state_a.standing_minor_units
+    snapshot = {
+      "schedule_revision" => 0,
+      "units" => {"unit-a" => state_a.to_h, "unit-b" => engine.initial_state.to_h},
+      "closing_sets" => [{"group_id" => "group-1", "member_unit_ids" => %w[unit-a unit-b],
+        "closes_at" => "2031-04-17T13:00:00Z", "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}]
+    }
+    coordinator = RBBB::LiveScheduling::Coordinator.new(auction_id: "auction-demo", configurations: configs,
+      snapshot: snapshot, policy: {"minimum_shortening_lead_seconds" => 60})
+    result = coordinator.bid(
+      unit_id: "unit-a",
+      command: {"type" => "reduce_maximum", "command_id" => "reduce-flip", "bidder_id" => "bidder-a", "maximum_minor_units" => 500},
+      effective_at: "2031-04-17T12:59:30Z",
+      commit_id: "commit-reduce-flip"
+    )
+    assert_nil result.rejection_reason
+    assert_equal "bidder-b", result.state["units"]["unit-a"]["leader_id"]
+    assert_equal "2031-04-17T13:01:30Z", result.state["units"]["unit-a"]["closes_at"]
+    assert_equal "2031-04-17T13:01:30Z", result.state["units"]["unit-b"]["closes_at"]
+
+    replayed = RBBB::LiveScheduling::Projector.apply(snapshot: snapshot, configurations: configs, records: result.records)
+    assert_equal normalize_times(result.state), normalize_times(replayed)
+  end
+
+  def test_projector_rejects_forged_and_out_of_window_bid_extensions
+    config = {"currency" => "USD", "opening_minor_units" => 100, "reserve_minor_units" => nil,
+      "increments" => [{"from_minor_units" => 0, "amount_minor_units" => 100}],
+      "opens_at" => "2031-04-17T12:00:00Z", "closes_at" => "2031-04-17T13:00:00Z",
+      "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}
+    configs = {"unit-a" => config}
+    empty = RBBB::State.empty(RBBB::Configuration.from_h(config)).to_h
+    snapshot = {
+      "schedule_revision" => 0,
+      "units" => {"unit-a" => empty},
+      "closing_sets" => [{"group_id" => nil, "member_unit_ids" => ["unit-a"],
+        "closes_at" => "2031-04-17T13:00:00Z", "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}]
+    }
+    coordinator = RBBB::LiveScheduling::Coordinator.new(auction_id: "auction-demo", configurations: configs,
+      snapshot: snapshot, policy: {"minimum_shortening_lead_seconds" => 60})
+
+    # 1. Forged extension on an out-of-window bid (at 12:30:00Z, trigger window is 60s before 13:00:00Z)
+    early = coordinator.bid(
+      unit_id: "unit-a",
+      command: {"type" => "place_bid", "command_id" => "early-bid", "bidder_id" => "bidder-a", "maximum_minor_units" => 500},
+      effective_at: "2031-04-17T12:30:00Z",
+      commit_id: "commit-early"
+    )
+    assert_nil early.rejection_reason
+    forged_records = RBBB::LiveScheduling.copy(early.records)
+    forged_close = "2031-04-17T13:05:00Z"
+    forged_records.each { |r| r["event"]["closes_at"] = forged_close if r["event"].key?("closes_at") }
+    forged_records << {"unit_id" => "unit-a", "event" => {"type" => "closing_time_changed",
+      "command_id" => "early-bid", "aggregate_version" => 1, "closes_at" => forged_close}}
+    forged_records << {"capability" => RBBB::LiveScheduling::CAPABILITY, "type" => "closing_configuration_changed",
+      "command_id" => "early-bid", "commit_id" => "commit-early", "auction_id" => "auction-demo",
+      "effective_at" => "2031-04-17T12:30:00Z", "visibility" => "public", "schedule_revision" => 1,
+      "unit_versions" => [{"unit_id" => "unit-a", "version" => 1}],
+      "resulting_closing_sets" => [{"group_id" => nil, "member_unit_ids" => ["unit-a"],
+        "closes_at" => forged_close, "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}],
+      "retired_group_ids" => []}
+    assert_raises(RBBB::InvalidState) do
+      RBBB::LiveScheduling::Projector.apply(snapshot: snapshot, configurations: configs, records: forged_records)
+    end
+
+    # 2. Forged duration on an in-window bid (should extend to 13:01:30Z, forged to 13:10:00Z)
+    in_window = coordinator.bid(
+      unit_id: "unit-a",
+      command: {"type" => "place_bid", "command_id" => "late-bid", "bidder_id" => "bidder-a", "maximum_minor_units" => 500},
+      effective_at: "2031-04-17T12:59:30Z",
+      commit_id: "commit-late"
+    )
+    assert_nil in_window.rejection_reason
+    tampered = RBBB::LiveScheduling.copy(in_window.records)
+    tampered.each do |record|
+      if record.key?("event")
+        record["event"]["closes_at"] = "2031-04-17T13:10:00Z" if record["event"].key?("closes_at")
+      elsif record["type"] == "closing_configuration_changed"
+        record["resulting_closing_sets"].first["closes_at"] = "2031-04-17T13:10:00Z"
+      end
+    end
+    assert_raises(RBBB::InvalidState) do
+      RBBB::LiveScheduling::Projector.apply(snapshot: snapshot, configurations: configs, records: tampered)
+    end
+  end
+
+  def test_projector_assigns_accurate_privileged_and_public_event_visibility
+    assert_equal :privileged, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "executed_amount_changed"})
+    assert_equal :privileged, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "notification_requested"})
+    assert_equal :privileged, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "bidding_closed", "positions" => {}})
+    assert_equal :privileged, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "closing_time_changed", "positions" => {}})
+    assert_equal :public, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "standing_bid_changed"})
+    assert_equal :public, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "reserve_status_changed"})
+    assert_equal :public, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "closing_time_changed"})
+    assert_equal :public, RBBB::LiveScheduling::Projector.send(:event_visibility, {"type" => "bidding_closed"})
+  end
+
+  def test_coordinator_close_rejects_invalid_effective_at_and_bid_guards_year_9999_overflow
+    config = {"currency" => "USD", "opening_minor_units" => 100, "reserve_minor_units" => nil,
+      "increments" => [{"from_minor_units" => 0, "amount_minor_units" => 100}],
+      "opens_at" => "9999-12-31T22:00:00Z", "closes_at" => "9999-12-31T23:59:59Z",
+      "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}
+    configs = {"unit-a" => config}
+    empty = RBBB::State.empty(RBBB::Configuration.from_h(config)).to_h
+    snapshot = {
+      "schedule_revision" => 0,
+      "units" => {"unit-a" => empty},
+      "closing_sets" => [{"group_id" => nil, "member_unit_ids" => ["unit-a"],
+        "closes_at" => "9999-12-31T23:59:59Z", "extension" => {"trigger_window_seconds" => 60, "duration_seconds" => 120}}]
+    }
+    coordinator = RBBB::LiveScheduling::Coordinator.new(auction_id: "auction-demo", configurations: configs,
+      snapshot: snapshot, policy: {"minimum_shortening_lead_seconds" => 60})
+
+    bad_close = coordinator.close(
+      unit_id: "unit-a",
+      command: {"type" => "close_bidding", "command_id" => "bad-close"},
+      effective_at: "not-a-timestamp",
+      commit_id: "commit-bad-close"
+    )
+    assert_equal "invalid_request", bad_close.rejection_reason
+    assert_empty bad_close.records
+
+    overflow_bid = coordinator.bid(
+      unit_id: "unit-a",
+      command: {"type" => "place_bid", "command_id" => "overflow-bid", "bidder_id" => "bidder-a", "maximum_minor_units" => 500},
+      effective_at: "9999-12-31T23:59:30Z",
+      commit_id: "commit-overflow"
+    )
+    assert_equal "invalid_closing_time", overflow_bid.rejection_reason
+    assert_empty overflow_bid.records
+  end
 end

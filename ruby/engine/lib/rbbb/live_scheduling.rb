@@ -21,7 +21,20 @@ module RBBB
     end
 
     def self.copy(value)
-      JSON.parse(JSON.generate(value))
+      case value
+      when Hash
+        result = {}
+        value.each { |k, v| result[k.is_a?(String) ? k : k.to_s] = copy(v) }
+        result
+      when Array
+        value.map { |item| copy(item) }
+      when String
+        value.dup
+      when Symbol
+        value.to_s
+      else
+        value
+      end
     end
 
     def self.time(value)

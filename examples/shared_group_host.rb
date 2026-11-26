@@ -101,22 +101,10 @@ module RBBBExamples
       @mutex.synchronize { public_units(@snapshot.states, @snapshot.clock) }
     end
 
-    private
-
-    # A durable adapter needs a database transaction, group-wide lock/CAS,
-    # and atomic receipt/event outbox writes in place of this publication.
-    def publish(candidate)
-      @snapshot = candidate
-    end
-
-    def synchronized_state(state, clock)
-      RBBB::State.from_h(state.to_h.merge("closes_at" => RBBB::Timestamp.dump(clock.closes_at)))
-    end
-
-    def public_units(states, clock)
-      states.to_h do |id, state|
-        [id, synchronized_state(state, clock).public_view.transform_values { |v| v.freeze }.freeze]
-      end.freeze
+    def public_snapshot
+      @mutex.synchronize do
+        {"clock" => @snapshot.clock.public_view, "units" => public_units(@snapshot.states, @snapshot.clock)}
+      end
     end
 
     def normalize_close_request(command_id, effective_at, revision)
@@ -142,6 +130,24 @@ module RBBBExamples
       end
       copied = values.to_h { |k, v| [k.dup.freeze, v.is_a?(String) ? v.dup.freeze : v] }.freeze
       {"unit_id" => unit_id.dup.freeze, "command" => copied, "expected_revision" => revision}.freeze
+    end
+
+    private
+
+    # A durable adapter needs a database transaction, group-wide lock/CAS,
+    # and atomic receipt/event outbox writes in place of this publication.
+    def publish(candidate)
+      @snapshot = candidate
+    end
+
+    def synchronized_state(state, clock)
+      RBBB::State.from_h(state.to_h.merge("closes_at" => RBBB::Timestamp.dump(clock.closes_at)))
+    end
+
+    def public_units(states, clock)
+      states.to_h do |id, state|
+        [id, synchronized_state(state, clock).public_view.transform_values { |v| v.freeze }.freeze]
+      end.freeze
     end
   end
 end

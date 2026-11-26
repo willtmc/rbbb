@@ -47,7 +47,7 @@ module RBBBExamples
         end
         # Hash ONLY this authorized payload, never privileged state for a public
         # response. Reauthorize every refetch; no shared cross-principal cache.
-        {"payload" => payload, "sha256" => Digest::SHA256.hexdigest(JSON.generate(payload))}
+        {"payload" => payload, "sha256" => Digest::SHA256.hexdigest(RBBB::LiveScheduling::Intent.canonical(payload))}
       end
     end
   end
