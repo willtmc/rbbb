@@ -40,7 +40,10 @@ license agreement.
 
 ## Development
 
-The Ruby reference engine currently supports Ruby 3.2 and newer.
+The Ruby reference engine currently supports Ruby 3.2 and newer. The `rbbb` gem
+itself has zero runtime dependencies; `bundle install` in `ruby/engine` installs
+`sqlite3` as a development dependency for running the durable host examples and
+their tests.
 
 ```sh
 cd ruby/engine

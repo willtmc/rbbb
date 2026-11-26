@@ -25,7 +25,7 @@ Gem::Specification.new do |spec|
     "documentation_uri" => "https://github.com/willtmc/rbbb/blob/#{release_tag}/ruby/engine/README.md",
     "homepage_uri" => spec.homepage,
     "rbbb_release_status" => RBBB::RELEASE_STATUS,
-    "rbbb_rfc" => "0001",
+    "rbbb_rfc" => "0001, 0002, 0003, 0004, 0005",
     "rbbb_specification_version" => RBBB::SPECIFICATION_VERSION,
     "rubygems_mfa_required" => "true",
     "source_code_uri" => "https://github.com/willtmc/rbbb/tree/#{release_tag}/ruby/engine"

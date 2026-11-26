@@ -35,8 +35,10 @@ Member-list and group-list order do not change the resulting schedule.
 The output is a plan only. It accepts no existing bidding state and performs no
 mutation, registration, live shortening, soft-close extension or group close.
 Hosts must not apply it over an active auction as a substitute for the atomic
-scheduling coordinator accepted in RFC 0004 (not yet implemented). A planned group does not give RFC 0001 engines
-linked soft-close capability.
+scheduling coordinator accepted in [RFC 0004](0004-flexible-live-scheduling.md)
+(reference implementation complete in source, unreleased; see
+[docs/live-scheduling-implementation.md](../docs/live-scheduling-implementation.md)).
+A planned group does not give RFC 0001 engines linked soft-close capability.
 
 ## Validation and compatibility
 

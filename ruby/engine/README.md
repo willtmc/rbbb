@@ -179,10 +179,12 @@ crash/restore and snapshot recovery cases execute in the test suite. See the
 [implementation, acceptance and migration guide](../../docs/live-scheduling-implementation.md)
 for precise API and evidence. Deployment certification remains separate.
 
-The published `0.1.0.pre.3` package does not contain this coordinator. The source
-version constant has not been bumped or released: pin a reviewed source commit
-for evaluation, or use a separately approved future prerelease. No live bidding
-or capability-advertisement permission follows from passing the reference suite.
+The published `0.1.0.pre.3` RubyGems prerelease does not contain this
+coordinator. Source currently carries `RBBB::VERSION = "0.2.0.pre.1"`
+(`SPECIFICATION_VERSION = "0.2.0-draft"`), which has not yet been published:
+pin a reviewed source commit for evaluation, or wait for a separately approved
+prerelease. No live bidding or capability-advertisement permission follows from
+passing the reference suite.
 
 ## Install the evaluation gem
 
@@ -221,6 +223,10 @@ specification version, and release status as `RBBB::VERSION`,
 not, by itself, a production-readiness or compatibility claim.
 
 ## Development
+
+The `rbbb` gem itself has zero runtime dependencies. Running `bundle install`
+installs `sqlite3` as a development dependency for running the durable host
+examples and their tests.
 
 ```sh
 bundle install

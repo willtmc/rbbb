@@ -44,16 +44,25 @@ Quantity, choice, multi-parcel bidding, additional
 auctioneer overrides, and other formats remain out of scope until their
 semantics are specified and tested.
 
-[RFC 0004: Flexible live scheduling and closing groups](rfcs/0004-flexible-live-scheduling.md)
-was accepted on 2026-09-24: mutable group membership and explicit earlier/later
-deadlines during bidding, with atomic ordering, auditable operator actions, a
-host-set minimum shortening lead, and leader-change extensions. The bounded
-reference coordinator and its durable host/snapshot recovery examples are now
-implemented; see the [acceptance and integration evidence](docs/live-scheduling-implementation.md).
-Deployment certification and a separately approved release remain future work.
-The baseline engine's behavior is unchanged and no service capability is advertised.
+Optional closing-schedule extensions are accepted and implemented in source
+(unreleased):
 
-An optional rule that realigns a proxy-clipped short increment to the regular
-increment grid is explicitly deferred. The v0.1 baseline permits short
-increments and calculates the next required amount from the resulting standing
-amount.
+- [RFC 0002: Initial closing schedule planning](rfcs/0002-initial-closing-schedules.md)
+  (minute batches and nonconsecutive initial group planning);
+- [RFC 0003: Fixed-membership shared closing clock](rfcs/0003-shared-closing-clock.md)
+  (shared quiet-period clock component for fixed groups); and
+- [RFC 0004: Flexible live scheduling and closing groups](rfcs/0004-flexible-live-scheduling.md),
+  accepted on 2026-09-24 (mutable group membership and explicit earlier/later
+  deadlines during bidding, with atomic ordering, auditable operator actions, a
+  host-set minimum shortening lead, and leader-change extensions). The bounded
+  reference coordinator and its durable host/snapshot recovery examples are
+  implemented; see the [acceptance and integration evidence](docs/live-scheduling-implementation.md).
+  Deployment certification and a separately approved release remain future work.
+  The baseline engine's behavior is unchanged and no service capability is advertised.
+
+[RFC 0005: Fixed bid ladder with arbitrary maximum authority](rfcs/0005-fixed-bid-ladder.md)
+was accepted on 2026-10-23 (`0.2.0-draft`, implemented in source), superseding
+the v0.1 short-increment and raw-maximum tie rules. All executed bids now follow
+the fixed published ladder with no cut bids, while odd entered maxima retain
+their full authorization and emit a private nonblocking notice. The v0.1
+baseline remains pinned for historical auctions and replays.

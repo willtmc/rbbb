@@ -88,8 +88,21 @@ requires an RFC, schemas, conformance scenarios, and implementation support.
 
 ## Accepted and deferred behavior
 
-RFC 0001 accepts normative rules for timed online proxy bidding, including
-opening amounts, equal maxima, increment boundaries, reserves, extension
-timing, proxy reduction, and constrained operator actions. Quantity, choice,
-linked closing groups, multi-parcel allocation, outcry, and hybrid auctions
-remain deferred and must not be inferred from another auction system.
+[RFC 0001](../rfcs/0001-timed-online-proxy-bidding.md) accepts normative rules
+for timed online proxy bidding, including opening amounts, increment boundaries,
+reserves, extension timing, proxy reduction, and constrained operator actions.
+[RFC 0005](../rfcs/0005-fixed-bid-ladder.md) (`0.2.0-draft`) supersedes RFC
+0001's short-increment pricing and raw-maximum tie rules with fixed published
+ladder execution, arbitrary entered maxima, no cut bids, and private bidder
+notices.
+
+Optional closing-schedule additions are accepted and implemented in source
+(unreleased): [RFC 0002](../rfcs/0002-initial-closing-schedules.md) (initial
+closing schedule planning), [RFC 0003](../rfcs/0003-shared-closing-clock.md)
+(fixed-membership shared closing clock), and
+[RFC 0004](../rfcs/0004-flexible-live-scheduling.md) (flexible live scheduling
+and linked closing groups; see
+[live-scheduling-implementation.md](live-scheduling-implementation.md)).
+
+Quantity, choice, multi-parcel allocation, outcry, and hybrid auctions remain
+deferred and must not be inferred from another auction system.
