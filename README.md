@@ -34,7 +34,7 @@ application's code.
 specification/   Language-neutral concepts, schemas, and API contracts
 conformance/     Portable behavior scenarios for every compliant engine
 ruby/engine/     Pure-Ruby reference implementation
-ruby/server/     Future deployable reference service
+examples/        Synthetic host, admission, reader, and consumer examples
 rfcs/            Proposed changes to normative auction behavior
 docs/            Architecture, terminology, and design decisions
 ```
@@ -88,6 +88,10 @@ bundle exec rake package:verify
 gem build rbbb.gemspec
 gem install ./rbbb-0.2.0.pre.1.gem
 ```
+
+The `rbbb` gem itself has zero runtime dependencies. Running `bundle install`
+in `ruby/engine` installs `sqlite3` as a development dependency so you can run
+the durable host examples and their tests.
 
 This artifact is for evaluation and historical replay only. It is not a hosted
 service and must not be used to accept or resolve live bids. See the

@@ -1,16 +1,5 @@
 # Changelog
 
-## 0.2.0.pre.1 — fixed ladder evaluation
-
-Incompatible specification 0.2.0-draft, accepted in RFC 0005 on 2026-10-23:
-fixed ladder execution, arbitrary entered maxima, no cut bids, and private
-nonblocking bidder notices. Unused remainders affect neither price nor priority.
-Reserves execute at the first eligible rung, and corrections replay identical
-rules. Existing post-close and operator authorization boundaries remain intact.
-Positions now carry executable maximum separately from entered authority.
-Preserve 0.1 snapshots and the pinned baseline; no live migration is provided.
-
-
 All notable changes will be documented here.
 
 The project intends to follow Semantic Versioning once it begins publishing
@@ -18,54 +7,60 @@ versioned artifacts.
 
 ## Unreleased
 
-- Fix operator void reconstruction returning a `bid_voided` event that `apply`
-  refused. A later bid that falls below its bidder's executed amount in the
-  reconstructed order now has no effect, as a reduction below it already had,
-  so executed amounts stay within executable maxima. Record the maintainer
-  decision of 2026-11-10 in RFC 0001: such a void can leave another bidder
-  executed above the maximum they have on file, the engine allows it, and hosts
-  warn the operator; the contract explains how a host derives the warning from
-  the prior state and the `bid_voided` positions (no new field). Adds scenarios
-  041 and 042 and a seeded property test with an exhaustive short-history
-  observation. For rare histories that `apply` already accepted before this
-  fix, the stored priority numbers after a void now differ, and so can the tie
-  order, because a bid below the replayed executed amount no longer takes
-  effect. The leader or the price can also differ from the previous release
-  when a bidder's most recent bid is voided, in histories with three or more
-  bidders in which bidders had lowered their maximums; the maintainer chose the
-  new result (RFC 0001 amendment, second ruling of 2026-11-10). Adds scenario
-  043 and two named regressions for it.
+Source targets `0.2.0.pre.1` (specification `0.2.0-draft`, incompatible with
+`0.1.0-draft`). No `0.2.0.pre.1` package has been published yet; `0.1.0.pre.3`
+remains the latest published RubyGems prerelease.
 
-- Clarify bidder revocation versus audited operator correction and add trusted
-  admission regressions: executed competition remains binding, operator identity
-  cannot be spoofed, corrections require reasons, and post-close voids remain
-  rejected. Historical partial removals must not imply full authorization voids.
-
+- Add the RFC 0002 initial closing schedule planner (`#36`): minute batches,
+  arbitrary group membership, latest-member defaults, and explicit initial
+  overrides. This does not add live group coordination or change baseline bids.
+- Add the RFC 0003 fixed-membership shared closing-clock component (`#37`) and
+  process-local / SQLite durable shared-group host examples with retry receipts
+  and atomic group closing (`#38`, `#39`, `#40`). New qualifying bids extend
+  all members; leader proxy adjustments do not.
+- Accept RFC 0004 (`#43`) and complete the optional linked soft-close reference
+  coordinator (`#47`): live group/schedule edits, standalone registration,
+  independent linked bidding and atomic closing, durable SQLite
+  ordering/receipts/outbox, trusted admission, authorized snapshots, and atomic
+  snapshot-first recovery. Reject wrong-route commands in pure scheduling
+  entrypoints and refuse missing, reordered, or conflicting native records
+  during complete-commit replay. Adds behavioral, resource, process-race,
+  crash/restore, and installed-package coverage. Source-only evaluation work,
+  not a package release or live deployment.
 - Preserve competitive standing price when the leader raises a hidden maximum,
-  including ordered reconstruction after a void. Retain reserve pressure and
-  exact-maximum tie priority when reducing back to the executed floor. Add seven
-  synthetic regression scenarios, clarify RFC 0001, and retain the post-close
-  correction boundary. This source change is not a published package release.
-
-- Complete the optional RFC 0004 linked soft-close reference coordinator:
-  live group/schedule edits, standalone registration, independent linked bidding
-  and atomic closing, durable SQLite ordering/receipts/outbox, trusted admission,
-  authorized snapshots and atomic snapshot-first recovery. Add full behavioral,
-  resource, process-race/crash/restore and installed-package coverage.
-  Baseline RFC 0001 semantics and published capabilities remain unchanged.
-  This is source-only evaluation work, not a package release or live deployment.
-- Reject wrong-route commands in pure scheduling entrypoints and refuse missing,
-  reordered or conflicting native records during complete-commit replay.
-
-- Add the fixed-membership shared closing-clock component. New qualifying bids
-  extend all members; proxy adjustments do not. Atomic host integration remains
-  separate, and baseline per-unit bidding semantics are unchanged.
-
-
-- Add the RFC 0002 initial closing schedule planner: minute batches, arbitrary
-  group membership, latest-member defaults and explicit initial overrides.
-  This does not add live group coordination or change baseline bids.
-
+  including ordered reconstruction after a void (`#50`). Retain reserve
+  pressure and exact-maximum tie priority when reducing back to the executed
+  floor, add seven synthetic regression scenarios, clarify RFC 0001, and retain
+  the post-close correction boundary.
+- Clarify bidder revocation versus audited operator correction and add trusted
+  admission regressions (`#51`): executed competition remains binding, operator
+  identity cannot be spoofed, corrections require reasons, and post-close voids
+  remain rejected. Historical partial removals must not imply full
+  authorization voids.
+- **Breaking (`0.2.0-draft`, RFC 0005, accepted 2026-10-23):** execute maxima
+  on a fixed bid ladder (`#52`). Bidders may enter arbitrary maxima, but only
+  published ladder rungs execute; there are no cut bids. Adds private
+  nonblocking `maximum_not_fully_executable` bidder notices; unused remainders
+  affect neither price nor priority. Reserves execute at the first eligible
+  rung, positions carry executable maximum separately from entered authority,
+  and corrections replay identical rules. Preserve 0.1 snapshots and the pinned
+  baseline; no live migration is provided.
+- Fix operator void reconstruction returning a `bid_voided` event that `apply`
+  refused (`#57`). A later bid that falls below its bidder's executed amount in
+  the reconstructed order now has no effect, as a reduction below it already
+  had, so executed amounts stay within executable maxima. Records the
+  2026-11-10 maintainer rulings in RFC 0001 (including host-derived operator
+  warnings when a void leaves another bidder executed above their on-file
+  maximum, and priority/leader replay semantics for multi-bidder histories with
+  maximum reductions) and adds scenarios 041–043 plus a seeded property test
+  and exhaustive short-history check.
+- Add opt-in `extend_on_void` soft-close configuration (`#59`): when enabled,
+  an audited pre-close void that changes the leader or standing price within
+  the trigger window extends closing time, backed by fixture
+  `usd-soft-close-extend-on-void` and scenario 044.
+- Track durable public result delivery acknowledgments (`#41`): add restart-safe
+  outbox stream identity and per-consumer delivery cursors in the SQLite
+  shared-group host example for receiver deduplication.
 
 ## 0.1.0.pre.3 — 2026-09-02
 

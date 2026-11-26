@@ -5,10 +5,31 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 permissions:
   contents: read
 
 jobs:
+  documents-and-examples:
+    name: documents-and-examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
+        with:
+          ruby-version: "3.4"
+      - name: Validate specification documents
+        run: ruby scripts/validate_documents.rb
+      - name: Run fixed bid ladder example
+        run: ruby -Iruby/engine/lib examples/fixed_bid_ladder.rb
+
   test:
     name: Ruby ${{ matrix.ruby }}
     runs-on: ubuntu-latest
@@ -19,14 +40,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Ruby
-        uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # pinned 2026-09-01
+        uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
           working-directory: ruby/engine
-      - name: Validate specification documents
-        run: ruby scripts/validate_documents.rb
       - name: Test and package reference engine
         working-directory: ruby/engine
         run: bundle exec rake
