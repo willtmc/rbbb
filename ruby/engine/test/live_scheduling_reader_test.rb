@@ -49,7 +49,7 @@ class LiveSchedulingReaderTest < Minitest::Test
     expected = @host.snapshot.fetch("units").reject { |id, _| id == @hidden }.transform_values { |unit| RBBB::State.from_h(unit).public_view }
     assert_equal expected, payload.fetch("snapshot").fetch("units")
     refute payload.fetch("snapshot").key?("closing_sets")
-    assert_equal Digest::SHA256.hexdigest(JSON.generate(payload)), result.fetch("sha256")
+    assert_equal Digest::SHA256.hexdigest(RBBB::LiveScheduling::Intent.canonical(payload)), result.fetch("sha256")
     assert_equal "tenant-demo", @scope[:tenant_id]
     assert_equal "auction-demo", @scope[:auction_id]
     assert_equal "reader-demo", @scope[:principal_id]

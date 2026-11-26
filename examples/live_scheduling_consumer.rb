@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "sqlite3"
+require_relative "support/sqlite_store"
 require_relative "live_scheduling_reader"
 
 module RBBBExamples
@@ -8,13 +8,15 @@ module RBBBExamples
   # The fetch callback MUST authenticate/authorize each call and return only its
   # authorized projection. A digest is integrity bookkeeping, not authentication.
   class LiveSchedulingConsumer
+    include SqliteStore
+
     class InvalidCheckpoint < StandardError; end
 
     def initialize(path:, tenant_id:, auction_id:, visibility:, fetch:)
       raise ArgumentError, "unsupported visibility" unless %w[public privileged].include?(visibility)
-      @path, @tenant, @auction, @visibility, @fetch = path, tenant_id, auction_id, visibility, fetch
-      File.open(path, File::RDWR | File::CREAT, 0o600) {} unless File.exist?(path)
-      File.chmod(0o600, path)
+      @path = File.expand_path(path)
+      @tenant, @auction, @visibility, @fetch = tenant_id, auction_id, visibility, fetch
+      secure_file!
       transaction do |db|
         db.execute("CREATE TABLE IF NOT EXISTS installation (slot INTEGER PRIMARY KEY CHECK(slot = 1), document TEXT NOT NULL)")
       end
@@ -63,24 +65,14 @@ module RBBBExamples
           payload["decision_sequence"].is_a?(Integer) && payload["decision_sequence"] >= 0 && payload["snapshot"].is_a?(Hash)
         raise InvalidCheckpoint, "invalid scope or checkpoint"
       end
-      unless result["sha256"] == Digest::SHA256.hexdigest(JSON.generate(payload))
+      expected_digest = begin
+        Digest::SHA256.hexdigest(RBBB::LiveScheduling::Intent.canonical(payload))
+      rescue RBBB::LiveScheduling::Intent::Invalid
         raise InvalidCheckpoint, "invalid digest"
       end
-    end
-
-    def transaction
-      db = SQLite3::Database.new(@path)
-      db.busy_timeout = 5000
-      db.execute("PRAGMA synchronous = FULL")
-      db.execute("BEGIN IMMEDIATE")
-      value = yield db
-      db.execute("COMMIT")
-      value
-    rescue Exception
-      db&.execute("ROLLBACK") if db&.transaction_active?
-      raise
-    ensure
-      db&.close
+      unless result["sha256"] == expected_digest
+        raise InvalidCheckpoint, "invalid digest"
+      end
     end
 
     # Fault hooks for synthetic tests; no external effects.

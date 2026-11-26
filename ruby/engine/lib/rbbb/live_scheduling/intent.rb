@@ -43,7 +43,7 @@ module RBBB
         config = value["configuration"]
         object(config, %w[currency opening_minor_units reserve_minor_units increments opens_at closes_at extension])
         array(config["increments"], minimum: 1).each { |tier| object(tier, %w[from_minor_units amount_minor_units]) }
-        object(config["extension"], %w[trigger_window_seconds duration_seconds]) unless config["extension"].nil?
+        validate_registration_extension(config["extension"]) unless config["extension"].nil?
         Configuration.from_h(config)
         canonical(value) # Reject invalid text and unsupported/unsafe JSON values.
         normalized = LiveScheduling.copy(value)
@@ -83,6 +83,9 @@ module RBBB
         raise Invalid, "ungrouped set needs one unit" if set["group_id"].nil? && ids.size != 1
         extension = set["extension"]
         unless extension.nil?
+          if extension.is_a?(Hash) && extension["extend_on_void"] == true
+            raise Invalid, "extend_on_void is not supported for linked live scheduling"
+          end
           object(extension, %w[trigger_window_seconds duration_seconds])
           revision(extension["trigger_window_seconds"])
           revision(extension["duration_seconds"])
@@ -91,6 +94,22 @@ module RBBB
         at = LiveScheduling.time(set["closes_at"])
         set.merge("member_unit_ids" => ids.sort, "closes_at" => at.utc.iso8601(3))
       end
+
+      def validate_registration_extension(extension)
+        raise Invalid, "invalid object properties" unless extension.is_a?(Hash)
+        keys = extension.keys.sort
+        unless keys == %w[duration_seconds trigger_window_seconds] ||
+            keys == %w[duration_seconds extend_on_void trigger_window_seconds]
+          raise Invalid, "invalid object properties"
+        end
+        if extension.key?("extend_on_void")
+          if extension["extend_on_void"] == true
+            raise Invalid, "extend_on_void is not supported for linked live scheduling"
+          end
+          raise Invalid, "invalid extend_on_void" unless extension["extend_on_void"] == false
+        end
+      end
+      private_class_method :validate_registration_extension
 
       def fingerprint(principal, intent)
         identifier(principal)

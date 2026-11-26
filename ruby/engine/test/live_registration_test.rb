@@ -115,4 +115,34 @@ class LiveRegistrationTest < Minitest::Test
     malformed["configuration"]["opens_at"] = malformed["configuration"]["closes_at"]
     assert_raises(RBBB::LiveScheduling::Intent::Invalid) { register(malformed) }
   end
+
+  def test_registration_accepts_extend_on_void_false_and_rejects_true
+    with_false = Marshal.load(Marshal.dump(@intent))
+    with_false["configuration"]["extension"]["extend_on_void"] = false
+    normalized = RBBB::LiveScheduling::Intent.normalize_registration(with_false)
+    assert_equal false, normalized["configuration"]["extension"]["extend_on_void"]
+
+    result = register(with_false)
+    assert_nil result.rejection_reason
+    assert_equal({"trigger_window_seconds" => 60, "duration_seconds" => 120},
+      result.state["closing_sets"].first["extension"])
+    assert_equal false, result.configurations["unit-new"]["extension"]["extend_on_void"]
+
+    reloaded = coordinator(result.state, result.configurations)
+    assert_equal result.state["units"], reloaded.snapshot["units"]
+    assert_equal result.state["schedule_revision"], reloaded.snapshot["schedule_revision"]
+    replayed = RBBB::LiveScheduling::Projector.apply_commit(
+      snapshot: @snapshot, configurations: {}, records: result.records,
+      policy: {"minimum_shortening_lead_seconds" => 60}, auction_id: "auction-one"
+    )
+    assert_equal result.state, replayed["snapshot"]
+    assert_equal result.configurations, replayed["configurations"]
+
+    with_true = Marshal.load(Marshal.dump(@intent))
+    with_true["configuration"]["extension"]["extend_on_void"] = true
+    error = assert_raises(RBBB::LiveScheduling::Intent::Invalid) do
+      RBBB::LiveScheduling::Intent.normalize_registration(with_true)
+    end
+    assert_equal "extend_on_void is not supported for linked live scheduling", error.message
+  end
 end

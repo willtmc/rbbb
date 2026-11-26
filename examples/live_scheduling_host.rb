@@ -2,9 +2,9 @@
 
 require "json"
 require "securerandom"
-require "sqlite3"
 require "rbbb"
 require "rbbb/live_scheduling"
+require_relative "support/sqlite_store"
 
 module RBBBExamples
   # Embedded SQLite reference host, not an HTTP endpoint. Principal/permissions
@@ -12,6 +12,8 @@ module RBBBExamples
   # writes across connections/processes (stronger than an auction-row lock).
   # Snapshot/receipts are privileged; never expose them directly to a bidder.
   class LiveSchedulingHost
+    include SqliteStore
+
     class ResponseLost < StandardError; end
     attr_reader :auction_id, :tenant_id
 
@@ -68,7 +70,7 @@ module RBBBExamples
       raise ArgumentError, "server-assigned fields" if command.key?("effective_at") || command.key?("bidder_id")
       RBBB::LiveScheduling::Intent.identifier(unit_id)
       RBBB::LiveScheduling::Intent.identifier(principal_id)
-      allowed = %w[type command_id maximum_minor_units bid_id]
+      allowed = %w[type command_id maximum_minor_units bid_id expected_version]
       raise ArgumentError, "unknown bid property" unless (command.keys - allowed).empty?
       raise ArgumentError, "unsupported bid operation" unless %w[place_bid reduce_maximum].include?(command["type"])
       RBBB::LiveScheduling::Intent.identifier(command["command_id"])
@@ -88,7 +90,7 @@ module RBBBExamples
     def change_reserve(unit_id:, command:, principal_id:, permissions:)
       RBBB::LiveScheduling::Intent.identifier(unit_id)
       RBBB::LiveScheduling::Intent.identifier(principal_id)
-      allowed = %w[type command_id reserve_minor_units reason notification_policy]
+      allowed = %w[type command_id reserve_minor_units reason]
       raise ArgumentError, "unknown reserve property" unless (command.keys - allowed).empty?
       raise ArgumentError, "unsupported reserve operation" unless command["type"] == "change_reserve"
       RBBB::LiveScheduling::Intent.identifier(command["command_id"])
@@ -175,14 +177,17 @@ module RBBBExamples
         observed = RBBB::Timestamp.parse(@clock.call)
         at = last_time ? [observed, RBBB::Timestamp.parse(last_time)].max : observed
         clock_rollback(observed, at) if at > observed
+        retired_ids = JSON.parse(retired_json)
         coordinator = RBBB::LiveScheduling::Coordinator.new(auction_id: auction_id,
           configurations: document["configurations"], snapshot: state, policy: document["policy"],
-          profile: document["profile"], retired_group_ids: JSON.parse(retired_json))
+          profile: document["profile"], retired_group_ids: retired_ids)
         commit_id = next_commit_id
         result = if sealed == 1
-          coordinator.send(:reject, "auction_sealed")
+          RBBB::LiveScheduling::Coordinator::Result.new(state: coordinator.snapshot, records: [],
+            rejection_reason: "auction_sealed", retired_group_ids: retired_ids)
         elsif !permissions.include?(required)
-          coordinator.send(:reject, "not_authorized")
+          RBBB::LiveScheduling::Coordinator::Result.new(state: coordinator.snapshot, records: [],
+            rejection_reason: "not_authorized", retired_group_ids: retired_ids)
         else
           case request["kind"]
           when "register"
@@ -248,12 +253,25 @@ module RBBBExamples
       # Successful no-event operations can have a receipt without a journal batch.
       journaled = accepted.reject { |response| response.fetch("records").empty? }
       valid &&= commits.size == journaled.size
-      valid &&= commits.all? do |commit_id, encoded|
-        matching = journaled.select { |response| response["commit_id"] == commit_id }
-        records = JSON.parse(encoded)
-        outbox = db.execute("SELECT record_index, record FROM outbox WHERE commit_id = ? ORDER BY record_index", [commit_id])
-        matching.size == 1 && matching.first.fetch("records") == records &&
-          outbox == records.each_with_index.map { |record, index| [index, JSON.generate(record)] }
+      if valid && !commits.empty?
+        journaled_by_commit = Hash.new { |hash, key| hash[key] = [] }
+        journaled.each { |response| journaled_by_commit[response["commit_id"]] << response }
+        outbox_by_commit = Hash.new { |hash, key| hash[key] = [] }
+        db.execute(
+          "SELECT o.commit_id, o.record_index, o.record FROM outbox o " \
+          "INNER JOIN commits c ON c.commit_id = o.commit_id " \
+          "WHERE c.tenant = ? AND c.auction = ? ORDER BY o.commit_id, o.record_index",
+          [tenant_id, auction_id]
+        ).each do |commit_id, record_index, record|
+          outbox_by_commit[commit_id] << [record_index, record]
+        end
+        valid &&= commits.all? do |commit_id, encoded|
+          matching = journaled_by_commit[commit_id]
+          records = JSON.parse(encoded)
+          outbox = outbox_by_commit[commit_id]
+          matching.size == 1 && matching.first.fetch("records") == records &&
+            outbox == records.each_with_index.map { |record, index| [index, JSON.generate(record)] }
+        end
       end
       raise RBBB::InvalidState, "incomplete retained registry or history" unless valid
     rescue JSON::ParserError, KeyError, TypeError
@@ -266,28 +284,6 @@ module RBBBExamples
 
     def row(db)
       db.get_first_row("SELECT configuration, state, retired, sealed, last_time, sequence FROM auctions WHERE tenant = ? AND auction = ?", [tenant_id, auction_id])
-    end
-
-    def secure_file!
-      File.open(@path, File::WRONLY | File::CREAT | File::EXCL, 0o600) { |_| }
-    rescue Errno::EEXIST
-      stat = File.lstat(@path)
-      raise ArgumentError, "database must be an owner-only regular file" unless stat.file? && stat.uid == Process.uid && (stat.mode & 0o077).zero?
-    end
-
-    def transaction
-      db = SQLite3::Database.new(@path)
-      db.busy_timeout = 5000
-      db.execute("PRAGMA synchronous = FULL")
-      db.execute("BEGIN IMMEDIATE")
-      result = yield db
-      db.execute("COMMIT")
-      result
-    rescue Exception
-      db.execute("ROLLBACK") if db&.transaction_active?
-      raise
-    ensure
-      db&.close
     end
 
     def before_commit(_db); end

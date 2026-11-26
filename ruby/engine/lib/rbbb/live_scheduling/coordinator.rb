@@ -25,10 +25,17 @@ module RBBB
         @snapshot = LiveScheduling.copy(snapshot)
         @original_closing_sets = LiveScheduling.copy(snapshot.fetch("closing_sets"))
         @retired_group_ids = retired_group_ids.dup
+        @retired_group_set = @retired_group_ids.to_h { |id| [id, true] }
         configurations.each_value { |config| Configuration.from_h(config) }
         snapshot.fetch("units").each_value { |unit| State.from_h(unit) }
         @snapshot["closing_sets"] = LiveScheduling.sort_sets(snapshot.fetch("closing_sets").map { |set| Intent.normalize_set(set) })
         validate_snapshot!
+        @unit_to_set = {}
+        @group_to_set = {}
+        @snapshot["closing_sets"].each do |set|
+          @group_to_set[set["group_id"]] = set if set["group_id"]
+          set["member_unit_ids"].each { |id| @unit_to_set[id] = set }
+        end
       end
 
       def register_unit(intent:, principal_id:, permissions:, effective_at:, commit_id:)
@@ -49,7 +56,8 @@ module RBBB
         empty = State.empty(Configuration.from_h(config)).to_h
         state["units"][id] = empty
         state["schedule_revision"] += 1
-        set = {"group_id" => nil, "member_unit_ids" => [id], "closes_at" => config["closes_at"], "extension" => config["extension"]}
+        set_extension = config["extension"]&.slice("trigger_window_seconds", "duration_seconds")
+        set = {"group_id" => nil, "member_unit_ids" => [id], "closes_at" => config["closes_at"], "extension" => set_extension}
         state["closing_sets"] = LiveScheduling.sort_sets(state["closing_sets"] + [set])
         creation = {"capability" => CAPABILITY, "type" => "bidding_unit_registered", "visibility" => "privileged",
           "command_id" => intent["command_id"], "commit_id" => commit_id, "auction_id" => auction_id,
@@ -72,7 +80,7 @@ module RBBB
         versions = intent["expected_units"].to_h { |unit| unit.values_at("unit_id", "version") }
         return reject("stale_revision") if versions.any? { |id, version| snapshot["units"].key?(id) && snapshot["units"][id]["version"] != version }
         return reject("duplicate_membership") unless requested.uniq.size == requested.size
-        return reject("conflicting_group_definition") if sets.any? { |set| set["group_id"] && @retired_group_ids.include?(set["group_id"]) }
+        return reject("conflicting_group_definition") if sets.any? { |set| set["group_id"] && @retired_group_set.key?(set["group_id"]) }
         return reject("incomplete_affected_set") unless requested.sort == affected.sort && versions.keys.sort == affected.sort && affected.all? { |id| snapshot["units"].key?(id) }
         previous = affected_sets(affected)
         old_groups = previous.map { |set| set["group_id"] }.compact
@@ -95,13 +103,18 @@ module RBBB
         return reject("version_exhausted") if exhausted?(affected)
 
         state = LiveScheduling.copy(snapshot)
-        affected.each do |id|
-          set = sets.find { |item| item["member_unit_ids"].include?(id) }
-          state["units"][id].merge!("version" => state["units"][id]["version"] + 1,
-            "closes_at" => LiveScheduling.dump_time(set["closes_at"]), "last_effective_at" => LiveScheduling.dump_time(at))
+        dumped_at = LiveScheduling.dump_time(at)
+        sets.each do |set|
+          dumped_close = LiveScheduling.dump_time(set["closes_at"])
+          set["member_unit_ids"].each do |id|
+            state["units"][id].merge!("version" => state["units"][id]["version"] + 1,
+              "closes_at" => dumped_close, "last_effective_at" => dumped_at)
+          end
         end
         state["schedule_revision"] += 1
-        state["closing_sets"] = LiveScheduling.sort_sets(snapshot["closing_sets"] - previous + sets)
+        previous_set_ids = previous.to_h { |set| [set.object_id, true] }
+        remaining = snapshot["closing_sets"].reject { |set| previous_set_ids.key?(set.object_id) }
+        state["closing_sets"] = LiveScheduling.sort_sets(remaining + sets)
         public_record = change_record(intent["command_id"], commit_id, at, state, affected, sets, intent["retired_group_ids"])
         audit = public_record.merge("type" => "closing_configuration_committed", "visibility" => "privileged",
           "operator_id" => principal_id, "reason" => intent["reason"], "allow_shortening" => intent["allow_shortening"],
@@ -119,7 +132,7 @@ module RBBB
       def bid(unit_id:, command:, effective_at:, commit_id:)
         return reject("invalid_request") unless %w[place_bid reduce_maximum].include?(command["type"])
         return reject("invalid_request") unless snapshot["units"].key?(unit_id)
-        set = snapshot["closing_sets"].find { |item| item["member_unit_ids"].include?(unit_id) }
+        set = @unit_to_set.fetch(unit_id)
         engine = unit_engine(unit_id, set, extension: nil)
         before = State.from_h(snapshot["units"].fetch(unit_id))
         command = command.merge("effective_at" => LiveScheduling.dump_time(effective_at))
@@ -131,11 +144,17 @@ module RBBB
         qualifying = standing && !own_adjustment
         at = LiveScheduling.time(effective_at)
         return reject("effective_at_out_of_order") if set["member_unit_ids"].any? { |id| snapshot['units'][id]['last_effective_at'] && LiveScheduling.time(snapshot['units'][id]['last_effective_at']) > at }
-        closing = LiveScheduling.time(set["closes_at"])
-        if qualifying && set["extension"] && at >= closing - set["extension"]["trigger_window_seconds"]
-          closing = [closing, at + set["extension"]["duration_seconds"]].max
+        original_closing = LiveScheduling.time(set["closes_at"])
+        closing = original_closing
+        if qualifying && set["extension"] && at >= original_closing - set["extension"]["trigger_window_seconds"]
+          begin
+            candidate = [original_closing, at + set["extension"]["duration_seconds"]].max
+            closing = Timestamp.parse(candidate)
+          rescue ArgumentError, RangeError
+            return reject("invalid_closing_time")
+          end
         end
-        extended = closing > LiveScheduling.time(set["closes_at"])
+        extended = closing > original_closing
         affected = extended ? set["member_unit_ids"] : [unit_id]
         return reject("resource_limit_exceeded") if affected.size > profile.fetch('affected_units')
         return reject("version_exhausted") if affected.any? { |id| snapshot["units"][id]["version"] >= MAX_SAFE_INTEGER } || (extended && snapshot["schedule_revision"] >= MAX_SAFE_INTEGER)
@@ -144,17 +163,20 @@ module RBBB
         events = decision.events.map(&:to_h)
         records = []
         if extended
+          dumped_closing = LiveScheduling.dump_time(closing)
+          dumped_at = LiveScheduling.dump_time(at)
           state["schedule_revision"] += 1
-          new_set = set.merge("closes_at" => LiveScheduling.dump_time(closing))
-          state["closing_sets"] = LiveScheduling.sort_sets(snapshot["closing_sets"] - [set] + [new_set])
+          new_set = set.merge("closes_at" => dumped_closing)
+          remaining = snapshot["closing_sets"].reject { |item| item.equal?(set) }
+          state["closing_sets"] = LiveScheduling.sort_sets(remaining + [new_set])
           affected.each do |id|
             unit = state["units"][id]
             unit["version"] += 1 unless id == unit_id
-            unit.merge!("closes_at" => LiveScheduling.dump_time(closing), "last_effective_at" => LiveScheduling.dump_time(at))
+            unit.merge!("closes_at" => dumped_closing, "last_effective_at" => dumped_at)
           end
-          events.each { |event| event["closes_at"] = LiveScheduling.dump_time(closing) if event.key?("closes_at") }
+          events.each { |event| event["closes_at"] = dumped_closing if event.key?("closes_at") }
           events << {"type" => "closing_time_changed", "command_id" => command["command_id"],
-            "aggregate_version" => after.version, "closes_at" => LiveScheduling.dump_time(closing)}
+            "aggregate_version" => after.version, "closes_at" => dumped_closing}
           records << change_record(command["command_id"], commit_id, at, state, affected, [new_set], [])
         end
         result(state, events.map { |event| {"unit_id" => unit_id, "event" => event} } + records, commit_id: commit_id)
@@ -174,7 +196,7 @@ module RBBB
 
       def operator_unit_change(unit_id:, command:, effective_at:, commit_id:)
         return reject("invalid_request") unless snapshot["units"].key?(unit_id)
-        set = snapshot["closing_sets"].find { |item| item["member_unit_ids"].include?(unit_id) }
+        set = @unit_to_set.fetch(unit_id)
         at = LiveScheduling.time(effective_at)
         return reject("effective_at_out_of_order") if set["member_unit_ids"].any? { |id| snapshot["units"][id]["last_effective_at"] && LiveScheduling.time(snapshot["units"][id]["last_effective_at"]) > at }
         return reject("version_exhausted") if snapshot["units"][unit_id]["version"] >= MAX_SAFE_INTEGER
@@ -194,8 +216,15 @@ module RBBB
 
       def close(group_id: nil, unit_id: nil, command:, effective_at:, commit_id:)
         return reject("invalid_request") unless command["type"] == "close_bidding" && (!!group_id != !!unit_id)
-        set = snapshot["closing_sets"].find { |item| group_id ? item["group_id"] == group_id : item["group_id"].nil? && item["member_unit_ids"] == [unit_id] }
+        set = if group_id
+          @group_to_set[group_id]
+        else
+          candidate = @unit_to_set[unit_id]
+          candidate if candidate && candidate["group_id"].nil?
+        end
         return reject("invalid_request") unless set
+        at = LiveScheduling.time(effective_at)
+        dumped_at = LiveScheduling.dump_time(at)
         ids = set["member_unit_ids"].sort
         return reject("resource_limit_exceeded") if ids.size > profile["affected_units"]
         return reject("version_exhausted") if exhausted?(ids)
@@ -204,14 +233,16 @@ module RBBB
         ids.each do |id|
           engine = unit_engine(id, set, extension: set["extension"])
           before = State.from_h(snapshot["units"][id])
-          decision = engine.decide(before, command.merge("effective_at" => LiveScheduling.dump_time(effective_at)))
+          decision = engine.decide(before, command.merge("effective_at" => dumped_at))
           return reject(decision.rejection.fetch("reason")) if decision.rejected?
           state["units"][id] = engine.apply(before, decision.events).to_h
           records.concat(decision.events.map { |event| {"unit_id" => id, "event" => event.to_h} })
         end
         state["schedule_revision"] += 1
-        records << change_record(command["command_id"], commit_id, effective_at, state, ids, [set], [])
+        records << change_record(command["command_id"], commit_id, at, state, ids, [set], [])
         result(state, records, commit_id: commit_id)
+      rescue ArgumentError, RangeError
+        reject("invalid_request")
       end
 
       private
@@ -221,24 +252,34 @@ module RBBB
         members = snapshot["closing_sets"].flat_map { |set| set["member_unit_ids"] }
         raise InvalidState, "invalid partition" unless members.sort == snapshot["units"].keys.sort && members.uniq.size == members.size && configurations.keys.sort == members.sort
         snapshot["closing_sets"].each do |set|
+          set_close = LiveScheduling.time(set["closes_at"])
           set["member_unit_ids"].each do |id|
-            raise InvalidState, "deadline mismatch" unless LiveScheduling.time(snapshot["units"][id]["closes_at"]) == LiveScheduling.time(set["closes_at"])
+            raise InvalidState, "deadline mismatch" unless LiveScheduling.time(snapshot["units"][id]["closes_at"]) == set_close
           end
         end
       end
 
       def discover(ids, group_ids)
-        found = ids.dup
-        loop do
-          more = snapshot["closing_sets"].select { |set| (set["member_unit_ids"] & found).any? || group_ids.include?(set["group_id"]) }.flat_map { |set| set["member_unit_ids"] }
-          union = (found + more).uniq
-          return union.sort if union.size == found.uniq.size
-          found = union
+        found = {}
+        ids.each do |id|
+          found[id] = true
+          set = @unit_to_set[id]
+          set["member_unit_ids"].each { |member| found[member] = true } if set
         end
+        group_ids.each do |group_id|
+          set = @group_to_set[group_id]
+          set["member_unit_ids"].each { |member| found[member] = true } if set
+        end
+        found.keys.sort
       end
 
       def affected_sets(ids)
-        snapshot["closing_sets"].select { |set| (set["member_unit_ids"] & ids).any? }
+        seen = {}
+        ids.each do |id|
+          set = @unit_to_set[id]
+          seen[set.object_id] = set if set
+        end
+        LiveScheduling.sort_sets(seen.values)
       end
 
       def membership(sets)
@@ -272,11 +313,19 @@ module RBBB
       def change_kinds(previous, sets)
         kinds = []
         kinds << "membership" unless membership(previous) == membership(sets)
+        old_by_unit = {}
+        old_times = {}
+        previous.each do |item|
+          old_times[item.object_id] = LiveScheduling.time(item["closes_at"])
+          item["member_unit_ids"].each { |id| old_by_unit[id] = item }
+        end
         sets.each do |set|
+          new_time = LiveScheduling.time(set["closes_at"])
           set["member_unit_ids"].each do |id|
-            old = previous.find { |item| item["member_unit_ids"].include?(id) }
-            kinds << "extended" if LiveScheduling.time(set["closes_at"]) > LiveScheduling.time(old["closes_at"])
-            kinds << "shortened" if LiveScheduling.time(set["closes_at"]) < LiveScheduling.time(old["closes_at"])
+            old = old_by_unit.fetch(id)
+            old_time = old_times.fetch(old.object_id)
+            kinds << "extended" if new_time > old_time
+            kinds << "shortened" if new_time < old_time
             kinds << "policy" unless set["extension"] == old["extension"]
           end
         end
@@ -291,11 +340,18 @@ module RBBB
         return reject("resource_limit_exceeded") if LiveScheduling.encoded_batch_size(records, commit_id) > profile["batch_bytes"]
         # Only the scheduling delta's affected sets change in whole-commit
         # replay. Preserve all other sets exactly, including timestamp spelling.
-        changed_ids = records.select { |record| record["type"] == "closing_configuration_changed" }
-          .flat_map { |record| record.fetch("unit_versions").map { |unit| unit.fetch("unit_id") } }
-        untouched = @original_closing_sets.select { |set| (set["member_unit_ids"] & changed_ids).empty? }
-        affected = state["closing_sets"].reject { |set| (set["member_unit_ids"] & changed_ids).empty? }
-        state["closing_sets"] = LiveScheduling.sort_sets(LiveScheduling.copy(untouched) + wire_sets(affected))
+        changed_set = {}
+        records.each do |record|
+          next unless record["type"] == "closing_configuration_changed"
+          record.fetch("unit_versions").each { |unit| changed_set[unit.fetch("unit_id")] = true }
+        end
+        if changed_set.empty?
+          state["closing_sets"] = LiveScheduling.sort_sets(LiveScheduling.copy(@original_closing_sets))
+        else
+          untouched = @original_closing_sets.reject { |set| set["member_unit_ids"].any? { |id| changed_set.key?(id) } }
+          affected = state["closing_sets"].select { |set| set["member_unit_ids"].any? { |id| changed_set.key?(id) } }
+          state["closing_sets"] = LiveScheduling.sort_sets(LiveScheduling.copy(untouched) + wire_sets(affected))
+        end
         Result.new(state: state, records: records, rejection_reason: nil, retired_group_ids: retired.uniq.sort)
       end
     end

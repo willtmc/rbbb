@@ -78,7 +78,7 @@ class LiveSchedulingConsumerTest < Minitest::Test
     refute current["payload"]["snapshot"]["units"].key?(@hidden)
     refute_equal old["sha256"], current["sha256"]
     assert_equal current, stored
-    assert_equal Digest::SHA256.hexdigest(JSON.generate(current["payload"])), current["sha256"]
+    assert_equal Digest::SHA256.hexdigest(RBBB::LiveScheduling::Intent.canonical(current["payload"])), current["sha256"]
     refute current["payload"]["snapshot"].key?("closing_sets")
     assert_raises(RBBBExamples::LiveSchedulingReader::NotAuthorized) do
       @reader.checkpoint(credential: "token", visibility: "privileged")
@@ -89,14 +89,14 @@ class LiveSchedulingConsumerTest < Minitest::Test
     original = read
     mutated = JSON.parse(JSON.generate(original))
     mutated["payload"]["snapshot"]["units"].clear
-    mutated["sha256"] = Digest::SHA256.hexdigest(JSON.generate(mutated["payload"]))
+    mutated["sha256"] = Digest::SHA256.hexdigest(RBBB::LiveScheduling::Intent.canonical(mutated["payload"]))
     adapter = RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(fetch: ->(**_args) { mutated }))
     assert_raises(RBBBExamples::LiveSchedulingConsumer::InvalidCheckpoint) { adapter.read(credential: "token") }
     assert_equal original, stored
     %w[tenant_id auction_id visibility].each do |field|
       changed = JSON.parse(JSON.generate(original))
       changed["payload"][field] = "wrong"
-      changed["sha256"] = Digest::SHA256.hexdigest(JSON.generate(changed["payload"]))
+      changed["sha256"] = Digest::SHA256.hexdigest(RBBB::LiveScheduling::Intent.canonical(changed["payload"]))
       adapter = RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(fetch: ->(**_args) { changed }))
       assert_raises(RBBBExamples::LiveSchedulingConsumer::InvalidCheckpoint) { adapter.read(credential: "token") }
     end
@@ -104,6 +104,38 @@ class LiveSchedulingConsumerTest < Minitest::Test
     adapter = RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(fetch: ->(**_args) { broken }))
     assert_raises(RBBBExamples::LiveSchedulingConsumer::InvalidCheckpoint) { adapter.read(credential: "token") }
     assert_equal original, stored
+  end
+
+  def test_canonical_digest_accepts_reordered_payload_keys
+    original = read
+    reordered = {
+      "sha256" => original.fetch("sha256"),
+      "payload" => original.fetch("payload").to_a.reverse.to_h
+    }
+    adapter = RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(
+      path: File.join(@dir, "reordered.sqlite3"),
+      fetch: ->(**_args) { reordered }
+    ))
+    assert_equal original.fetch("sha256"), adapter.read(credential: "token").fetch("sha256")
+  end
+
+  def test_consumer_rejects_symlink_and_world_readable_database_paths
+    target = File.join(@dir, "target.sqlite3")
+    File.write(target, "")
+    File.chmod(0o600, target)
+    symlink = File.join(@dir, "link.sqlite3")
+    File.symlink(target, symlink)
+    assert_raises(ArgumentError) { RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(path: symlink)) }
+
+    dangling = File.join(@dir, "dangling.sqlite3")
+    File.symlink(File.join(@dir, "missing.sqlite3"), dangling)
+    assert_raises(ArgumentError) { RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(path: dangling)) }
+    refute File.exist?(File.join(@dir, "missing.sqlite3"))
+
+    loose = File.join(@dir, "loose.sqlite3")
+    File.write(loose, "")
+    File.chmod(0o644, loose)
+    assert_raises(ArgumentError) { RBBBExamples::LiveSchedulingConsumer.new(**@args.merge(path: loose)) }
   end
 
   def test_public_and_privileged_stores_are_isolated_and_no_offline_fallback_is_served

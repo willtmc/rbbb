@@ -1,24 +1,19 @@
 # frozen_string_literal: true
 require "json"
-require "sqlite3"
 require "securerandom"
+require_relative "support/sqlite_store"
 require_relative "shared_group_host"
 
 module RBBBExamples
   # Local SQLite reference adapter. The engine gem has no SQLite dependency.
   class DurableSharedGroupHost
+    include SqliteStore
+
     def initialize(path:, configurations:, clock:)
       @path = File.expand_path(path)
       @document = canonical({"format" => 1, "configurations" => configurations, "clock" => clock})
       build_host # Validate configuration before creating storage.
-      begin
-        File.open(@path, File::WRONLY | File::CREAT | File::EXCL, 0o600) { |_| }
-      rescue Errno::EEXIST
-        stat = File.lstat(@path)
-        unless stat.file? && stat.uid == Process.uid && (stat.mode & 0o077).zero?
-          raise ArgumentError, "database must be an owner-only regular file"
-        end
-      end
+      secure_file!
       transaction do |db|
         db.execute("CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id = 1), document TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS commits (sequence INTEGER PRIMARY KEY, command_id TEXT NOT NULL UNIQUE, request TEXT NOT NULL, result TEXT NOT NULL)")
@@ -37,7 +32,7 @@ module RBBBExamples
     def submit(unit_id:, command:, expected_revision:)
       transaction do |db|
         host = restore(db)
-        request = host.send(:normalize_request, unit_id, command, expected_revision)
+        request = host.normalize_request(unit_id, command, expected_revision)
         receipt = host.submit(unit_id: request.fetch("unit_id"), command: request.fetch("command"),
           expected_revision: expected_revision)
         persist(db, request, receipt)
@@ -48,7 +43,7 @@ module RBBBExamples
     def close_group(command_id:, effective_at:, expected_revision:)
       transaction do |db|
         host = restore(db)
-        request = host.send(:normalize_close_request, command_id, effective_at, expected_revision)
+        request = host.normalize_close_request(command_id, effective_at, expected_revision)
         receipt = dispatch(host, request)
         persist(db, request, receipt)
         receipt
@@ -58,9 +53,7 @@ module RBBBExamples
     # One transaction returns both the revision and all member projections.
     def public_view
       transaction do |db|
-        host = restore(db)
-        snapshot = host.instance_variable_get(:@snapshot)
-        {"clock" => snapshot.clock.public_view, "units" => host.public_view}
+        restore(db).public_snapshot
       end
     end
 
@@ -190,21 +183,6 @@ module RBBBExamples
         end
       end
       JSON.generate(sort.call(normalized))
-    end
-
-    def transaction
-      db = SQLite3::Database.new(@path)
-      db.busy_timeout = 5000
-      db.execute("PRAGMA synchronous = FULL")
-      db.execute("BEGIN IMMEDIATE")
-      result = yield db
-      db.execute("COMMIT")
-      result
-    rescue Exception
-      db.execute("ROLLBACK") if db&.transaction_active?
-      raise
-    ensure
-      db&.close
     end
 
     # Fault-injection seam: never deliver notifications before durable commit.

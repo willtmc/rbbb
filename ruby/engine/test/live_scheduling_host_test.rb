@@ -651,7 +651,7 @@ class LiveSchedulingHostTest < Minitest::Test
 
   def reserve_command(id = "reserve-command", amount = 100)
     {"type" => "change_reserve", "command_id" => id, "reserve_minor_units" => amount,
-      "reason" => "Synthetic reserve correction", "notification_policy" => "affected"}
+      "reason" => "Synthetic reserve correction"}
   end
 
   def reserve(host = @host, command = reserve_command, principal = "operator-demo", permissions = ["reserve"])
@@ -676,9 +676,23 @@ class LiveSchedulingHostTest < Minitest::Test
       assert_empty denied["records"]
     end
     assert_equal "command_id_reused", reserve(reopened, reserve_command("reserve-command", 50))["rejection_reason"]
-    %w[operator_id effective_at].each do |field|
+    %w[operator_id effective_at notification_policy].each do |field|
       assert_raises(ArgumentError) { reserve(@host, reserve_command.merge(field => "spoof")) }
     end
+  end
+
+  def test_bid_accepts_expected_version_and_enforces_optimistic_concurrency
+    version = @host.snapshot["units"]["unit-c"]["version"]
+    stale = @host.bid(unit_id: "unit-c",
+      command: {"type" => "place_bid", "command_id" => "stale-bid", "maximum_minor_units" => 5000, "expected_version" => version + 1},
+      principal_id: "bidder-new")
+    assert_equal "stale_aggregate_version", stale["rejection_reason"]
+
+    accepted = @host.bid(unit_id: "unit-c",
+      command: {"type" => "place_bid", "command_id" => "fresh-bid", "maximum_minor_units" => 5000, "expected_version" => version},
+      principal_id: "bidder-new")
+    assert_nil accepted["rejection_reason"]
+    assert_equal version + 1, @host.snapshot["units"]["unit-c"]["version"]
   end
 
   def test_reserve_commit_failure_rolls_back_and_retry_commits_once

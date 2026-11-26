@@ -28,7 +28,7 @@ class LiveSchedulingAdmissionIntegrationTest < Minitest::Test
       bid: {unit_id: "unit-c", command: {"type" => "place_bid", "command_id" => "bid-demo", "bid_id" => "bid-demo", "maximum_minor_units" => 5000}},
       void_bid: {unit_id: "unit-c", command: {"type" => "void_bid", "command_id" => "void-demo", "bid_id" => "bid-demo", "reason" => "Synthetic correction", "notification_policy" => "affected"}},
       change_reserve: {unit_id: "unit-c", command: {"type" => "change_reserve", "command_id" => "reserve-demo", "reserve_minor_units" => 100,
-        "reason" => "Synthetic correction", "notification_policy" => "affected"}},
+        "reason" => "Synthetic correction"}},
       close: {unit_id: "unit-c", command_id: "close-demo"}
     }
   end

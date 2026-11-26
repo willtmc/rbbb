@@ -3,6 +3,8 @@
 module RBBB
   # RFC 0002 initial planning only. Never applies a schedule to live state.
   module InitialClosingSchedule
+    ALLOWED_GROUP_KEYS = {"group_id" => true, "unit_ids" => true, "closes_at" => true}.freeze
+
     module_function
 
     def plan(unit_ids:, opens_at:, first_closes_at:, lots_per_minute:, groups: [])
@@ -19,20 +21,22 @@ module RBBB
         [id, timestamp(first + (index / lots_per_minute) * 60)]
       end
       resolved = original.dup
-      assigned = []
-      group_ids = []
+      assigned = {}
+      group_ids = {}
       planned_groups = groups.map do |group|
-        unless group.is_a?(Hash) && (group.keys - %w[group_id unit_ids closes_at]).empty?
+        unless group.is_a?(Hash) && group.each_key.all? { |key| ALLOWED_GROUP_KEYS.key?(key) }
           raise InvalidConfiguration, "invalid group shape"
         end
         id = identity(group["group_id"])
-        raise InvalidConfiguration, "duplicate group identity" if group_ids.include?(id)
-        group_ids << id
+        raise InvalidConfiguration, "duplicate group identity" if group_ids.key?(id)
+        group_ids[id] = true
         members = identities(group["unit_ids"]).sort
-        unless (members - units).empty? && (members & assigned).empty?
-          raise InvalidConfiguration, "unknown or overlapping group member"
+        members.each do |member|
+          if !original.key?(member) || assigned.key?(member)
+            raise InvalidConfiguration, "unknown or overlapping group member"
+          end
+          assigned[member] = true
         end
-        assigned.concat(members)
         close = group.key?("closes_at") ? timestamp(group["closes_at"]) : members.map { |member| original.fetch(member) }.max
         raise InvalidConfiguration, "group closing must follow opening" unless close > opening
         members.each { |member| resolved[member] = close }
@@ -52,9 +56,13 @@ module RBBB
 
     def identities(values)
       raise InvalidConfiguration, "identities must be a nonempty array" unless values.is_a?(Array) && !values.empty?
-      result = values.map { |value| identity(value) }
-      raise InvalidConfiguration, "duplicate identity" unless result.uniq.size == result.size
-      result
+      seen = {}
+      values.map do |value|
+        id = identity(value)
+        raise InvalidConfiguration, "duplicate identity" if seen.key?(id)
+        seen[id] = true
+        id
+      end
     end
     private_class_method :identities
 

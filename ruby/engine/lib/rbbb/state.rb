@@ -52,6 +52,8 @@ module RBBB
       authorization_history reserve_history voided_bid_ids
     ].freeze
 
+    EMPTY_ARRAY = [].freeze
+
     def self.empty(configuration)
       new(
         version: 0,
@@ -76,9 +78,11 @@ module RBBB
     def self.from_h(snapshot, bid_ladder: nil)
       raise InvalidState, "snapshot must be an object" unless snapshot.respond_to?(:transform_keys)
 
-      values = snapshot.transform_keys(&:to_s)
-      missing = SNAPSHOT_KEYS.reject { |key| values.key?(key) }
-      raise InvalidState, "snapshot is missing #{missing.join(', ')}" if missing.any?
+      values = string_keyed_hash?(snapshot) ? snapshot : snapshot.transform_keys(&:to_s)
+      unless SNAPSHOT_KEYS.all? { |key| values.key?(key) }
+        missing = SNAPSHOT_KEYS.reject { |key| values.key?(key) }
+        raise InvalidState, "snapshot is missing #{missing.join(', ')}"
+      end
 
       new(
         version: values.fetch("version"),
@@ -113,9 +117,11 @@ module RBBB
       data = event_or_data.respond_to?(:data) ? event_or_data.data : event_or_data
       raise InvalidState, "transition data must be an object" unless data.respond_to?(:transform_keys)
 
-      values = data.transform_keys(&:to_s)
-      missing = TRANSITION_KEYS.reject { |key| values.key?(key) }
-      raise InvalidState, "transition is missing #{missing.join(', ')}" if missing.any?
+      values = string_keyed_hash?(data) ? data : data.transform_keys(&:to_s)
+      unless TRANSITION_KEYS.all? { |key| values.key?(key) }
+        missing = TRANSITION_KEYS.reject { |key| values.key?(key) }
+        raise InvalidState, "transition is missing #{missing.join(', ')}"
+      end
 
       from_h(
         {
@@ -141,6 +147,14 @@ module RBBB
       )
     end
 
+    def self.string_keyed_hash?(value)
+      return false unless value.instance_of?(Hash)
+
+      value.each_key { |key| return false unless key.is_a?(String) }
+      true
+    end
+    private_class_method :string_keyed_hash?
+
     def initialize(version:, positions:, leader_id:, standing_minor_units:,
       next_required_minor_units:, reserve_status: nil, opens_at: nil, closes_at: nil,
       last_effective_at: nil, reserve_minor_units: nil,
@@ -149,26 +163,34 @@ module RBBB
       winning_minor_units: nil, bid_ladder: nil)
       @version = version
       @positions = positions.each_with_object({}) do |(bidder_id, position), copy|
-        copy[bidder_id.to_s.freeze] = coerce_position(position)
+        copy[freeze_string(bidder_id)] = coerce_position(position)
       end.freeze
-      @leader_id = leader_id&.to_s&.freeze
+      @leader_id = leader_id.nil? ? nil : freeze_string(leader_id)
       @standing_minor_units = standing_minor_units
       @next_required_minor_units = next_required_minor_units
-      @reserve_status = reserve_status&.to_s&.freeze
+      @reserve_status = reserve_status.nil? ? nil : freeze_string(reserve_status)
       @reserve_minor_units = reserve_minor_units
       @opens_at = coerce_timestamp(opens_at, "opens_at")
       @closes_at = coerce_timestamp(closes_at, "closes_at")
       @last_effective_at = coerce_timestamp(last_effective_at, "last_effective_at")
-      @authorization_history = authorization_history.map do |entry|
-        coerce_authorization(entry)
-      end.freeze
-      @reserve_history = reserve_history.map do |entry|
-        coerce_reserve_change(entry)
-      end.freeze
-      @voided_bid_ids = voided_bid_ids.map { |bid_id| bid_id.to_s.freeze }.freeze
-      @status = status.to_s.freeze
-      @result = result&.to_s&.freeze
-      @winner_id = winner_id&.to_s&.freeze
+      @authorization_history = if authorization_history.empty?
+        EMPTY_ARRAY
+      else
+        authorization_history.map { |entry| coerce_authorization(entry) }.freeze
+      end
+      @reserve_history = if reserve_history.empty?
+        EMPTY_ARRAY
+      else
+        reserve_history.map { |entry| coerce_reserve_change(entry) }.freeze
+      end
+      @voided_bid_ids = if voided_bid_ids.empty?
+        EMPTY_ARRAY
+      else
+        voided_bid_ids.map { |bid_id| freeze_string(bid_id) }.freeze
+      end
+      @status = freeze_string(status)
+      @result = result.nil? ? nil : freeze_string(result)
+      @winner_id = winner_id.nil? ? nil : freeze_string(winner_id)
       @winning_minor_units = winning_minor_units
       validate!(bid_ladder: bid_ladder)
       freeze
@@ -260,7 +282,13 @@ module RBBB
     def coerce_position(position)
       return position if position.is_a?(Position) && position.frozen?
 
-      values = position.respond_to?(:to_h) ? position.to_h.transform_keys(&:to_s) : {}
+      values = if self.class.send(:string_keyed_hash?, position)
+        position
+      elsif position.respond_to?(:to_h)
+        position.to_h.transform_keys(&:to_s)
+      else
+        {}
+      end
       Position.new(
         maximum_minor_units: values.fetch("maximum_minor_units"),
         executable_maximum_minor_units: values.fetch("executable_maximum_minor_units"),
@@ -272,15 +300,36 @@ module RBBB
     end
 
     def coerce_authorization(entry)
-      values = entry.respond_to?(:to_h) ? entry.to_h.transform_keys(&:to_s) : {}
+      if entry.instance_of?(Hash) && entry.frozen?
+        type = entry["type"]
+        bidder_id = entry["bidder_id"]
+        if type.is_a?(String) && type.frozen? && bidder_id.is_a?(String) && bidder_id.frozen? &&
+            entry.key?("maximum_minor_units") && entry.key?("priority")
+          if type == "place_bid" && entry.size == 5 &&
+              (bid_id = entry["bid_id"]).is_a?(String) && bid_id.frozen?
+            return entry
+          elsif type == "maximum_reduced" && entry.size == 4
+            return entry
+          end
+        end
+      end
+
+      values = if self.class.send(:string_keyed_hash?, entry)
+        entry
+      elsif entry.respond_to?(:to_h)
+        entry.to_h.transform_keys(&:to_s)
+      else
+        {}
+      end
+      type = freeze_string(values.fetch("type"))
       normalized = {
-        "type" => values.fetch("type").to_s.freeze,
-        "bidder_id" => values.fetch("bidder_id").to_s.freeze,
+        "type" => type,
+        "bidder_id" => freeze_string(values.fetch("bidder_id")),
         "maximum_minor_units" => values.fetch("maximum_minor_units"),
         "priority" => values.fetch("priority")
       }
-      if normalized.fetch("type") == "place_bid"
-        normalized["bid_id"] = values.fetch("bid_id").to_s.freeze
+      if type == "place_bid"
+        normalized["bid_id"] = freeze_string(values.fetch("bid_id"))
       end
       normalized.freeze
     rescue KeyError => e
@@ -288,7 +337,20 @@ module RBBB
     end
 
     def coerce_reserve_change(entry)
-      values = entry.respond_to?(:to_h) ? entry.to_h.transform_keys(&:to_s) : {}
+      if entry.instance_of?(Hash) && entry.frozen? && entry.size == 3 &&
+          entry.key?("old_reserve_minor_units") &&
+          entry.key?("new_reserve_minor_units") &&
+          entry.key?("priority")
+        return entry
+      end
+
+      values = if self.class.send(:string_keyed_hash?, entry)
+        entry
+      elsif entry.respond_to?(:to_h)
+        entry.to_h.transform_keys(&:to_s)
+      else
+        {}
+      end
       {
         "old_reserve_minor_units" => values.fetch("old_reserve_minor_units"),
         "new_reserve_minor_units" => values.fetch("new_reserve_minor_units"),
@@ -298,6 +360,10 @@ module RBBB
       raise InvalidState, "reserve change is missing #{e.key}"
     end
 
+    def freeze_string(value)
+      value.is_a?(String) ? -value : value.to_s.freeze
+    end
+
     def validate!(bid_ladder: nil)
       unless version.is_a?(Integer) && version.between?(0, MAX_SAFE_INTEGER)
         raise InvalidState, "version must be a non-negative integer no greater than #{MAX_SAFE_INTEGER}"
@@ -305,7 +371,7 @@ module RBBB
       unless Money.amount?(next_required_minor_units)
         raise InvalidState, "next required amount must be a non-negative integer no greater than #{Money::MAX_MINOR_UNITS}"
       end
-      unless [nil, "reserve_not_met", "reserve_met"].include?(reserve_status)
+      unless reserve_status.nil? || reserve_status == "reserve_not_met" || reserve_status == "reserve_met"
         raise InvalidState, "reserve status is invalid"
       end
       unless valid_optional_minor_units?(reserve_minor_units)
@@ -319,8 +385,8 @@ module RBBB
       if opens_at >= closes_at
         raise InvalidState, "opens_at must be earlier than closes_at"
       end
-      validate_authorization_history!
-      validate_reserve_history!
+      auth_priorities = validate_authorization_history!
+      validate_reserve_history!(auth_priorities)
       validate_lifecycle!
       if leader_id && !positions.key?(leader_id)
         raise InvalidState, "leader must have a position"
@@ -366,24 +432,33 @@ module RBBB
         raise InvalidState, "next required amount must exceed standing amount"
       end
 
-      ranked_leader = positions.min_by do |bidder_id, position|
-        [-position.executable_maximum_minor_units, position.priority, bidder_id]
-      end.first
+      ranked_leader = if positions.size == 1
+        positions.each_key.first
+      else
+        positions.min_by do |bidder_id, position|
+          [-position.executable_maximum_minor_units, position.priority, bidder_id]
+        end.first
+      end
       raise InvalidState, "leader does not match maximum priority" unless ranked_leader == leader_id
     end
 
     def validate_authorization_history!
-      priorities = authorization_history.map { |entry| entry.fetch("priority") }
-      unless priorities.all? { |priority| priority.is_a?(Integer) }
-        raise InvalidState, "authorization priority must belong to the event stream"
-      end
-      unless priorities == priorities.sort && priorities.uniq == priorities
-        raise InvalidState, "authorization priorities must be unique and ordered"
-      end
+      prev_priority = nil
+      bid_ids = {}
+      auth_priorities = reserve_history.empty? ? nil : {}
 
-      bid_ids = []
       authorization_history.each do |entry|
-        unless %w[place_bid maximum_reduced].include?(entry.fetch("type"))
+        priority = entry.fetch("priority")
+        unless priority.is_a?(Integer)
+          raise InvalidState, "authorization priority must belong to the event stream"
+        end
+        if prev_priority && priority <= prev_priority
+          raise InvalidState, "authorization priorities must be unique and ordered"
+        end
+        prev_priority = priority
+
+        type = entry.fetch("type")
+        unless type == "place_bid" || type == "maximum_reduced"
           raise InvalidState, "authorization type is invalid"
         end
         unless Money.amount?(entry.fetch("maximum_minor_units"))
@@ -392,54 +467,65 @@ module RBBB
         if entry.fetch("bidder_id").empty?
           raise InvalidState, "authorization bidder ID must be present"
         end
-        unless entry.fetch("priority").positive? && entry.fetch("priority") <= version
+        unless priority.positive? && priority <= version
           raise InvalidState, "authorization priority must belong to the event stream"
         end
-        next unless entry.fetch("type") == "place_bid"
+        auth_priorities[priority] = true if auth_priorities
+
+        next unless type == "place_bid"
 
         bid_id = entry.fetch("bid_id")
         raise InvalidState, "authorization bid ID must be present" if bid_id.empty?
+        raise InvalidState, "bid IDs must be unique" if bid_ids.key?(bid_id)
 
-        bid_ids << bid_id
+        bid_ids[bid_id] = true
       end
-      raise InvalidState, "bid IDs must be unique" unless bid_ids.uniq == bid_ids
-      unless voided_bid_ids.uniq == voided_bid_ids
-        raise InvalidState, "voided bid IDs must be unique"
+
+      unless voided_bid_ids.empty?
+        seen_voided = {}
+        missing_voided = false
+        voided_bid_ids.each do |bid_id|
+          raise InvalidState, "voided bid IDs must be unique" if seen_voided.key?(bid_id)
+          seen_voided[bid_id] = true
+          missing_voided = true unless bid_ids.key?(bid_id)
+        end
+        raise InvalidState, "voided bid IDs must refer to accepted bids" if missing_voided
       end
-      unless voided_bid_ids.all? { |bid_id| bid_ids.include?(bid_id) }
-        raise InvalidState, "voided bid IDs must refer to accepted bids"
-      end
+
+      auth_priorities
     end
 
-    def validate_reserve_history!
-      priorities = reserve_history.map { |entry| entry.fetch("priority") }
-      valid_priorities = priorities.all? do |priority|
-        priority.is_a?(Integer) && priority.positive? && priority <= version
-      end
-      unless valid_priorities
-        raise InvalidState, "reserve change priority must belong to the event stream"
-      end
-      unless priorities == priorities.sort && priorities.uniq == priorities
-        raise InvalidState, "reserve change priorities must be unique and ordered"
-      end
-      unless (priorities & authorization_history.map { |entry| entry.fetch("priority") }).empty?
-        raise InvalidState, "state history priorities must be unique"
-      end
+    def validate_reserve_history!(auth_priorities)
+      return if reserve_history.empty?
 
+      prev_priority = nil
+      prev_new_reserve = nil
+      has_prev = false
       reserve_history.each do |entry|
-        unless valid_optional_minor_units?(entry.fetch("old_reserve_minor_units")) &&
-            valid_optional_minor_units?(entry.fetch("new_reserve_minor_units"))
+        priority = entry.fetch("priority")
+        unless priority.is_a?(Integer) && priority.positive? && priority <= version
+          raise InvalidState, "reserve change priority must belong to the event stream"
+        end
+        if prev_priority && priority <= prev_priority
+          raise InvalidState, "reserve change priorities must be unique and ordered"
+        end
+        if auth_priorities&.key?(priority)
+          raise InvalidState, "state history priorities must be unique"
+        end
+        prev_priority = priority
+
+        old_reserve = entry.fetch("old_reserve_minor_units")
+        new_reserve = entry.fetch("new_reserve_minor_units")
+        unless valid_optional_minor_units?(old_reserve) && valid_optional_minor_units?(new_reserve)
           raise InvalidState, "reserve change values must be non-negative integers or nil"
         end
-      end
-      reserve_history.each_cons(2) do |previous, current|
-        unless previous.fetch("new_reserve_minor_units") ==
-            current.fetch("old_reserve_minor_units")
+        if has_prev && prev_new_reserve != old_reserve
           raise InvalidState, "reserve change history must be continuous"
         end
+        prev_new_reserve = new_reserve
+        has_prev = true
       end
-      if reserve_history.any? &&
-          reserve_history.last.fetch("new_reserve_minor_units") != reserve_minor_units
+      if prev_new_reserve != reserve_minor_units
         raise InvalidState, "current reserve must match reserve change history"
       end
     end
@@ -449,7 +535,7 @@ module RBBB
     end
 
     def validate_lifecycle!
-      unless %w[open closed].include?(status)
+      unless status == "open" || status == "closed"
         raise InvalidState, "bidding status is invalid"
       end
       if status == "open"
@@ -459,7 +545,7 @@ module RBBB
         return
       end
 
-      unless %w[sold no_sale no_bid].include?(result)
+      unless result == "sold" || result == "no_sale" || result == "no_bid"
         raise InvalidState, "closed bidding result is invalid"
       end
       case result

@@ -281,14 +281,14 @@ module RBBB
 
     def build_bid_decision(state, command, bid_id, bidder_id, maximum, existing, effective_at)
       aggregate_version = next_aggregate_version(state)
-      authorization_history = state.authorization_history.map(&:dup)
+      authorization_history = state.authorization_history.dup
       authorization_history << {
         "type" => "place_bid",
-        "bid_id" => bid_id,
-        "bidder_id" => bidder_id,
+        "bid_id" => -bid_id,
+        "bidder_id" => -bidder_id,
         "maximum_minor_units" => maximum,
         "priority" => aggregate_version
-      }
+      }.freeze
       positions = state.positions.transform_values(&:to_h)
       positions[bidder_id] = {
         "maximum_minor_units" => maximum,
@@ -361,13 +361,13 @@ module RBBB
 
     def build_reduction_decision(state, command, bidder_id, maximum, existing, effective_at)
       aggregate_version = next_aggregate_version(state)
-      authorization_history = state.authorization_history.map(&:dup)
+      authorization_history = state.authorization_history.dup
       authorization_history << {
         "type" => "maximum_reduced",
-        "bidder_id" => bidder_id,
+        "bidder_id" => -bidder_id,
         "maximum_minor_units" => maximum,
         "priority" => aggregate_version
-      }
+      }.freeze
       positions = state.positions.transform_values(&:to_h)
       positions[bidder_id] = {
         "maximum_minor_units" => maximum,
@@ -421,12 +421,12 @@ module RBBB
 
     def build_reserve_change_decision(state, command, new_reserve, effective_at)
       aggregate_version = next_aggregate_version(state)
-      reserve_history = state.reserve_history.map(&:dup)
+      reserve_history = state.reserve_history.dup
       reserve_history << {
         "old_reserve_minor_units" => state.reserve_minor_units,
         "new_reserve_minor_units" => new_reserve,
         "priority" => aggregate_version
-      }
+      }.freeze
       leader = state.position_for(state.leader_id)
       reserve_status = reserve_status_for(leader&.to_h, new_reserve)
       transition = Event.new(
