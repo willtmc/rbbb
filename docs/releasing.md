@@ -29,10 +29,18 @@ into the gem's trusted publisher and adds the maintainer as an owner.
 6. Create and push an annotated, immutable `v<gem-version>` tag from the
    reviewed, GitHub-verified `main` merge commit. The tag must exactly match
    `RBBB::VERSION`.
-7. Approve the `release` environment deployment. The pinned release workflow
-   reruns verification, publishes through RubyGems trusted publishing, waits for
-   registry propagation, and creates the matching GitHub prerelease with the
-   exact artifact and SHA-256 checksum.
+7. Approve the `release` environment deployment. The pinned three-stage release
+   workflow separates privileges across three jobs:
+   - `verify` (`contents: read`): checks that the tag matches `RBBB::VERSION`,
+     is reachable from `origin/main`, and is recorded in `CHANGELOG.md`, then
+     reruns document validation, the test suite, `package:verify`, and a clean
+     gem build.
+   - `publish-rubygems` (`contents: read`, `id-token: write`, `release`
+     environment): publishes the gem through RubyGems trusted publishing and
+     uploads the exact published `.gem` artifact.
+   - `github-release` (`contents: write`, `release` environment): attaches that
+     exact `.gem` artifact and SHA-256 checksum to the matching GitHub release
+     (marking non-stable builds as prereleases with the non-production warning).
 8. Read back the RubyGems version, owners, metadata links, installed package,
    GitHub release, artifact checksum, and tag target.
 

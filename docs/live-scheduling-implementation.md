@@ -46,13 +46,13 @@ conflicting and revision-gapped batches. Registration retains version 0 and null
 unit command time. Replaying audit history requires privileged authority; it does
 not recheck live execution permissions.
 
-**Distribution:** the published `0.1.0.pre.3` gem predates this coordinator.
-This source tree still carries that version constant; it is not evidence that
-the published artifact contains these files. Pin the reviewed source commit
-(and the `ruby/engine` gemspec) for evaluation, or wait for a separately approved
-new prerelease. Do not replace an installed/published `0.1.0.pre.3` artifact with
-an unlabelled local rebuild. The SQLite examples are repository files, not gem
-contents; they require the development `sqlite3` dependency.
+**Distribution:** the published `0.1.0.pre.3` RubyGems prerelease predates this
+coordinator. This source tree carries `RBBB::VERSION = "0.2.0.pre.1"`
+(`SPECIFICATION_VERSION = "0.2.0-draft"`), while `0.1.0.pre.3` remains the
+latest published RubyGems prerelease. Pin a reviewed source commit (and the
+`ruby/engine` gemspec) for evaluation, or wait for a separately approved
+prerelease. The SQLite examples are repository files, not gem contents; they
+require the development `sqlite3` dependency.
 
 ## Durable host and authorized snapshots
 
